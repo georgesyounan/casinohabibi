@@ -15,14 +15,14 @@ Keep `.env` private and with the demo database. The file contains the local oper
 
 ### 2. Show English and Canadian French
 
-The site opens in English. Use the language button in the header to switch to Canadian French and back. The lobby, account dialogs, game instructions, support area, and operator pages include localized copy. Star games on their cards, then use the **Favorites** filter to find them later in the same browser; imported provider listings remain preview-only.
+The site opens in English. Use the language button in the header to switch to Canadian French and back. The lobby, account dialogs, game instructions, support area, and operator pages include localized copy. Star games on their cards, then use the **Favorites** filter to find them again. Signed-in players sync favorites to their account; guest favorites stay in the browser. Imported provider listings remain preview-only.
 
 ### 3. Try a player account
 
 1. Choose any built-in game and select **Play demo**.
 2. Create a player account with an email address and password of at least 10 characters.
 3. For a local signup, open the verification link shown in the browser dialog or the launcher window. Complete verification, then sign in. If you began from a game card in the same browser session, the selected game resumes after sign-in.
-4. The verified demo account receives $100 CAD in simulated credit. The default daily demo wager limit is $25 CAD. The account and game dialogs show a progress bar with simulated wagers used and remaining for the UTC day.
+4. The verified demo account receives $100 CAD in simulated credit. The default daily demo wager limit is $25 CAD. The account and game dialogs show a progress bar with simulated wagers used and remaining for the UTC day. In the account panel, choose a play-time reminder every 30, 60, or 120 minutes; reminders apply to the current signed-in session and can be acknowledged as they appear.
 
 ### 4. Play a simulated round
 
@@ -30,14 +30,14 @@ The site opens in English. Use the language button in the header to switch to Ca
 - **Midnight Blackjack:** Receive two cards. The dealer draws until reaching 17; the higher hand wins. A tie leaves the simulated balance unchanged.
 - **Roulette Royale:** Choose red or black. A matching colour adds one times the wager. Zero is green and loses either bet.
 
-All results use simulated funds. Select the balance button to view recent activity, including each round’s outcome. The account panel can export activity as CSV and shows progress toward the daily simulated wager limit. The limit resets at UTC midnight.
+All results use simulated funds. Select the balance button to open the account panel, set a tenant-specific display name or preferred language, and view recent activity, including each round’s outcome. The account panel can export activity as CSV and shows progress toward the daily simulated wager limit. The limit resets at UTC midnight.
 
 ### 5. Preview operator catalog tools
 
-1. Sign in at `/admin` using the operator email and password chosen by the launcher. Leave **Authenticator code** blank unless you have already enabled two-step verification for this account.
-2. In **Casino settings**, edit the brand name, accent colour, support email, and lobby headline and introduction in both languages. Review the side-by-side preview, save the draft, then publish it for players to see.
+1. Sign in at `/admin` using the operator email and password chosen by the launcher. The tenant dashboard summarizes player accounts, verified emails, the last 30 days of simulated play, open support requests, and enabled catalog listings. Leave **Authenticator code** blank unless you have already enabled two-step verification for this account.
+2. In **Casino settings**, edit the brand name, optional PNG/JPEG/WebP logo (up to 48 KB) and PNG/WebP favicon (up to 16 KB), accent colour, support email, lobby headline and introduction, optional lobby announcement, and the three FAQ entries in both languages. Review the side-by-side preview, save the draft, then publish it for players to see. Leave both announcement fields blank to hide the announcement. Add optional English and Canadian French terms and privacy HTTPS links, and edit the bilingual footer disclaimer. Select up to three built-in demo games to feature first; external provider listings remain separate and preview-only.
 3. In **Catalog data**, choose **Prepare sample catalog**. This saves a local placeholder key and prepares four bilingual sample listings.
-4. Review the catalog changes, then choose **Sync catalog**.
+4. Review the catalog changes, then choose **Sync catalog**. Use **Catalog listing management** to hide or restore individual preview cards.
 5. Return to the player lobby. The sample provider titles appear as preview-only cards; they cannot be played and no external service is contacted.
 
 The sample key is a local placeholder, not a real provider credential. Do not enter real provider keys in this demo.
@@ -46,7 +46,7 @@ If the sign-in page says Admin setup is not loaded, confirm `.env` is beside `pa
 
 ### 6. Preview support workflows
 
-From a signed-in player account, create a support request or formal complaint. Return to `/admin` and open the support inbox to find and respond to the request. Player and operator sessions use separate cookies, so both pages can be kept open in separate tabs.
+From a signed-in player account, create a support request or formal complaint. Return to `/admin` and open the support inbox to find and respond to the request. Player display names appear with email addresses when the player has set a name. Player and operator sessions use separate cookies, so both pages can be kept open in separate tabs.
 
 ### Stop the demo
 

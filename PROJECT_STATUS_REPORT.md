@@ -10,17 +10,17 @@ Northplay is a bilingual white-label **demonstration** of an online casino exper
 
 ### What the demo includes
 
-- **Player experience:** Bilingual lobby, localized game catalog, search, category filters, browser-local favorites, playable simulated games, and a demo balance.
+- **Player experience:** Bilingual lobby, localized game catalog, search, category filters, account-synced favorites for signed-in players, playable simulated games, and a demo balance.
 - **White-label foundation:** Tenant branding and locale settings, platform onboarding endpoints, environment configuration, health checks, and SQLite backup and restore tools.
-- **Operator tools:** Staff accounts with password rotation and tenant roles, two-step verification, bilingual lobby content editing with a live draft preview, provider credential storage, a local sample provider catalog for preview, catalog import, and staff audit history.
+- **Operator tools:** Staff accounts with password rotation and tenant roles, two-step verification, casino branding with locally stored logos and favicons, bilingual lobby announcements, editable localized FAQ entries, optional localized terms and privacy links, editable bilingual footer text, and lobby content editing with a live draft preview, provider credential storage, a local sample provider catalog for preview, catalog import and individual listing controls, staff audit history, a tenant-scoped operator overview, and configurable featured placement for built-in demo games.
 - **Player accounts:** Email verification, password reset and change, verified email change, saved language preference, session revocation, and account data export in JSON and CSV.
-- **Player protection examples:** Simulated wager limits with a live usage meter, a 15-minute break, one-, seven-, and 30-day cooling-off periods, self-exclusion, and hourly play-time reminders.
-- **Support workflows:** Player support conversations and complaint classification; staff inbox with search, filters, paging, assignment, priority, private notes, replies, and closure.
+- **Player protection examples:** Simulated wager limits with a live usage meter, a 15-minute break, one-, seven-, and 30-day cooling-off periods, self-exclusion, and player-configurable play-time reminders every 30, 60, or 120 minutes.
+- **Support workflows:** Player support conversations and complaint classification; staff inbox with search, filters, paging, assignment, priority, private notes, replies, closure, and player display names alongside email.
 - **Demo wallet records:** Simulated ledger, paginated account history, and downloadable activity export. Balances have no cash value.
 
 ### What is ready to preview
 
-The repository includes the runnable local demo, setup instructions, roadmap and module documents, a partner package PDF, and a Windows-ready ZIP named `Northplay-Casino-Windows.zip`. Operators can import a provider catalog for display, but games from external providers are not connected or launched.
+The repository includes the runnable local demo, setup instructions, roadmap and module documents, a partner package PDF, and a Windows-ready ZIP named `Northplay-Casino-Windows.zip`. Operators can import, show, or hide individual provider listings for display, but games from external providers are not connected or launched.
 
 ### Deliberately outside the demo
 

@@ -35,8 +35,21 @@ const copy = {
   faqGamesAnswer: ['Not in this demo. It includes four built-in simulated games you can play. Imported provider listings are for catalog preview only; no external games are connected or launched.', 'Pas dans cette version de démonstration. Elle comprend quatre jeux simulés intégrés auxquels vous pouvez jouer. Les fiches importées servent uniquement à prévisualiser le catalogue; aucun jeu externe n’est connecté ni lancé.'],
   faqSafetyQuestion: ['What account controls are available?', 'Quels contrôles sont offerts dans le compte?'],
   faqSafetyAnswer: ['You can set a daily limit for simulated wagers, pause demo play for 15 minutes, or self-exclude the account. These controls apply to this prototype account only.', 'Vous pouvez fixer une limite quotidienne de mises fictives, mettre le jeu en pause pendant 15 minutes ou exclure le compte. Ces contrôles s’appliquent uniquement au compte de ce prototype.'],
+  faqEditorTitle: ['Lobby FAQ', 'FAQ du hall'], faqEditorHelp: ['Edit these three entries in both languages. Answers are limited to 500 characters.', 'Modifiez ces trois entrées dans les deux langues. Les réponses sont limitées à 500 caractères.'],
+  termsLink: ['Terms', 'Conditions'], privacyLink: ['Privacy', 'Confidentialité'],
+  policyLinksTitle: ['Policy links (optional)', 'Liens vers les politiques (facultatifs)'],
+  termsUrlEn: ['Terms page URL · English', 'URL des conditions · anglais'], termsUrlFr: ['Terms page URL · Canadian French', 'URL des conditions · français canadien'],
+  privacyUrlEn: ['Privacy page URL · English', 'URL de confidentialité · anglais'], privacyUrlFr: ['Privacy page URL · Canadian French', 'URL de confidentialité · français canadien'],
+  policyUrlHelp: ['Optional. Enter a complete HTTPS URL. If only one language URL is set, it is used for both languages.', 'Facultatif. Saisissez une URL HTTPS complète. Si une seule URL est fournie, elle sera utilisée dans les deux langues.'],
+  footerTextEnLabel: ['Footer disclaimer · English', 'Mention au pied de page · anglais'],
+  footerTextFrLabel: ['Footer disclaimer · Canadian French', 'Mention au pied de page · français canadien'],
+  footerTextTitle: ['Footer disclaimer', 'Mention au pied de page'],
+  faqQuestionEn: ['Question · English', 'Question · anglais'], faqQuestionFr: ['Question · Canadian French', 'Question · français canadien'],
+  faqAnswerEn: ['Answer · English', 'Réponse · anglais'], faqAnswerFr: ['Answer · Canadian French', 'Réponse · français canadien'],
+  faqOne: ['FAQ entry 1', 'Entrée FAQ 1'], faqTwo: ['FAQ entry 2', 'Entrée FAQ 2'], faqThree: ['FAQ entry 3', 'Entrée FAQ 3'],
   all: ['All games', 'Tous les jeux'], slots: ['Slots', 'Machines à sous'], table: ['Table games', 'Jeux de table'], live: ['Live games', 'Jeux avec croupier en direct'], favorites: ['Favorites', 'Favoris'],
   addFavorite: ['Add {game} to favorites', 'Ajouter {game} aux favoris'], removeFavorite: ['Remove {game} from favorites', 'Retirer {game} des favoris'], noFavoriteGames: ['You have not saved any games yet.', 'Vous n’avez pas encore enregistré de jeux.'],
+  favoritesLocal: ['Favorites saved in this browser.', 'Favoris enregistrés dans ce navigateur.'], favoritesSynced: ['Favorites saved to your account.', 'Favoris enregistrés dans votre compte.'], favoriteSaveFailed: ['Could not sync favorites to your account. The change was reverted.', 'Impossible de synchroniser les favoris avec votre compte. Le changement a été annulé.'],
   disclaimer: ['Simulated funds only. No cash value.', 'Fonds fictifs uniquement. Aucune valeur monétaire.'],
   email: ['Email address', 'Adresse courriel'], password: ['Password (10 characters minimum)', 'Mot de passe (au moins 10 caractères)'],
   passwordReset: ['Forgot your password?', 'Mot de passe oublié?'], passwordResetTitle: ['Reset your password', 'Réinitialiser votre mot de passe'], passwordResetHelp: ['Enter your account email. If it matches an account, we will send reset instructions.', 'Saisissez le courriel de votre compte. Si une correspondance existe, nous enverrons les instructions de réinitialisation.'], passwordResetRequested: ['If an account matches that address, reset instructions have been sent.', 'Si une correspondance existe, les instructions de réinitialisation ont été envoyées.'], passwordResetSend: ['Send reset instructions', 'Envoyer les instructions'], passwordResetInvalid: ['This reset link is invalid or expired. Request a new one.', 'Ce lien de réinitialisation est invalide ou expiré. Demandez-en un nouveau.'], passwordResetComplete: ['Password reset. Sign in with your new password.', 'Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe.'], passwordResetSave: ['Set new password', 'Enregistrer le nouveau mot de passe'],
@@ -44,7 +57,13 @@ const copy = {
   passwordChangeTitle: ['Change password', 'Changer le mot de passe'], currentPassword: ['Current password', 'Mot de passe actuel'], newPassword: ['New password (10 characters minimum)', 'Nouveau mot de passe (au moins 10 caractères)'], confirmPassword: ['Confirm new password', 'Confirmer le nouveau mot de passe'], passwordMismatch: ['The new passwords do not match.', 'Les nouveaux mots de passe ne correspondent pas.'], passwordChanged: ['Password updated. Other sessions have been signed out.', 'Mot de passe modifié. Les autres sessions ont été fermées.'],
   balanceLabel: ['Simulated balance', 'Solde fictif'], history: ['Recent activity', 'Activité récente'],
   dailyLimitProgress: ['Today’s demo wagers (UTC): {used} of {limit} · {remaining} remaining', 'Mises fictives aujourd’hui (UTC) : {used} sur {limit} · {remaining} restantes'], dailyLimitProgressLabel: ['Daily simulated wager limit progress', 'Progression vers la limite quotidienne de mises fictives'],
-  preferredLanguage: ['Preferred language', 'Langue de préférence'], englishLanguage: ['English', 'anglais'], frenchLanguage: ['French', 'français'],
+  preferredLanguage: ['Preferred language', 'Langue de préférence'], englishLanguage: ['English (Canada)', 'anglais (Canada)'], frenchLanguage: ['French (Canada)', 'français (Canada)'],
+  savedLanguageLabel: ['Saved language', 'Langue enregistrée'],
+  emailStatusLabel: ['Email status', 'État du courriel'], emailVerifiedStatus: ['Verified', 'Confirmé'], emailUnverifiedStatus: ['Not verified', 'Non confirmé'],
+  accountProfileTitle: ['Player profile', 'Profil joueur'], displayName: ['Display name (optional)', 'Nom affiché (facultatif)'],
+  displayNameHelp: ['Up to 40 characters. This name is used only for this casino demo account.', 'Jusqu’à 40 caractères. Ce nom est utilisé uniquement pour ce compte de démonstration.'],
+  displayNameCount: ['{count} of 40 characters', '{count} sur 40 caractères'],
+  saveProfile: ['Save profile', 'Enregistrer le profil'], profileSaved: ['Profile saved.', 'Profil enregistré.'],
   accountSecurity: ['Account security', 'Sécurité du compte'], signOutOtherSessions: ['Sign out other sessions', 'Fermer les autres sessions'], confirmSignOutOtherSessions: ['Sign out of all other devices? This device will stay signed in.', 'Fermer toutes les autres sessions? Cet appareil restera connecté.'], sessionsRevoked: ['Other sessions signed out: {count}.', 'Autres sessions fermées : {count}.'], noOtherSessions: ['There were no other active sessions.', 'Aucune autre session active.'],
   changeEmail: ['Change email address', 'Changer l’adresse courriel'], emailChangeTitle: ['Update your email address', 'Modifier votre adresse courriel'], emailChangeHelp: ['Enter your new address and current password. We will send a confirmation link to the new address. Your current address stays active until you confirm.', 'Saisissez votre nouvelle adresse et votre mot de passe actuel. Nous enverrons un lien de confirmation à la nouvelle adresse. Votre adresse actuelle reste active jusqu’à la confirmation.'], emailChangeRequest: ['Send confirmation link', 'Envoyer le lien de confirmation'], emailChangeConfirmHelp: ['Confirm this email address change. The link expires after 24 hours.', 'Confirmez le changement d’adresse courriel. Le lien expire après 24 heures.'], emailChangeConfirm: ['Confirm new email address', 'Confirmer la nouvelle adresse courriel'], emailChangeRequested: ['Check your new email address for a confirmation link.', 'Consultez votre nouvelle adresse courriel pour le lien de confirmation.'], emailChangeComplete: ['Email address updated. Sign in using your new address.', 'Adresse courriel modifiée. Connectez-vous avec votre nouvelle adresse.'], emailChangeInvalid: ['This email change link is invalid or expired. Request a new one.', 'Ce lien de changement d’adresse est invalide ou expiré. Demandez-en un nouveau.'], emailUnchanged: ['That is already your current email address.', 'Cette adresse est déjà votre adresse actuelle.'], emailUnavailable: ['That email address is already in use or has a pending change.', 'Cette adresse est déjà utilisée ou un changement est en attente.'],
   communicationPreferences: ['Communication preferences', 'Préférences de communication'], marketingConsentText: ['I agree to receive casino news and promotional emails. I can withdraw consent at any time. This does not change essential account or security emails.', 'J’accepte de recevoir des nouvelles du casino et des courriels promotionnels. Je peux retirer mon consentement en tout temps. Cela ne change pas les courriels essentiels liés au compte ou à la sécurité.'], savePreferences: ['Save email preferences', 'Enregistrer les préférences de courriel'], consentSaved: ['Email preferences saved.', 'Préférences de courriel enregistrées.'],
@@ -67,7 +86,29 @@ const copy = {
   audit: ['View key change history', 'Voir l’historique des changements de clés'],
   tenantSettings: ['Casino settings', 'Paramètres du casino'],
   tenantSettingsHelp: ['Save changes as a draft, then publish the version players should see.', 'Enregistrez les changements comme brouillon, puis publiez la version destinée aux joueurs.'],
+  operatorOverview: ['Casino overview', 'Aperçu du casino'],
+  operatorOverviewHelp: ['Tenant-scoped demo activity. Wager totals are simulated CAD values for the last 30 days.', 'Activité fictive propre au casino. Les mises sont des montants fictifs en CAD des 30 derniers jours.'],
+  refreshOverview: ['Refresh overview', 'Actualiser l’aperçu'],
+  overviewPlayers: ['Player accounts', 'Comptes joueurs'], overviewVerified: ['Email verified', 'Courriel confirmé'],
+  overviewRounds: ['Demo rounds · 30 days', 'Parties fictives · 30 jours'], overviewWagered: ['Simulated wagers · 30 days', 'Mises fictives · 30 jours'],
+  overviewTickets: ['Open support tickets', 'Demandes de soutien ouvertes'], overviewCatalog: ['Enabled catalog listings', 'Fiches actives du catalogue'],
+  overviewUpdated: ['Updated {time}', 'Mis à jour à {time}'],
+  featuredDemoGames: ['Featured demo games', 'Jeux de démonstration en vedette'],
+  featuredDemoGamesHelp: ['Choose up to three built-in demo games to show first in the lobby. Provider catalog listings are managed separately.', 'Choisissez jusqu’à trois jeux de démonstration intégrés à afficher en premier dans le hall. Les fiches des fournisseurs sont gérées séparément.'],
+  featuredBadge: ['Featured', 'En vedette'], featuredPreview: ['Featured first: {games}', 'En vedette en premier : {games}'],
+  featuredLimit: ['Choose no more than three featured games.', 'Choisissez au plus trois jeux en vedette.'],
   brandName: ['Casino name', 'Nom du casino'], accentColor: ['Accent colour', 'Couleur d’accent'],
+  brandLogoLabel: ['Upload logo (PNG, JPEG or WebP; up to 48 KB)', 'Téléverser un logo (PNG, JPEG ou WebP; 48 Ko maximum)'],
+  brandLogoHelp: ['Use a compact logo with a transparent background for best results.', 'Pour un meilleur résultat, utilisez un logo compact avec un arrière-plan transparent.'],
+  removeBrandLogo: ['Remove logo', 'Retirer le logo'],
+  brandLogoInvalid: ['Choose a PNG, JPEG or WebP image no larger than 48 KB.', 'Choisissez une image PNG, JPEG ou WebP de 48 Ko ou moins.'],
+  brandFaviconLabel: ['Upload favicon (PNG or WebP; up to 16 KB)', 'Téléverser une icône de site (PNG ou WebP; 16 Ko maximum)'],
+  brandFaviconHelp: ['Square artwork works best. Remove the file to use the Northplay default.', 'Une image carrée donne le meilleur résultat. Retirez le fichier pour rétablir l’icône Northplay.'],
+  brandFaviconInvalid: ['Choose a PNG or WebP image no larger than 16 KB.', 'Choisissez une image PNG ou WebP de 16 Ko ou moins.'],
+  removeBrandFavicon: ['Remove favicon', 'Retirer l’icône'],
+  announcementEnLabel: ['Lobby announcement · English (optional)', 'Annonce du hall · anglais (facultative)'],
+  announcementFrLabel: ['Lobby announcement · Canadian French (optional)', 'Annonce du hall · français canadien (facultative)'],
+  announcementHelp: ['Leave both blank to hide the announcement. Keep both versions aligned.', 'Laissez les deux champs vides pour masquer l’annonce. Gardez les deux versions équivalentes.'],
   heroTitleEn: ['Lobby headline · English', 'Titre du hall · anglais'], heroTitleFr: ['Lobby headline · Canadian French', 'Titre du hall · français canadien'],
   heroIntroEn: ['Lobby introduction · English', 'Présentation du hall · anglais'], heroIntroFr: ['Lobby introduction · Canadian French', 'Présentation du hall · français canadien'],
   heroPreviewEn: ['English preview', 'Aperçu en anglais'], heroPreviewFr: ['Canadian French preview', 'Aperçu en français canadien'],
@@ -131,6 +172,14 @@ const copy = {
   playNow: ['Play demo', 'Jouer à la démo'],
   catalogSync: ['Catalog data', 'Données du catalogue'],
   catalogSyncHelp: ['Paste catalog JSON or load a JSON file. Sync replaces the provider’s full listing set, disabling entries omitted from the file. It does not connect to a provider or launch games.', 'Collez le catalogue JSON ou chargez un fichier JSON. La synchronisation remplace l’ensemble des fiches du fournisseur et désactive celles qui manquent au fichier. Elle ne connecte pas de fournisseur et ne lance aucun jeu.'],
+  catalogListings: ['Catalog listing management', 'Gestion des fiches du catalogue'],
+  catalogListingsHelp: ['Show or hide individual imported listings. These cards are preview-only and cannot launch games.', 'Affichez ou masquez des fiches importées individuellement. Ces cartes servent uniquement d’aperçu et ne lancent aucun jeu.'],
+  catalogListingsRefresh: ['Refresh listings', 'Actualiser les fiches'],
+  catalogListingEnabled: ['Visible in lobby preview', 'Visible dans l’aperçu du hall'],
+  catalogListingDisabled: ['Hidden from lobby preview', 'Masquée de l’aperçu du hall'],
+  catalogListingHide: ['Hide listing', 'Masquer la fiche'], catalogListingShow: ['Show listing', 'Afficher la fiche'],
+  catalogListingsEmpty: ['No imported catalog listings yet.', 'Aucune fiche de catalogue importée pour le moment.'],
+  catalogListingUpdated: ['Catalog listing updated.', 'Fiche de catalogue modifiée.'],
   sampleCatalogHelp: ['Use local sample data to try the operator workflow. It saves a clearly marked placeholder key and bilingual sample listings; no provider is contacted and the listings cannot be played.', 'Utilisez des données fictives locales pour essayer les outils de gestion. Un code fictif clairement indiqué et des fiches bilingues seront enregistrés; aucun fournisseur n’est contacté et les jeux ne sont pas accessibles.'],
   loadSampleCatalog: ['Prepare sample catalog', 'Préparer le catalogue fictif'], sampleProviderReady: ['Local sample provider saved with a placeholder key. No external provider was contacted.', 'Fournisseur fictif local enregistré avec un code provisoire. Aucun fournisseur externe n’a été contacté.'], sampleCatalogPrepared: ['Sample catalog is ready. Review the preview, then sync it to show the preview-only listings in the lobby.', 'Le catalogue fictif est prêt. Vérifiez l’aperçu, puis synchronisez-le pour afficher les fiches non jouables dans le hall.'],
   catalogJson: ['Game entries (JSON array)', 'Fiches de jeux (tableau JSON)'],
@@ -159,6 +208,9 @@ const copy = {
   confirmExclude: ['Self-exclusion will sign you out and prevent this account from signing in again. Continue?', 'L’autoexclusion fermera votre session et empêchera ce compte de se reconnecter. Continuer?'],
   dailyLimitLabel: ['Daily demo wager limit', 'Limite quotidienne de mises fictives'],
   saveLimit: ['Save limit', 'Enregistrer la limite'],
+  reminderFrequencyLabel: ['Play-time reminder frequency', 'Fréquence des rappels de temps de jeu'],
+  reminder30: ['Every 30 minutes', 'Toutes les 30 minutes'], reminder60: ['Every 60 minutes', 'Toutes les 60 minutes'], reminder120: ['Every 120 minutes', 'Toutes les 120 minutes'],
+  saveReminder: ['Save reminder frequency', 'Enregistrer la fréquence des rappels'],
   dailyLimit: ['You have reached your daily demo wager limit.', 'Vous avez atteint votre limite quotidienne de mises fictives.'],
   pauseActive: ['Play is paused until', 'Le jeu est suspendu jusqu’à'],
   sessionReminder: ['You have been playing this demo for {minutes} minutes. Consider taking a break.', 'Vous jouez à cette démo depuis {minutes} minutes. Pensez à faire une pause.'], sessionReminderAcknowledge: ['Acknowledge', 'Compris'],
@@ -183,23 +235,33 @@ if (new URLSearchParams(location.search).get('lang') === 'fr') {
 }
 let player;
 let playerSessionStartedAt;
-let displayedReminderHour;
+let displayedReminderPeriod;
 let displayedReminderLanguage;
 let filter = 'all';
 let searchQuery = '';
-let favorites;
+let guestFavorites;
 try {
   const saved = JSON.parse(localStorage.getItem('northplay-favorites') || '[]');
-  favorites = new Set(Array.isArray(saved) ? saved.filter((key) => typeof key === 'string').slice(0, 1000) : []);
+  guestFavorites = new Set(Array.isArray(saved) ? saved.filter((key) => typeof key === 'string').slice(0, 1000) : []);
 } catch {
-  favorites = new Set();
+  guestFavorites = new Set();
 }
+let favorites = new Set(guestFavorites);
+let favoriteSavePending = false;
 let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let result;
 let dialogError;
-let tenantCopy = { headline: copy.headline, intro: copy.intro };
+let tenantCopy = { headline: copy.headline, intro: copy.intro, announcement: ['', ''] };
+let tenantFaqItems = [];
+let tenantFeaturedGameIds = ['gold', 'roulette'];
+let tenantPolicyLinks = { termsUrlEn: '', termsUrlFr: '', privacyUrlEn: '', privacyUrlFr: '' };
 const t = (key) => tenantCopy?.[key]?.[language] ?? (copy[key] || copy.unavailable)[language];
+const defaultFaqItems = () => [
+  { questionEn: copy.faqBalanceQuestion[0], answerEn: copy.faqBalanceAnswer[0], questionFr: copy.faqBalanceQuestion[1], answerFr: copy.faqBalanceAnswer[1] },
+  { questionEn: copy.faqGamesQuestion[0], answerEn: copy.faqGamesAnswer[0], questionFr: copy.faqGamesQuestion[1], answerFr: copy.faqGamesAnswer[1] },
+  { questionEn: copy.faqSafetyQuestion[0], answerEn: copy.faqSafetyAnswer[0], questionFr: copy.faqSafetyQuestion[1], answerFr: copy.faqSafetyAnswer[1] }
+];
 const money = (cents) => new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(cents / 100);
 const gameName = (game) => game.name[language];
 const demoProviderName = () => language ? `Démo ${tenantBrandName}` : `${tenantBrandName} Demo`;
@@ -234,38 +296,39 @@ function updateSessionReminder() {
   if (!banner) return;
   if (!player || !playerSessionStartedAt || location.pathname === '/admin') {
     banner.hidden = true;
-    displayedReminderHour = undefined;
+    displayedReminderPeriod = undefined;
     displayedReminderLanguage = undefined;
     return;
   }
-  const hours = Math.floor((Date.now() - playerSessionStartedAt) / 3600000);
-  if (hours < 1) {
+  const interval = player.safety?.sessionReminderMinutes || 60;
+  const periods = Math.floor((Date.now() - playerSessionStartedAt) / (interval * 60_000));
+  if (periods < 1) {
     banner.hidden = true;
-    displayedReminderHour = undefined;
+    displayedReminderPeriod = undefined;
     displayedReminderLanguage = undefined;
     return;
   }
-  const key = `northplay-session-reminder:${playerSessionStartedAt}`;
-  const acknowledgedHour = Number(localStorage.getItem(key) || 0);
-  if (hours <= acknowledgedHour) {
+  const key = `northplay-session-reminder:${playerSessionStartedAt}:${interval}`;
+  const acknowledgedPeriod = Number(localStorage.getItem(key) || 0);
+  if (periods <= acknowledgedPeriod) {
     banner.hidden = true;
-    displayedReminderHour = undefined;
+    displayedReminderPeriod = undefined;
     displayedReminderLanguage = undefined;
     return;
   }
-  if (displayedReminderHour === hours && displayedReminderLanguage === language && !banner.hidden) return;
-  const message = element('p', t('sessionReminder').replace('{minutes}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(hours * 60)));
+  if (displayedReminderPeriod === periods && displayedReminderLanguage === language && !banner.hidden) return;
+  const message = element('p', t('sessionReminder').replace('{minutes}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(periods * interval)));
   const acknowledge = element('button', t('sessionReminderAcknowledge'), 'ghost');
   acknowledge.type = 'button';
   acknowledge.addEventListener('click', () => {
-    localStorage.setItem(key, String(hours));
-    displayedReminderHour = undefined;
+    localStorage.setItem(key, String(periods));
+    displayedReminderPeriod = undefined;
     displayedReminderLanguage = undefined;
     updateSessionReminder();
   });
   banner.replaceChildren(message, acknowledge);
   banner.hidden = false;
-  displayedReminderHour = hours;
+  displayedReminderPeriod = periods;
   displayedReminderLanguage = language;
 }
 
@@ -284,16 +347,39 @@ async function api(path, data, method = 'POST') {
 
 function applyTenant(config) {
   tenantBrandName = config.brandName;
+  tenantFeaturedGameIds = Array.isArray(config.featuredGameIds) ? config.featuredGameIds : ['gold', 'roulette'];
+  renderFeaturedGameEditor(tenantFeaturedGameIds);
+  const favicon = $('#tenant-favicon');
+  favicon.href = config.brandFavicon || '/favicon.svg';
+  if (config.brandFavicon) favicon.type = config.brandFavicon.startsWith('data:image/png;') ? 'image/png' : 'image/webp';
+  else favicon.type = 'image/svg+xml';
+  tenantPolicyLinks = {
+    termsUrlEn: (config.termsUrlEn || '').trim(), termsUrlFr: (config.termsUrlFr || '').trim(),
+    privacyUrlEn: (config.privacyUrlEn || '').trim(), privacyUrlFr: (config.privacyUrlFr || '').trim()
+  };
+  tenantFaqItems = Array.isArray(config.faqItems) ? config.faqItems : defaultFaqItems();
   tenantCopy = {
     headline: [config.heroTitleEn || copy.headline[0], config.heroTitleFr || copy.headline[1]],
-    intro: [config.heroIntroEn || copy.intro[0], config.heroIntroFr || copy.intro[1]]
+    intro: [config.heroIntroEn || copy.intro[0], config.heroIntroFr || copy.intro[1]],
+    announcement: [config.announcementEn || '', config.announcementFr || ''],
+    disclaimer: [config.footerTextEn || copy.disclaimer[0], config.footerTextFr || copy.disclaimer[1]]
   };
+  $('#lobby-announcement').textContent = t('announcement');
+  $('#lobby-announcement').hidden = !$('#lobby-announcement').textContent;
+  renderFaqs();
+  updatePolicyLinks();
+  renderCatalog();
   updateDocumentTitle();
   for (const node of document.querySelectorAll('[data-copy="headline"], [data-copy="intro"]')) node.textContent = t(node.dataset.copy);
   document.documentElement.style.setProperty('--green', config.accentColor);
   document.querySelector('meta[name="theme-color"]').content = config.accentColor;
   for (const brand of document.querySelectorAll('.brand')) {
-    const mark = element('span', '✧');
+    const mark = config.brandLogo ? element('img') : element('span', '✧');
+    if (config.brandLogo) {
+      mark.src = config.brandLogo;
+      mark.alt = '';
+      mark.className = 'brand-logo';
+    }
     mark.setAttribute('aria-hidden', 'true');
     brand.replaceChildren(mark, document.createTextNode(` ${config.brandName.toUpperCase()}`));
   }
@@ -307,6 +393,59 @@ function applyTenant(config) {
   }
 }
 
+function selectedFeaturedGameIds() {
+  return [...document.querySelectorAll('[data-featured-game]:checked')].map((input) => input.value);
+}
+
+function renderFeaturedGameEditor(selectedIds) {
+  const container = $('#featured-game-options');
+  if (!container) return;
+  const selected = selectedIds ?? (container.querySelector('[data-featured-game]') ? selectedFeaturedGameIds() : tenantFeaturedGameIds);
+  container.replaceChildren(...games.map((game) => {
+    const label = element('label', '', 'featured-game-choice');
+    const input = element('input');
+    input.type = 'checkbox';
+    input.value = game.id;
+    input.dataset.featuredGame = '';
+    input.checked = selected.includes(game.id);
+    input.addEventListener('change', (event) => {
+      if (selectedFeaturedGameIds().length > 3) {
+        event.currentTarget.checked = false;
+        $('#tenant-config-status').textContent = t('featuredLimit');
+        return;
+      }
+      updateTenantPreview();
+    });
+    label.append(input, element('span', game.name[language]));
+    return label;
+  }));
+}
+
+function renderFaqs() {
+  const list = $('#faq-list');
+  if (!list) return;
+  list.replaceChildren(...tenantFaqItems.map((item) => {
+    const details = element('details');
+    details.append(element('summary', language ? item.questionFr : item.questionEn), element('p', language ? item.answerFr : item.answerEn));
+    return details;
+  }));
+}
+
+function updatePolicyLinks() {
+  for (const [id, key] of [['terms-link', 'termsUrl'], ['privacy-link', 'privacyUrl']]) {
+    const link = $(`#${id}`);
+    const url = tenantPolicyLinks[`${key}${language ? 'Fr' : 'En'}`] || tenantPolicyLinks[`${key}En`] || tenantPolicyLinks[`${key}Fr`];
+    link.hidden = !url;
+    if (url) {
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    } else {
+      link.removeAttribute('href');
+    }
+  }
+}
+
 function updateTenantPreview() {
   const form = $('#tenant-config');
   if (!form) return;
@@ -316,10 +455,35 @@ function updateTenantPreview() {
   $('#tenant-preview-name').textContent = brandName || t('previewBrandPlaceholder');
   $('#tenant-preview-email').textContent = supportEmail || t('previewEmailPlaceholder');
   $('#tenant-preview-swatch').style.backgroundColor = accentColor || '#b8ec9d';
+  $('#tenant-preview-favicon').src = form.elements.brandFavicon.value || '/favicon.svg';
+  const previewSwatch = $('#tenant-preview-swatch');
+  previewSwatch.replaceChildren();
+  if (form.elements.brandLogo.value) {
+    const logo = element('img');
+    logo.src = form.elements.brandLogo.value;
+    logo.alt = '';
+    previewSwatch.append(logo);
+  }
   $('#tenant-preview-title-en').textContent = form.elements.heroTitleEn.value.trim() || copy.headline[0];
   $('#tenant-preview-title-fr').textContent = form.elements.heroTitleFr.value.trim() || copy.headline[1];
   $('#tenant-preview-intro-en').textContent = form.elements.heroIntroEn.value.trim() || copy.intro[0];
   $('#tenant-preview-intro-fr').textContent = form.elements.heroIntroFr.value.trim() || copy.intro[1];
+  $('#tenant-preview-announcement-en').textContent = form.elements.announcementEn.value.trim() || '—';
+  $('#tenant-preview-announcement-fr').textContent = form.elements.announcementFr.value.trim() || '—';
+  $('#tenant-preview-announcement').hidden = !form.elements.announcementEn.value.trim() && !form.elements.announcementFr.value.trim();
+  $('#tenant-preview-footer-en').textContent = form.elements.footerTextEn.value.trim();
+  $('#tenant-preview-footer-fr').textContent = form.elements.footerTextFr.value.trim();
+  const featuredIds = selectedFeaturedGameIds();
+  const featuredNames = games.filter((game) => featuredIds.includes(game.id)).map((game) => game.name[language]);
+  $('#tenant-preview-featured').textContent = featuredNames.length ? t('featuredPreview').replace('{games}', featuredNames.join(', ')) : '';
+  $('#tenant-preview-featured').hidden = !featuredNames.length;
+  for (let index = 0; index < 3; index += 1) {
+    const item = form.elements;
+    $(`#tenant-preview-faq-${index}-question-en`).textContent = item[`faq${index}QuestionEn`].value.trim();
+    $(`#tenant-preview-faq-${index}-answer-en`).textContent = item[`faq${index}AnswerEn`].value.trim();
+    $(`#tenant-preview-faq-${index}-question-fr`).textContent = item[`faq${index}QuestionFr`].value.trim();
+    $(`#tenant-preview-faq-${index}-answer-fr`).textContent = item[`faq${index}AnswerFr`].value.trim();
+  }
   const publish = $('#publish-config');
   if (publish) publish.disabled = !savedTenantDraftSignature || tenantConfigSignature() !== savedTenantDraftSignature;
 }
@@ -328,21 +492,51 @@ function tenantConfigSignature(config) {
   const form = $('#tenant-config');
   config ||= {
     brandName: form.elements.brandName.value,
+    brandLogo: form.elements.brandLogo.value,
+    brandFavicon: form.elements.brandFavicon.value,
+    featuredGameIds: selectedFeaturedGameIds(),
     accentColor: form.elements.accentColor.value,
     supportEmail: form.elements.supportEmail.value,
     heroTitleEn: form.elements.heroTitleEn.value,
     heroTitleFr: form.elements.heroTitleFr.value,
     heroIntroEn: form.elements.heroIntroEn.value,
-    heroIntroFr: form.elements.heroIntroFr.value
+    heroIntroFr: form.elements.heroIntroFr.value,
+    announcementEn: form.elements.announcementEn.value,
+    announcementFr: form.elements.announcementFr.value,
+    faqItems: Array.from({ length: 3 }, (_, index) => ({
+      questionEn: form.elements[`faq${index}QuestionEn`].value,
+      answerEn: form.elements[`faq${index}AnswerEn`].value,
+      questionFr: form.elements[`faq${index}QuestionFr`].value,
+      answerFr: form.elements[`faq${index}AnswerFr`].value
+    })),
+    termsUrlEn: form.elements.termsUrlEn.value,
+    termsUrlFr: form.elements.termsUrlFr.value,
+    privacyUrlEn: form.elements.privacyUrlEn.value,
+    privacyUrlFr: form.elements.privacyUrlFr.value,
+    footerTextEn: form.elements.footerTextEn.value,
+    footerTextFr: form.elements.footerTextFr.value
   };
   return JSON.stringify({
     brandName: config.brandName.trim(),
+    brandLogo: config.brandLogo || '',
+    brandFavicon: config.brandFavicon || '',
+    featuredGameIds: config.featuredGameIds || ['gold', 'roulette'],
     accentColor: config.accentColor,
     supportEmail: config.supportEmail.trim(),
     heroTitleEn: config.heroTitleEn.trim(),
     heroTitleFr: config.heroTitleFr.trim(),
     heroIntroEn: config.heroIntroEn.trim(),
-    heroIntroFr: config.heroIntroFr.trim()
+    heroIntroFr: config.heroIntroFr.trim(),
+    announcementEn: (config.announcementEn || '').trim(),
+    announcementFr: (config.announcementFr || '').trim(),
+    faqItems: (config.faqItems || defaultFaqItems()).map((item) => ({
+      questionEn: item.questionEn.trim(), answerEn: item.answerEn.trim(),
+      questionFr: item.questionFr.trim(), answerFr: item.answerFr.trim()
+    })),
+    termsUrlEn: config.termsUrlEn || '', termsUrlFr: config.termsUrlFr || '',
+    privacyUrlEn: config.privacyUrlEn || '', privacyUrlFr: config.privacyUrlFr || '',
+    footerTextEn: (config.footerTextEn || copy.disclaimer[0]).trim(),
+    footerTextFr: (config.footerTextFr || copy.disclaimer[1]).trim()
   });
 }
 
@@ -368,7 +562,13 @@ function action(label, callback, className) {
 
 function supportMessageElement(author, message, createdAt, kind) {
   const item = element('article', '', `support-message ${kind}`);
-  item.append(element('small', `${author} · ${new Date(createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
+  const timestamp = new Date(createdAt);
+  const metadata = element('div', '', 'support-message-meta');
+  metadata.append(element('strong', author));
+  const time = element('time', timestamp.toLocaleString(language ? 'fr-CA' : 'en-CA'));
+  time.dateTime = timestamp.toISOString();
+  metadata.append(time);
+  item.append(metadata);
   item.append(element('p', message));
   return item;
 }
@@ -488,6 +688,8 @@ function renderDialog() {
         return;
       }
       player = auth;
+      const favoritesSynced = await adoptAccountFavorites(auth);
+      if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
       playerSessionStartedAt = auth.sessionStartedAt;
       sessionStorage.removeItem('northplay-pending-game');
       language = auth.preferredLocale === 'fr-CA' ? 1 : 0;
@@ -542,6 +744,7 @@ function renderDialog() {
         await api('account/email-change/complete', { token: emailChangeToken });
         history.replaceState(null, '', location.pathname);
         player = null;
+        restoreGuestFavorites();
         playerSessionStartedAt = undefined;
         updateAccount();
         updateSessionReminder();
@@ -713,7 +916,51 @@ function renderDialog() {
     }
     return;
   }
-  panel.append(element('p', player.email), action(t('changeEmail'), () => openPanel('emailChange'), 'ghost'), element('p', `${t('preferredLanguage')} · ${t(language ? 'frenchLanguage' : 'englishLanguage')}`));
+  panel.append(element('p', player.email), element('p', `${t('emailStatusLabel')}: ${t(player.emailVerified ? 'emailVerifiedStatus' : 'emailUnverifiedStatus')}`), element('p', `${t('savedLanguageLabel')}: ${t(player.preferredLocale === 'fr-CA' ? 'frenchLanguage' : 'englishLanguage')}`), action(t('changeEmail'), () => openPanel('emailChange'), 'ghost'), element('h3', t('accountProfileTitle')));
+  const displayNameLabel = element('label', t('displayName'));
+  const displayNameInput = element('input');
+  Object.assign(displayNameInput, { name: 'displayName', value: player.displayName || '', maxLength: 40, autocomplete: 'nickname' });
+  const displayNameHelpText = element('small', t('displayNameHelp'));
+  const displayNameCounter = element('small', '');
+  displayNameCounter.id = 'display-name-count';
+  displayNameCounter.setAttribute('aria-live', 'polite');
+  displayNameInput.setAttribute('aria-describedby', 'display-name-count');
+  const updateDisplayNameCount = () => {
+    displayNameCounter.textContent = t('displayNameCount').replace('{count}', String(displayNameInput.value.length));
+  };
+  displayNameInput.addEventListener('input', updateDisplayNameCount);
+  updateDisplayNameCount();
+  displayNameLabel.append(displayNameInput, displayNameHelpText, displayNameCounter);
+  const profileLanguageLabel = element('label', t('preferredLanguage'));
+  const profileLanguageSelect = element('select');
+  profileLanguageSelect.name = 'locale';
+  for (const [locale, key] of [['en-CA', 'englishLanguage'], ['fr-CA', 'frenchLanguage']]) {
+    const option = element('option', t(key));
+    option.value = locale;
+    option.selected = player.preferredLocale === locale;
+    profileLanguageSelect.append(option);
+  }
+  profileLanguageLabel.append(profileLanguageSelect);
+  const profileForm = element('form');
+  const profileSave = element('button', t('saveProfile'));
+  profileForm.append(displayNameLabel, profileLanguageLabel, profileSave);
+  profileForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    profileSave.disabled = true;
+    try {
+      player = await api('account/profile', { displayName: displayNameInput.value, locale: profileLanguageSelect.value });
+      language = player.preferredLocale === 'fr-CA' ? 1 : 0;
+      localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+      render();
+      $('#status').textContent = t('profileSaved');
+    } catch (error) {
+      dialogError = error.message;
+      $('#status').textContent = t(dialogError);
+    } finally {
+      profileSave.disabled = false;
+    }
+  });
+  panel.append(profileForm);
   panel.append(element('h3', t('accountSecurity')), action(t('signOutOtherSessions'), async () => {
     if (!window.confirm(t('confirmSignOutOtherSessions'))) return;
     try {
@@ -774,6 +1021,7 @@ function renderDialog() {
   panel.append(submitForm([], t('logout'), async () => {
     await api('logout', {});
     player = null;
+    restoreGuestFavorites();
     playerSessionStartedAt = undefined;
     selectedGame = undefined;
     updateAccount();
@@ -884,6 +1132,34 @@ function renderDialog() {
     }
   });
   panel.append(limitForm);
+  const reminderForm = element('form');
+  const reminderLabel = element('label', t('reminderFrequencyLabel'));
+  const reminderSelect = element('select');
+  reminderSelect.name = 'minutes';
+  for (const [minutes, key] of [[30, 'reminder30'], [60, 'reminder60'], [120, 'reminder120']]) {
+    const option = element('option', t(key));
+    option.value = String(minutes);
+    option.selected = (player.safety.sessionReminderMinutes || 60) === minutes;
+    reminderSelect.append(option);
+  }
+  reminderLabel.append(reminderSelect);
+  const reminderButton = element('button', t('saveReminder'));
+  reminderForm.append(reminderLabel, reminderButton);
+  reminderForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    reminderButton.disabled = true;
+    try {
+      player = await api('safety/reminder', { minutes: Number(reminderSelect.value) });
+      updateSessionReminder();
+      openPanel('account');
+    } catch (error) {
+      dialogError = error.message;
+      $('#status').textContent = t(dialogError);
+    } finally {
+      reminderButton.disabled = false;
+    }
+  });
+  panel.append(reminderForm);
   panel.append(element('h3', t('coolingOffTitle')),
     element('p', t('coolingOffHelp')));
   if (player.safety.coolingOffUntil > Date.now()) {
@@ -929,6 +1205,7 @@ function renderDialog() {
       if (!window.confirm(t('confirmExclude'))) return;
       await api('safety/exclude', {});
       player = null;
+      restoreGuestFavorites();
       playerSessionStartedAt = undefined;
       updateAccount();
       updateSessionReminder();
@@ -943,6 +1220,62 @@ function openPanel(next) {
   if (!$('#dialog').open) $('#dialog').showModal();
 }
 
+function cacheGuestFavorites() {
+  try { localStorage.setItem('northplay-favorites', JSON.stringify([...guestFavorites])); } catch {}
+}
+
+function restoreGuestFavorites() {
+  favorites = new Set(guestFavorites);
+  $('#favorites-status').textContent = '';
+  renderCatalog();
+}
+
+async function adoptAccountFavorites(account) {
+  const merged = new Set([...(Array.isArray(account.favorites) ? account.favorites : []), ...guestFavorites]);
+  favorites = merged;
+  if (!guestFavorites.size) return true;
+  try {
+    const saved = await api('account/favorites', { favorites: [...merged] });
+    favorites = new Set(saved.favorites);
+    account.favorites = [...favorites];
+    guestFavorites = new Set();
+    cacheGuestFavorites();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function toggleFavorite(key) {
+  if (favoriteSavePending) return;
+  const previous = new Set(favorites);
+  if (favorites.has(key)) favorites.delete(key);
+  else favorites.add(key);
+  if (!player) {
+    guestFavorites = new Set(favorites);
+    cacheGuestFavorites();
+    $('#favorites-status').textContent = t('favoritesLocal');
+    renderCatalog();
+    return;
+  }
+  favoriteSavePending = true;
+  renderCatalog();
+  try {
+    const saved = await api('account/favorites', { favorites: [...favorites] });
+    favorites = new Set(saved.favorites);
+    player.favorites = [...favorites];
+    guestFavorites = new Set();
+    cacheGuestFavorites();
+    $('#favorites-status').textContent = t('favoritesSynced');
+  } catch {
+    favorites = previous;
+    $('#favorites-status').textContent = t('favoriteSaveFailed');
+  } finally {
+    favoriteSavePending = false;
+    renderCatalog();
+  }
+}
+
 function renderCatalog() {
   const catalog = $('#catalog');
   catalog.replaceChildren();
@@ -954,12 +1287,8 @@ function renderCatalog() {
   };
   const addFavoriteButton = (art, key, name) => {
     const isFavorite = favorites.has(key);
-    const button = action(isFavorite ? '★' : '☆', () => {
-      if (favorites.has(key)) favorites.delete(key);
-      else favorites.add(key);
-      try { localStorage.setItem('northplay-favorites', JSON.stringify([...favorites])); } catch {}
-      renderCatalog();
-    }, 'favorite-toggle');
+    const button = action(isFavorite ? '★' : '☆', () => { void toggleFavorite(key); }, 'favorite-toggle');
+    button.disabled = favoriteSavePending;
     button.setAttribute('aria-pressed', String(isFavorite));
     button.setAttribute('aria-label', t(isFavorite ? 'removeFavorite' : 'addFavorite').replace('{game}', name));
     art.append(button);
@@ -975,7 +1304,7 @@ function renderCatalog() {
     if (filter === 'favorites' && !favorites.has(key)) return false;
     if (filter !== 'all' && filter !== 'favorites' && filter !== game.type) return false;
     return matchesQuery([...game.name, demoProviderName()]);
-  });
+  }).sort((a, b) => Number(tenantFeaturedGameIds.includes(b.id)) - Number(tenantFeaturedGameIds.includes(a.id)));
   const visibleGames = providerGames.filter((game) => {
     const key = `provider:${game.provider}:${game.externalId}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
@@ -993,6 +1322,7 @@ function renderCatalog() {
     const art = createArt(game.icon, game.id);
     addFavoriteButton(art, `demo:${game.id}`, gameName(game));
     const info = element('span', '', 'card-info');
+    if (tenantFeaturedGameIds.includes(game.id)) info.append(element('small', t('featuredBadge'), 'featured-label'));
     info.append(element('small', t('demoGameLabel'), 'catalog-label'), element('strong', gameName(game)), element('small', `${t(game.type)} · ${demoProviderName()}`));
     const play = action(t('playNow'), () => {
       selectedGame = game;
@@ -1020,6 +1350,7 @@ function renderCatalog() {
 let providerStatus;
 let currentStaffEmail;
 let currentStaffId;
+let currentStaffRole;
 let providerGames = [];
 let catalogReview;
 let supportInboxEntries;
@@ -1033,11 +1364,17 @@ function render() {
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
   updateDocumentTitle();
   updateTenantPreview();
+  renderFeaturedGameEditor();
   $('#skip-link').href = location.pathname === '/admin' ? '#admin' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
+  const announcement = $('#lobby-announcement');
+  announcement.textContent = t('announcement');
+  announcement.hidden = !announcement.textContent;
+  renderFaqs();
   for (const node of document.querySelectorAll('[data-copy][aria-label]')) node.setAttribute('aria-label', t(node.dataset.copy));
   $('header nav').setAttribute('aria-label', t('primaryNav'));
   $('footer nav').setAttribute('aria-label', t('footerNav'));
+  updatePolicyLinks();
   $('.welcome-rail').setAttribute('aria-label', t('infoLabel'));
   $('#language').textContent = language ? 'EN' : 'FR';
   $('#language').setAttribute('aria-label', language ? 'Switch to English' : 'Passer au français');
@@ -1049,6 +1386,8 @@ function render() {
   if (supportInboxEntries) renderSupportInbox();
   if ($('#dialog').open) renderDialog();
   updateSessionReminder();
+  if (currentStaffId) refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
+  if (['operator_admin', 'operator_provider'].includes(currentStaffRole)) refreshManagedCatalog();
 }
 
 $('#language').addEventListener('click', async () => {
@@ -1164,6 +1503,43 @@ function updateCatalogPreview() {
     reviewButton.disabled = true;
   }
 }
+
+async function refreshManagedCatalog() {
+  const status = $('#catalog-list-status');
+  const container = $('#managed-catalog');
+  status.textContent = '';
+  try {
+    const listings = await api('providers/catalog/list', undefined, 'POST');
+    if (!listings.length) {
+      container.replaceChildren(element('p', t('catalogListingsEmpty')));
+      return;
+    }
+    container.replaceChildren(...listings.map((listing) => {
+      const row = element('article', '', 'managed-catalog-item');
+      const details = element('div');
+      details.append(element('strong', language ? listing.titleFr : listing.titleEn));
+      details.append(element('p', `${listing.name} · ${t(listing.category)} · ${t(listing.enabled ? 'catalogListingEnabled' : 'catalogListingDisabled')}`));
+      const button = action(t(listing.enabled ? 'catalogListingHide' : 'catalogListingShow'), async () => {
+        button.disabled = true;
+        try {
+          await api('providers/catalog/status', { name: listing.name, externalId: listing.externalId, enabled: !listing.enabled });
+          await refreshManagedCatalog();
+          await refreshOperatorOverview();
+          status.textContent = t('catalogListingUpdated');
+        } catch (error) {
+          status.textContent = t(error.message);
+          button.disabled = false;
+        }
+      }, 'ghost');
+      row.append(details, button);
+      return row;
+    }));
+  } catch (error) {
+    status.textContent = t(error.message);
+  }
+}
+
+$('#catalog-list-refresh').addEventListener('click', () => { void refreshManagedCatalog(); });
 
 $('#catalog-review').addEventListener('click', async () => {
   const form = $('#catalog-sync');
@@ -1288,6 +1664,8 @@ $('#catalog-sync').addEventListener('submit', async (event) => {
     const response = await api('providers/catalog', { name: name.trim(), games: imported, expectedRevision });
     providerGames = await api('games', undefined, 'GET');
     renderCatalog();
+    await refreshManagedCatalog();
+    await refreshOperatorOverview();
     $('#catalog-status').textContent = t('synced') + ' · ' + response.imported;
     catalogReview = undefined;
     updateCatalogPreview();
@@ -1303,17 +1681,90 @@ async function loadTenantDraft() {
   const form = $('#tenant-config');
   const draft = await api('admin/config', undefined, 'GET');
   form.elements.brandName.value = draft.config.brandName;
+  form.elements.brandLogo.value = draft.config.brandLogo || '';
+  $('#brand-logo-file').value = '';
+  form.elements.brandFavicon.value = draft.config.brandFavicon || '';
+  $('#brand-favicon-file').value = '';
   form.elements.accentColor.value = draft.config.accentColor;
   form.elements.supportEmail.value = draft.config.supportEmail;
   form.elements.heroTitleEn.value = draft.config.heroTitleEn || copy.headline[0];
   form.elements.heroTitleFr.value = draft.config.heroTitleFr || copy.headline[1];
   form.elements.heroIntroEn.value = draft.config.heroIntroEn || copy.intro[0];
   form.elements.heroIntroFr.value = draft.config.heroIntroFr || copy.intro[1];
+  form.elements.announcementEn.value = draft.config.announcementEn || '';
+  form.elements.announcementFr.value = draft.config.announcementFr || '';
+  const faqItems = Array.isArray(draft.config.faqItems) ? draft.config.faqItems : defaultFaqItems();
+  faqItems.forEach((item, index) => {
+    form.elements[`faq${index}QuestionEn`].value = item.questionEn;
+    form.elements[`faq${index}AnswerEn`].value = item.answerEn;
+    form.elements[`faq${index}QuestionFr`].value = item.questionFr;
+    form.elements[`faq${index}AnswerFr`].value = item.answerFr;
+  });
+  tenantFeaturedGameIds = Array.isArray(draft.config.featuredGameIds) ? draft.config.featuredGameIds : ['gold', 'roulette'];
+  renderFeaturedGameEditor(tenantFeaturedGameIds);
+  form.elements.termsUrlEn.value = draft.config.termsUrlEn || '';
+  form.elements.termsUrlFr.value = draft.config.termsUrlFr || '';
+  form.elements.privacyUrlEn.value = draft.config.privacyUrlEn || '';
+  form.elements.privacyUrlFr.value = draft.config.privacyUrlFr || '';
+  form.elements.footerTextEn.value = draft.config.footerTextEn || copy.disclaimer[0];
+  form.elements.footerTextFr.value = draft.config.footerTextFr || copy.disclaimer[1];
   savedTenantDraftSignature = tenantConfigSignature();
   updateTenantPreview();
   $('#tenant-config-status').textContent = `v${draft.version}`;
 }
 $('#tenant-config').addEventListener('input', updateTenantPreview);
+$('#brand-logo-file').addEventListener('change', (event) => {
+  const input = event.currentTarget;
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 48 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+    input.value = '';
+    $('#tenant-config-status').textContent = t('brandLogoInvalid');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result !== 'string') {
+      $('#tenant-config-status').textContent = t('brandLogoInvalid');
+      return;
+    }
+    $('#tenant-config').elements.brandLogo.value = reader.result;
+    updateTenantPreview();
+  };
+  reader.onerror = () => { $('#tenant-config-status').textContent = t('brandLogoInvalid'); };
+  reader.readAsDataURL(file);
+});
+$('#remove-brand-logo').addEventListener('click', () => {
+  $('#tenant-config').elements.brandLogo.value = '';
+  $('#brand-logo-file').value = '';
+  updateTenantPreview();
+});
+$('#brand-favicon-file').addEventListener('change', (event) => {
+  const input = event.currentTarget;
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 16 * 1024 || !['image/png', 'image/webp'].includes(file.type)) {
+    input.value = '';
+    $('#tenant-config-status').textContent = t('brandFaviconInvalid');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result !== 'string') {
+      $('#tenant-config-status').textContent = t('brandFaviconInvalid');
+      return;
+    }
+    $('#tenant-config').elements.brandFavicon.value = reader.result;
+    updateTenantPreview();
+  };
+  reader.onerror = () => { $('#tenant-config-status').textContent = t('brandFaviconInvalid'); };
+  reader.readAsDataURL(file);
+});
+$('#remove-brand-favicon').addEventListener('click', () => {
+  $('#tenant-config').elements.brandFavicon.value = '';
+  $('#brand-favicon-file').value = '';
+  updateTenantPreview();
+});
 $('#load-config').addEventListener('click', async () => {
   try { await loadTenantDraft(); }
   catch (error) { $('#tenant-config-status').textContent = t(error.message); }
@@ -1325,8 +1776,21 @@ $('#tenant-config').addEventListener('submit', async (event) => {
   try {
     const config = {
       brandName: brandName.trim(), primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor, supportEmail: supportEmail.trim(),
+      brandLogo: form.elements.brandLogo.value,
+      brandFavicon: form.elements.brandFavicon.value,
+      featuredGameIds: selectedFeaturedGameIds(),
       heroTitleEn: form.elements.heroTitleEn.value.trim(), heroTitleFr: form.elements.heroTitleFr.value.trim(),
-      heroIntroEn: form.elements.heroIntroEn.value.trim(), heroIntroFr: form.elements.heroIntroFr.value.trim()
+      heroIntroEn: form.elements.heroIntroEn.value.trim(), heroIntroFr: form.elements.heroIntroFr.value.trim(),
+      announcementEn: form.elements.announcementEn.value.trim(), announcementFr: form.elements.announcementFr.value.trim(),
+      faqItems: Array.from({ length: 3 }, (_, index) => ({
+        questionEn: form.elements[`faq${index}QuestionEn`].value.trim(),
+        answerEn: form.elements[`faq${index}AnswerEn`].value.trim(),
+        questionFr: form.elements[`faq${index}QuestionFr`].value.trim(),
+        answerFr: form.elements[`faq${index}AnswerFr`].value.trim()
+      })),
+      termsUrlEn: form.elements.termsUrlEn.value.trim(), termsUrlFr: form.elements.termsUrlFr.value.trim(),
+      privacyUrlEn: form.elements.privacyUrlEn.value.trim(), privacyUrlFr: form.elements.privacyUrlFr.value.trim(),
+      footerTextEn: form.elements.footerTextEn.value.trim(), footerTextFr: form.elements.footerTextFr.value.trim()
     };
     const result = await api('admin/config', { config });
     savedTenantDraftSignature = tenantConfigSignature(config);
@@ -1361,6 +1825,9 @@ async function refreshStaffAudit() {
   const events = await api('admin/audit', undefined, 'GET');
   $('#staff-audit').replaceChildren(...events.map((entry) => element('li', `${entry.actor} · ${entry.action} · ${entry.target} · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')} · ${entry.correlationId || ''}`)));
 }
+function supportPlayerIdentity(ticket) {
+  return ticket.displayName ? `${ticket.displayName} (${ticket.email})` : ticket.email;
+}
 function renderSupportInbox() {
   if (!supportInboxEntries) return;
   const container = $('#support-tickets');
@@ -1385,7 +1852,7 @@ function renderSupportInbox() {
     if (selectedComplaint === 'requests' && ticket.isComplaint) return false;
     if (selectedAssignee === 'mine' && ticket.assignedTo !== currentStaffId) return false;
     if (selectedAssignee === 'unassigned' && ticket.assignedTo) return false;
-    const searchable = `${ticket.email} ${ticket.assignedEmail || ''} ${ticket.message} ${(ticket.messages || []).map((message) => message.message).join(' ')} ${(ticket.notes || []).map((note) => note.note).join(' ')}`.toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    const searchable = `${supportPlayerIdentity(ticket)} ${ticket.email} ${ticket.assignedEmail || ''} ${ticket.message} ${(ticket.messages || []).map((message) => message.message).join(' ')} ${(ticket.notes || []).map((note) => note.note).join(' ')}`.toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
     return searchable.includes(query);
   });
   if (!tickets.length) {
@@ -1394,14 +1861,15 @@ function renderSupportInbox() {
   }
   container.replaceChildren(...tickets.map((ticket) => {
     const article = element('article', '', 'support-ticket');
-    article.append(element('h3', `#${ticket.id} · ${ticket.email}`));
+    const playerIdentity = supportPlayerIdentity(ticket);
+    article.append(element('h3', `#${ticket.id} · ${playerIdentity}`));
     article.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
     if (ticket.isComplaint) article.append(element('strong', t('supportComplaintBadge'), 'complaint-badge'));
     article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
     article.append(element('h4', t('supportThread')));
-    article.append(supportMessageElement(ticket.email, ticket.message, ticket.createdAt, 'from-player'));
+    article.append(supportMessageElement(playerIdentity, ticket.message, ticket.createdAt, 'from-player'));
     for (const message of ticket.messages || []) {
-      const author = message.authorType === 'staff' ? message.author || t('supportStaffAuthor') : ticket.email;
+      const author = message.authorType === 'staff' ? message.author || t('supportStaffAuthor') : playerIdentity;
       article.append(supportMessageElement(author, message.message, message.createdAt, message.authorType === 'staff' ? 'from-staff' : 'from-player'));
     }
     const assignmentForm = element('form');
@@ -1597,13 +2065,32 @@ $('#support-filter').addEventListener('change', renderSupportInbox);
 $('#support-complaint-filter').addEventListener('change', renderSupportInbox);
 $('#support-priority-filter').addEventListener('change', renderSupportInbox);
 $('#support-assignee-filter').addEventListener('change', renderSupportInbox);
+async function refreshOperatorOverview() {
+  const overview = await api('admin/overview', undefined, 'GET');
+  const locale = language ? 'fr-CA' : 'en-CA';
+  const number = new Intl.NumberFormat(locale);
+  $('#overview-players').textContent = number.format(overview.playerAccounts);
+  $('#overview-verified').textContent = number.format(overview.verifiedAccounts);
+  $('#overview-rounds').textContent = number.format(overview.demoRounds30Days);
+  $('#overview-wagered').textContent = money(overview.simulatedWagersCents30Days);
+  $('#overview-tickets').textContent = number.format(overview.openSupportTickets);
+  $('#overview-catalog').textContent = number.format(overview.enabledCatalogListings);
+  $('#overview-status').textContent = t('overviewUpdated').replace('{time}', new Date(overview.generatedAt).toLocaleTimeString(locale));
+}
+$('#overview-refresh').addEventListener('click', () => {
+  refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
+});
+
 function showStaffSession(session) {
   currentStaffEmail = session.email;
   currentStaffId = session.id;
+  currentStaffRole = session.role;
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
   $('#staff-identity').textContent = `${session.email} · ${session.role}`;
   for (const section of document.querySelectorAll('[data-roles]')) section.hidden = !section.dataset.roles.split(',').includes(session.role);
+  refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
+  if (['operator_admin', 'operator_provider'].includes(session.role)) refreshManagedCatalog();
   $('#mfa-setup').hidden = session.mfaEnabled;
   $('#mfa-verify').hidden = false;
   $('#mfa-verify').querySelector('button[type=submit]').hidden = session.mfaEnabled;
@@ -1661,6 +2148,7 @@ $('#staff-logout').addEventListener('click', async () => {
   await api('admin/logout', {});
   currentStaffEmail = undefined;
   currentStaffId = undefined;
+  currentStaffRole = undefined;
   $('#admin-tools').hidden = true;
   $('#staff-login').hidden = false;
 });
@@ -1739,6 +2227,10 @@ try {
 }
 try {
   player = await api('account', undefined, 'GET');
+  if (player) {
+    const favoritesSynced = await adoptAccountFavorites(player);
+    if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
+  }
   playerSessionStartedAt = player?.sessionStartedAt;
   if (player?.preferredLocale) {
     language = player.preferredLocale === 'fr-CA' ? 1 : 0;

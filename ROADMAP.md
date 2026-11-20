@@ -92,7 +92,7 @@ This phase uses the approved game provider’s documentation, sandbox, credentia
 
 ## Phase 8 — Customer support and operations
 
-The current prototype includes a first support slice: signed-in players can submit and continue tenant-scoped ticket conversations, while operator admins and support staff can triage priority, assign requests to active support staff, add private case notes, reply, and close or reopen requests. It does not yet include the full lookup, escalation, notification, or retention workflows below.
+The current prototype includes a first operational dashboard slice showing tenant player, demo activity, support, and catalog totals. It also includes a first support slice: signed-in players can submit and continue tenant-scoped ticket conversations, while operator admins and support staff can triage priority, assign requests to active support staff, add private case notes, reply, and close or reopen requests. It does not yet include the full lookup, escalation, notification, or retention workflows below.
 
 | Module | Scope | Completion outcome |
 |---|---|---|
@@ -133,4 +133,4 @@ The current prototype includes a first support slice: signed-in players can subm
 
 ## Current prototype status
 
-The current build is a presentation demo with a bilingual branded lobby, four built-in simulated games, player account and support flows, simulated balances and ledger history, player-protection examples, tenant branding, staff roles and tools, and a provider catalog import preview. Imported provider listings do not launch games. The project is not intended for real-money operation; identity/location checks, payment processing, live provider integrations, licensing, and production launch work are outside the demo scope.
+The current build is a presentation demo with operator-managed bilingual lobby announcements and FAQs with configurable localized policy links and footer text, plus bilingual brand identity with an operator-uploaded favicon, four built-in simulated games with operator-managed featured placement, player account and support flows, simulated balances and ledger history, player-protection examples, tenant branding, staff roles and tools, and a provider catalog import preview. Imported provider listings do not launch games. The project is not intended for real-money operation; identity/location checks, payment processing, live provider integrations, licensing, and production launch work are outside the demo scope.

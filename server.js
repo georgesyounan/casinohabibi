@@ -57,7 +57,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS staff_sessions (token TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), staff_id INTEGER NOT NULL REFERENCES staff_accounts(id), expires INTEGER NOT NULL, created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS staff_events (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), actor_id INTEGER NOT NULL REFERENCES staff_accounts(id), action TEXT NOT NULL, target TEXT NOT NULL, created_at INTEGER NOT NULL, correlation_id TEXT);
   CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, email_verified INTEGER NOT NULL DEFAULT 1 CHECK(email_verified IN (0, 1)), preferred_locale TEXT NOT NULL DEFAULT 'en-CA' CHECK(preferred_locale IN ('en-CA', 'fr-CA')));
-  CREATE TABLE IF NOT EXISTS player_safety (player INTEGER PRIMARY KEY REFERENCES players(id), pause_until INTEGER, excluded_at INTEGER, cooling_off_until INTEGER);
+  CREATE TABLE IF NOT EXISTS player_profiles (tenant_id TEXT NOT NULL REFERENCES tenants(id), player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE, display_name TEXT NOT NULL DEFAULT '', preferred_locale TEXT NOT NULL DEFAULT 'en-CA' CHECK(preferred_locale IN ('en-CA', 'fr-CA')), updated_at INTEGER NOT NULL, PRIMARY KEY(tenant_id, player_id));
+  CREATE TABLE IF NOT EXISTS player_favorites (player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE, tenant_id TEXT NOT NULL REFERENCES tenants(id), favorite_key TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(player_id, tenant_id, favorite_key));
+  CREATE TABLE IF NOT EXISTS player_safety (player INTEGER PRIMARY KEY REFERENCES players(id), pause_until INTEGER, excluded_at INTEGER, cooling_off_until INTEGER, session_reminder_minutes INTEGER NOT NULL DEFAULT 60 CHECK(session_reminder_minutes IN (30, 60, 120)));
   CREATE TABLE IF NOT EXISTS support_tickets (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), player_id INTEGER NOT NULL REFERENCES players(id), category TEXT NOT NULL CHECK(category IN ('account', 'game', 'responsible_play', 'other')), message TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('open', 'answered', 'closed')), priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low', 'normal', 'high', 'urgent')), assigned_to INTEGER REFERENCES staff_accounts(id), reply TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, replied_by INTEGER REFERENCES staff_accounts(id), player_seen_at INTEGER, reply_thread_migrated INTEGER NOT NULL DEFAULT 0 CHECK(reply_thread_migrated IN (0, 1)));
   CREATE TABLE IF NOT EXISTS support_ticket_messages (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE, author_type TEXT NOT NULL CHECK(author_type IN ('player', 'staff')), player_id INTEGER REFERENCES players(id), staff_id INTEGER REFERENCES staff_accounts(id), message TEXT NOT NULL, created_at INTEGER NOT NULL, CHECK((author_type = 'player' AND player_id IS NOT NULL AND staff_id IS NULL) OR (author_type = 'staff' AND staff_id IS NOT NULL AND player_id IS NULL)));
   CREATE INDEX IF NOT EXISTS support_ticket_messages_thread ON support_ticket_messages(tenant_id, ticket_id, id);
@@ -127,10 +129,19 @@ for (const [column, definition] of [['verification_token', 'TEXT'], ['verified_a
 }
 db.prepare("INSERT OR IGNORE INTO tenants(id, slug, name, status, created_at) VALUES ('sandbox', 'sandbox', 'Northplay Sandbox', 'active', ?)").run(Date.now());
 const defaultTenantConfig = {
-  brandName: 'Northplay', primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor: '#d7b45a', supportEmail: '',
+  brandName: 'Northplay', brandLogo: '', brandFavicon: '', primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor: '#d7b45a', supportEmail: '',
   heroTitleEn: 'Your seat at the table.', heroTitleFr: 'Votre place à la table.',
   heroIntroEn: 'Explore the game lobby and try a round with simulated CAD funds.',
-  heroIntroFr: 'Explorez le hall et essayez une partie avec des fonds fictifs en dollars canadiens.'
+  heroIntroFr: 'Explorez le hall et essayez une partie avec des fonds fictifs en dollars canadiens.',
+  announcementEn: '', announcementFr: '',
+  faqItems: [
+    { questionEn: 'Can I withdraw my demo balance?', answerEn: 'No. The balance is simulated, has no cash value, and cannot be deposited or withdrawn.', questionFr: 'Puis-je retirer mon solde de démonstration?', answerFr: 'Non. Le solde est fictif, n’a aucune valeur monétaire et ne peut être ni déposé ni retiré.' },
+    { questionEn: 'Can I play games from external providers?', answerEn: 'Not in this demo. It includes four built-in simulated games you can play. Imported provider listings are for catalog preview only; no external games are connected or launched.', questionFr: 'Puis-je jouer aux jeux de fournisseurs externes?', answerFr: 'Pas dans cette version de démonstration. Elle comprend quatre jeux simulés intégrés auxquels vous pouvez jouer. Les fiches importées servent uniquement à prévisualiser le catalogue; aucun jeu externe n’est connecté ni lancé.' },
+    { questionEn: 'What account controls are available?', answerEn: 'You can set a daily limit for simulated wagers, pause demo play for 15 minutes, or self-exclude the account. These controls apply to this prototype account only.', questionFr: 'Quels contrôles sont offerts dans le compte?', answerFr: 'Vous pouvez fixer une limite quotidienne de mises fictives, mettre le jeu en pause pendant 15 minutes ou exclure le compte. Ces contrôles s’appliquent uniquement au compte de ce prototype.' }
+  ],
+  featuredGameIds: ['gold', 'roulette'],
+  footerTextEn: 'Simulated funds only. No cash value.', footerTextFr: 'Fonds fictifs uniquement. Aucune valeur monétaire.',
+  privacyUrlEn: '', privacyUrlFr: '', termsUrlEn: '', termsUrlFr: ''
 };
 if (!db.prepare("SELECT 1 FROM tenant_config_versions WHERE tenant_id = 'sandbox' AND status = 'published'").get()) {
   db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES ('sandbox', 1, ?, 'published', ?)").run(JSON.stringify(defaultTenantConfig), Date.now());
@@ -189,11 +200,15 @@ if (!db.prepare('PRAGMA table_info(players)').all().some(({ name }) => name === 
 if (!db.prepare('PRAGMA table_info(players)').all().some(({ name }) => name === 'preferred_locale')) {
   db.exec("ALTER TABLE players ADD COLUMN preferred_locale TEXT NOT NULL DEFAULT 'en-CA' CHECK(preferred_locale IN ('en-CA', 'fr-CA'))");
 }
+db.prepare('INSERT OR IGNORE INTO player_profiles(tenant_id, player_id, display_name, preferred_locale, updated_at) SELECT tenant_id, id, \'\', preferred_locale, ? FROM players').run(Date.now());
 if (!db.prepare('PRAGMA table_info(player_safety)').all().some(({ name }) => name === 'daily_limit_cents')) {
   db.exec('ALTER TABLE player_safety ADD COLUMN daily_limit_cents INTEGER NOT NULL DEFAULT 2500');
 }
 if (!db.prepare('PRAGMA table_info(player_safety)').all().some(({ name }) => name === 'cooling_off_until')) {
   db.exec('ALTER TABLE player_safety ADD COLUMN cooling_off_until INTEGER');
+}
+if (!db.prepare('PRAGMA table_info(player_safety)').all().some(({ name }) => name === 'session_reminder_minutes')) {
+  db.exec('ALTER TABLE player_safety ADD COLUMN session_reminder_minutes INTEGER NOT NULL DEFAULT 60 CHECK(session_reminder_minutes IN (30, 60, 120))');
 }
 if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === 'created_at')) {
   db.exec('ALTER TABLE ledger ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
@@ -427,19 +442,58 @@ function dailyWagered(id, tenantId) {
   return db.prepare("SELECT coalesce(sum(wager), 0) AS total FROM ledger WHERE player = ? AND tenant_id = ? AND game IS NOT NULL AND date(created_at / 1000, 'unixepoch') = ?").get(id, tenantId, today).total;
 }
 
+function validBrandLogo(dataUri) {
+  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUri);
+  if (!match || match[2].length % 4 !== 0) return false;
+  const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length > 48 * 1024 || bytes.toString('base64') !== match[2]) return false;
+  if (match[1] === 'png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (match[1] === 'jpeg') return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  return bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+}
+
+function validBrandFavicon(dataUri) {
+  const match = /^data:image\/(png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUri);
+  if (!match || match[2].length % 4 !== 0) return false;
+  const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length > 16 * 1024 || bytes.toString('base64') !== match[2]) return false;
+  if (match[1] === 'png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+}
+
+function validPolicyUrl(value) {
+  if (!value) return true;
+  if (value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 function account(id, tenantId) {
-  const safety = db.prepare('SELECT pause_until, excluded_at, daily_limit_cents, cooling_off_until FROM player_safety WHERE player = ?').get(id) || {};
+  const profile = db.prepare('SELECT display_name AS displayName, preferred_locale AS preferredLocale FROM player_profiles WHERE player_id = ? AND tenant_id = ?').get(id, tenantId);
+  const safety = db.prepare('SELECT pause_until, excluded_at, daily_limit_cents, cooling_off_until, session_reminder_minutes FROM player_safety WHERE player = ?').get(id) || {};
   const marketingConsent = db.prepare("SELECT granted FROM player_consent_events WHERE player_id = ? AND tenant_id = ? AND consent_type = 'marketing_email' ORDER BY id DESC LIMIT 1").get(id, tenantId);
   const supportReplies = db.prepare("SELECT count(*) AS count FROM support_tickets WHERE player_id = ? AND tenant_id = ? AND reply IS NOT NULL AND status IN ('answered', 'closed') AND updated_at > coalesce(player_seen_at, 0) AND id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id DESC LIMIT 50)").get(id, tenantId, id, tenantId).count;
   const historyRows = db.prepare('SELECT id, game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id DESC LIMIT 21').all(id, tenantId);
+  const availableFavorites = new Set(games.map(({ id: gameId }) => `demo:${gameId}`));
+  for (const listing of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
+    availableFavorites.add(`provider:${listing.provider}:${listing.externalId}`);
+  }
+  const favorites = db.prepare('SELECT favorite_key AS key FROM player_favorites WHERE player_id = ? AND tenant_id = ? ORDER BY created_at, favorite_key').all(id, tenantId).map(({ key }) => key).filter((key) => availableFavorites.has(key));
   const hasMoreHistory = historyRows.length > 20;
   if (hasMoreHistory) historyRows.pop();
   return {
-    ...db.prepare('SELECT email, preferred_locale AS preferredLocale FROM players WHERE id = ? AND tenant_id = ?').get(id, tenantId),
+    ...db.prepare('SELECT email, email_verified AS emailVerified FROM players WHERE id = ? AND tenant_id = ?').get(id, tenantId),
+    displayName: profile?.displayName || '',
+    preferredLocale: profile?.preferredLocale || 'en-CA',
     balance: balance(id, tenantId),
     history: historyRows,
     historyNextCursor: hasMoreHistory ? historyRows.at(-1).id : null,
-    safety: { pausedUntil: safety.pause_until || null, coolingOffUntil: safety.cooling_off_until || null, excluded: Boolean(safety.excluded_at), dailyLimit: safety.daily_limit_cents ?? 2500, dailyWagered: dailyWagered(id, tenantId) },
+    favorites,
+    safety: { pausedUntil: safety.pause_until || null, coolingOffUntil: safety.cooling_off_until || null, excluded: Boolean(safety.excluded_at), dailyLimit: safety.daily_limit_cents ?? 2500, dailyWagered: dailyWagered(id, tenantId), sessionReminderMinutes: safety.session_reminder_minutes ?? 60 },
     marketingEmailConsent: Boolean(marketingConsent?.granted),
     supportReplies
   };
@@ -471,6 +525,23 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/admin/session') {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
     return { id: staff.id, email: staff.email, role: staff.role, mfaEnabled: Boolean(staff.mfa_enabled) };
+  }
+  if (route === 'GET /api/admin/overview') {
+    staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
+    const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const players = db.prepare('SELECT count(*) AS total, coalesce(sum(email_verified), 0) AS verified FROM players WHERE tenant_id = ?').get(tenantId);
+    const gameplay = db.prepare('SELECT count(*) AS rounds, coalesce(sum(wager), 0) AS wagered_cents FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ?').get(tenantId, since);
+    const support = db.prepare("SELECT count(*) AS open FROM support_tickets WHERE tenant_id = ? AND status = 'open'").get(tenantId);
+    const catalog = db.prepare('SELECT count(*) AS enabled FROM game_catalog WHERE tenant_id = ? AND enabled = 1').get(tenantId);
+    return {
+      playerAccounts: players.total,
+      verifiedAccounts: players.verified,
+      demoRounds30Days: gameplay.rounds,
+      simulatedWagersCents30Days: gameplay.wagered_cents,
+      openSupportTickets: support.open,
+      enabledCatalogListings: catalog.enabled,
+      generatedAt: Date.now()
+    };
   }
   if (route === 'POST /api/admin/password') {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
@@ -675,9 +746,11 @@ async function api(req, res, path, tenantId, requestId) {
       return { version: draft.version, config: JSON.parse(draft.config) };
     }
     if (route === 'POST /api/admin/config') {
-      const { config } = await body(req);
-      if (!config || Object.keys(config).sort().join(',') !== 'accentColor,brandName,enabledLocales,heroIntroEn,heroIntroFr,heroTitleEn,heroTitleFr,primaryLocale,supportEmail' ||
+      const { config } = await body(req, 96 * 1024);
+      if (!config || Object.keys(config).sort().join(',') !== 'accentColor,announcementEn,announcementFr,brandFavicon,brandLogo,brandName,enabledLocales,faqItems,featuredGameIds,footerTextEn,footerTextFr,heroIntroEn,heroIntroFr,heroTitleEn,heroTitleFr,primaryLocale,privacyUrlEn,privacyUrlFr,supportEmail,termsUrlEn,termsUrlFr' ||
           typeof config.brandName !== 'string' || !config.brandName.trim() || config.brandName.length > 48 ||
+          typeof config.brandLogo !== 'string' || (config.brandLogo !== '' && !validBrandLogo(config.brandLogo)) ||
+          typeof config.brandFavicon !== 'string' || (config.brandFavicon !== '' && !validBrandFavicon(config.brandFavicon)) ||
           config.primaryLocale !== 'en-CA' || !Array.isArray(config.enabledLocales) || config.enabledLocales.length !== 2 ||
           !['en-CA', 'fr-CA'].every((locale) => config.enabledLocales.includes(locale)) ||
           typeof config.accentColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(config.accentColor) ||
@@ -685,7 +758,20 @@ async function api(req, res, path, tenantId, requestId) {
           typeof config.heroTitleEn !== 'string' || !config.heroTitleEn.trim() || config.heroTitleEn.length > 120 ||
           typeof config.heroTitleFr !== 'string' || !config.heroTitleFr.trim() || config.heroTitleFr.length > 120 ||
           typeof config.heroIntroEn !== 'string' || !config.heroIntroEn.trim() || config.heroIntroEn.length > 300 ||
-          typeof config.heroIntroFr !== 'string' || !config.heroIntroFr.trim() || config.heroIntroFr.length > 300) fail(400, 'invalid');
+          typeof config.heroIntroFr !== 'string' || !config.heroIntroFr.trim() || config.heroIntroFr.length > 300 ||
+          typeof config.announcementEn !== 'string' || config.announcementEn.length > 140 ||
+          typeof config.announcementFr !== 'string' || config.announcementFr.length > 140 ||
+          !Array.isArray(config.faqItems) || config.faqItems.length !== 3 || config.faqItems.some((item) =>
+            !item || Object.keys(item).sort().join(',') !== 'answerEn,answerFr,questionEn,questionFr' ||
+            typeof item.questionEn !== 'string' || !item.questionEn.trim() || item.questionEn.length > 140 ||
+            typeof item.questionFr !== 'string' || !item.questionFr.trim() || item.questionFr.length > 140 ||
+            typeof item.answerEn !== 'string' || !item.answerEn.trim() || item.answerEn.length > 500 ||
+            typeof item.answerFr !== 'string' || !item.answerFr.trim() || item.answerFr.length > 500) ||
+          !Array.isArray(config.featuredGameIds) || config.featuredGameIds.length > 3 || new Set(config.featuredGameIds).size !== config.featuredGameIds.length ||
+          config.featuredGameIds.some((id) => typeof id !== 'string' || !games.some((game) => game.id === id)) ||
+          !['privacyUrlEn', 'privacyUrlFr', 'termsUrlEn', 'termsUrlFr'].every((key) => typeof config[key] === 'string' && validPolicyUrl(config[key])) ||
+          typeof config.footerTextEn !== 'string' || !config.footerTextEn.trim() || config.footerTextEn.length > 160 ||
+          typeof config.footerTextFr !== 'string' || !config.footerTextFr.trim() || config.footerTextFr.length > 160) fail(400, 'invalid');
       const draft = db.prepare("SELECT version FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
       const version = draft?.version ?? db.prepare('SELECT coalesce(max(version), 0) + 1 AS version FROM tenant_config_versions WHERE tenant_id = ?').get(tenantId).version;
       if (draft) db.prepare('UPDATE tenant_config_versions SET config = ?, created_at = ? WHERE tenant_id = ? AND version = ?').run(JSON.stringify(config), Date.now(), tenantId, version);
@@ -706,6 +792,22 @@ async function api(req, res, path, tenantId, requestId) {
     if (!player) return null;
     const session = db.prepare('SELECT created_at AS sessionStartedAt FROM sessions WHERE token = ? AND tenant_id = ?').get(hash(cookie), tenantId);
     return { ...account(player, tenantId), sessionStartedAt: session.sessionStartedAt };
+  }
+  if (route === 'POST /api/account/favorites') {
+    if (!player) fail(401, 'signin');
+    const { favorites: requested } = await body(req, 128 * 1024);
+    if (!Array.isArray(requested) || requested.length > 1000 || requested.some((key) => typeof key !== 'string' || key.length > 256)) fail(400, 'invalid');
+    const allowed = new Set(games.map(({ id }) => `demo:${id}`));
+    for (const listing of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
+      allowed.add(`provider:${listing.provider}:${listing.externalId}`);
+    }
+    const saved = [...new Set(requested)].filter((key) => allowed.has(key));
+    transaction(() => {
+      db.prepare('DELETE FROM player_favorites WHERE player_id = ? AND tenant_id = ?').run(player, tenantId);
+      const insert = db.prepare('INSERT INTO player_favorites(player_id, tenant_id, favorite_key, created_at) VALUES (?, ?, ?, ?)');
+      for (const key of saved) insert.run(player, tenantId, key, Date.now());
+    });
+    return { favorites: saved };
   }
   if (route === 'POST /api/account/email-change/request') {
     if (!player) fail(401, 'signin');
@@ -775,7 +877,16 @@ async function api(req, res, path, tenantId, requestId) {
     if (!player) fail(401, 'signin');
     const { locale } = await body(req);
     if (!['en-CA', 'fr-CA'].includes(locale)) fail(400, 'invalid');
-    db.prepare('UPDATE players SET preferred_locale = ? WHERE id = ? AND tenant_id = ?').run(locale, player, tenantId);
+    db.prepare('UPDATE player_profiles SET preferred_locale = ?, updated_at = ? WHERE player_id = ? AND tenant_id = ?').run(locale, Date.now(), player, tenantId);
+    return account(player, tenantId);
+  }
+  if (route === 'POST /api/account/profile') {
+    if (!player) fail(401, 'signin');
+    const { displayName, locale } = await body(req);
+    if (typeof displayName !== 'string' || displayName.length > 80 || !['en-CA', 'fr-CA'].includes(locale) || /[\u0000-\u001f\u007f]/.test(displayName)) fail(400, 'invalid');
+    const normalizedName = displayName.trim().replace(/\s+/gu, ' ');
+    if (normalizedName.length > 40) fail(400, 'invalid');
+    db.prepare('UPDATE player_profiles SET display_name = ?, preferred_locale = ?, updated_at = ? WHERE player_id = ? AND tenant_id = ?').run(normalizedName, locale, Date.now(), player, tenantId);
     return account(player, tenantId);
   }
   if (route === 'POST /api/account/sessions/revoke-others') {
@@ -792,7 +903,7 @@ async function api(req, res, path, tenantId, requestId) {
     if (typeof marketingEmail !== 'boolean') fail(400, 'invalid');
     const latest = db.prepare("SELECT granted FROM player_consent_events WHERE player_id = ? AND tenant_id = ? AND consent_type = 'marketing_email' ORDER BY id DESC LIMIT 1").get(player, tenantId);
     if (Boolean(latest?.granted) !== marketingEmail) {
-      const locale = db.prepare('SELECT preferred_locale AS locale FROM players WHERE id = ? AND tenant_id = ?').get(player, tenantId).locale;
+      const locale = db.prepare('SELECT preferred_locale AS locale FROM player_profiles WHERE player_id = ? AND tenant_id = ?').get(player, tenantId).locale;
       db.prepare("INSERT INTO player_consent_events(tenant_id, player_id, consent_type, granted, locale, notice_version, source, captured_at) VALUES (?, ?, 'marketing_email', ?, ?, 'marketing_email_v1', 'account_settings', ?)").run(tenantId, player, Number(marketingEmail), locale, Date.now());
     }
     return account(player, tenantId);
@@ -820,8 +931,9 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'GET /api/account/export') {
     if (!player) fail(401, 'signin');
-    const profile = db.prepare('SELECT email, email_verified AS emailVerified, preferred_locale AS preferredLocale FROM players WHERE id = ? AND tenant_id = ?').get(player, tenantId);
-    const safety = db.prepare('SELECT pause_until AS pausedUntil, cooling_off_until AS coolingOffUntil, excluded_at AS excludedAt, daily_limit_cents AS dailyLimitCents FROM player_safety WHERE player = ?').get(player) || {};
+    const profile = db.prepare('SELECT p.email, p.email_verified AS emailVerified, profile.display_name AS displayName, profile.preferred_locale AS preferredLocale FROM players p JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = p.tenant_id WHERE p.id = ? AND p.tenant_id = ?').get(player, tenantId);
+    const favorites = db.prepare('SELECT favorite_key AS key FROM player_favorites WHERE player_id = ? AND tenant_id = ? ORDER BY created_at, favorite_key').all(player, tenantId).map(({ key }) => key);
+    const safety = db.prepare('SELECT pause_until AS pausedUntil, cooling_off_until AS coolingOffUntil, excluded_at AS excludedAt, daily_limit_cents AS dailyLimitCents, session_reminder_minutes AS sessionReminderMinutes FROM player_safety WHERE player = ?').get(player) || {};
     const transactions = db.prepare('SELECT game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
     const tickets = db.prepare('SELECT id, category, is_complaint AS isComplaint, message, status, created_at AS createdAt, updated_at AS updatedAt FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
     const consents = db.prepare('SELECT consent_type AS type, granted, locale, notice_version AS noticeVersion, source, captured_at AS capturedAt FROM player_consent_events WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId).map((entry) => ({ ...entry, granted: Boolean(entry.granted) }));
@@ -835,9 +947,10 @@ async function api(req, res, path, tenantId, requestId) {
     return {
       schemaVersion: 1,
       exportedAt: Date.now(),
-      account: { email: profile.email, emailVerified: Boolean(profile.emailVerified), preferredLocale: profile.preferredLocale, tenantId },
+      account: { email: profile.email, displayName: profile.displayName, emailVerified: Boolean(profile.emailVerified), preferredLocale: profile.preferredLocale, tenantId },
+      favorites,
       simulatedBalanceCents: balance(player, tenantId),
-      responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
+      responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
       consentHistory: consents,
       activity: transactions,
@@ -974,7 +1087,7 @@ async function api(req, res, path, tenantId, requestId) {
     const total = db.prepare('SELECT count(*) AS count FROM support_tickets WHERE tenant_id = ?').get(tenantId).count;
     const counts = { open: 0, answered: 0, closed: 0 };
     for (const row of db.prepare('SELECT status, count(*) AS count FROM support_tickets WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = row.count;
-    const ticketQuery = 'SELECT t.id, t.player_id AS playerId, p.email, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to WHERE t.tenant_id = ?';
+    const ticketQuery = 'SELECT t.id, t.player_id AS playerId, p.email, profile.display_name AS displayName, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to WHERE t.tenant_id = ?';
     const pageRows = cursorValue === null
       ? db.prepare(`${ticketQuery} ORDER BY t.id DESC LIMIT 201`).all(tenantId)
       : db.prepare(`${ticketQuery} AND t.id < ? ORDER BY t.id DESC LIMIT 201`).all(tenantId, Number(cursorValue));
@@ -1054,6 +1167,7 @@ async function api(req, res, path, tenantId, requestId) {
       if (row) fail(409, 'credentials');
       row = transaction(() => {
         const { lastInsertRowid: id } = db.prepare('INSERT INTO players(email, password, tenant_id, email_verified, preferred_locale) VALUES (?, ?, ?, 0, ?)').run(cleanEmail, passwordHash, tenantId, locale || 'en-CA');
+        db.prepare('INSERT INTO player_profiles(tenant_id, player_id, display_name, preferred_locale, updated_at) VALUES (?, ?, ?, ?, ?)').run(tenantId, id, '', locale || 'en-CA', Date.now());
         db.prepare('INSERT INTO ledger(player, wager, amount, tenant_id) VALUES (?, 0, 10000, ?)').run(id, tenantId);
         return { id };
       });
@@ -1117,6 +1231,13 @@ async function api(req, res, path, tenantId, requestId) {
     if (!Number.isInteger(dailyLimit) || dailyLimit < 500 || dailyLimit > 10000 || dailyLimit % 500 !== 0) fail(400, 'invalid');
     if (db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(player)?.excluded_at) fail(403, 'excluded');
     db.prepare('INSERT INTO player_safety(player, daily_limit_cents) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET daily_limit_cents = min(player_safety.daily_limit_cents, excluded.daily_limit_cents)').run(player, dailyLimit);
+    return account(player, tenantId);
+  }
+  if (route === 'POST /api/safety/reminder') {
+    if (!player) fail(401, 'signin');
+    const { minutes } = await body(req);
+    if (![30, 60, 120].includes(minutes)) fail(400, 'invalid');
+    db.prepare('INSERT INTO player_safety(player, session_reminder_minutes) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET session_reminder_minutes = excluded.session_reminder_minutes').run(player, minutes);
     return account(player, tenantId);
   }
   if (route === 'POST /api/play') {
@@ -1186,7 +1307,7 @@ async function api(req, res, path, tenantId, requestId) {
       return { ...account(player, tenantId), amount, outcome };
     });
   }
-  if (route === 'POST /api/providers' || route === 'POST /api/providers/list' || route === 'POST /api/providers/audit' || route === 'POST /api/providers/catalog' || route === 'POST /api/providers/catalog/preview') {
+  if (route === 'POST /api/providers' || route === 'POST /api/providers/list' || route === 'POST /api/providers/audit' || route === 'POST /api/providers/catalog' || route === 'POST /api/providers/catalog/preview' || route === 'POST /api/providers/catalog/list' || route === 'POST /api/providers/catalog/status') {
     if (!adminEnabled) fail(503, 'adminDisabled');
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_provider']);
     if (route === 'POST /api/providers') {
@@ -1225,6 +1346,22 @@ async function api(req, res, path, tenantId, requestId) {
       });
       return { imported: importedGames.length };
     }
+    if (route === 'POST /api/providers/catalog/list') {
+      return db.prepare('SELECT gc.provider AS name, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category, gc.enabled FROM game_catalog gc WHERE gc.tenant_id = ? ORDER BY gc.provider, gc.title_en LIMIT 2000').all(tenantId);
+    }
+    if (route === 'POST /api/providers/catalog/status') {
+      const { name, externalId, enabled } = await body(req);
+      if (typeof name !== 'string' || !/^[\p{L}\p{N} ._-]{1,64}$/u.test(name) || typeof externalId !== 'string' || !/^[\w.-]{1,128}$/.test(externalId) || typeof enabled !== 'boolean') fail(400, 'invalid');
+      const listing = db.prepare('SELECT id, enabled FROM game_catalog WHERE tenant_id = ? AND provider = ? AND external_id = ?').get(tenantId, name, externalId);
+      if (!listing) fail(404, 'invalid');
+      if (Boolean(listing.enabled) !== enabled) {
+        transaction(() => {
+          db.prepare('UPDATE game_catalog SET enabled = ? WHERE id = ? AND tenant_id = ?').run(enabled ? 1 : 0, listing.id, tenantId);
+          db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)").run(tenantId, staff.id, enabled ? 'catalog_listing_enabled' : 'catalog_listing_disabled', `${name}:${externalId}`, Date.now(), requestId);
+        });
+      }
+      return { name, externalId, enabled };
+    }
     if (route === 'POST /api/providers/catalog/preview') {
       const { name, games: importedGames } = await body(req, 256 * 1024);
       const providerRow = typeof name === 'string' && db.prepare('SELECT id FROM providers WHERE name = ? AND tenant_id = ?').get(name, tenantId);
@@ -1255,7 +1392,8 @@ const assets = {
   '/style.css': ['style.css', 'text/css'],
   '/app.js': ['app.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
-  '/hero.webp': ['hero.webp', 'image/webp']
+  '/hero.webp': ['hero.webp', 'image/webp'],
+  '/favicon.svg': ['favicon.svg', 'image/svg+xml']
 };
 createServer(async (req, res) => {
   const incomingRequestId = req.headers['x-request-id'];
@@ -1273,7 +1411,7 @@ createServer(async (req, res) => {
     console.log(JSON.stringify(entry));
   });
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   res.setHeader('Cache-Control', 'no-store');
   try {
     path = new URL(req.url, 'http://localhost').pathname;
