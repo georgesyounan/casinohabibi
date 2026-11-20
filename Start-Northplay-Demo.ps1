@@ -119,7 +119,11 @@ if ($selectedPort -ne $preferredPort) {
 
 Write-Host ''
 Write-Host 'Starting the Northplay demo. Keep this window open.' -ForegroundColor Green
-Write-Host "Open http://localhost:$selectedPort for the player lobby or http://localhost:$selectedPort/admin for the operator account."
+$playerUrl = "http://localhost:$selectedPort"
+$adminUrl = "$playerUrl/admin"
+Write-Host 'Copy and paste one of these addresses into your browser:'
+Write-Host "Player lobby:    $playerUrl" -ForegroundColor Cyan
+Write-Host "Operator admin:  $adminUrl" -ForegroundColor Cyan
 Write-Host 'Press Ctrl+C in this window to stop the demo.'
 Write-Host ''
 npm run dev

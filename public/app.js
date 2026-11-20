@@ -9,10 +9,12 @@ const copy = {
   account: ['My account', 'Mon compte'], logout: ['Sign out', 'Se déconnecter'],
   sandbox: ['Play-money casino', 'Casino en argent fictif'],
   headline: ['Your seat at the table.', 'Votre place à la table.'],
+  pageDescription: ['Explore the Northplay casino demo with simulated CAD credits. No deposits or withdrawals are available, and no external game providers are connected.', 'Découvrez la démo du casino Northplay avec des crédits fictifs en dollars canadiens. Aucun dépôt ni retrait n’est possible et aucun fournisseur de jeux externe n’est connecté.'],
   intro: ['Explore the game lobby and try a round with simulated CAD funds.', 'Explorez le hall et essayez une partie avec des fonds fictifs en dollars canadiens.'],
   browse: ['Explore games', 'Explorer les jeux'], games: ['Casino games', 'Jeux de casino'],
   infoLabel: ['Key information', 'À savoir'], cadDisplay: ['CAD currency display', 'Affichage en dollars canadiens'],
   twoLanguages: ['English and Canadian French', 'Anglais et français canadien'], simulatedOnly: ['Simulated play only', 'Jeu simulé seulement'],
+  switchToFrench: ['Switch to French', 'Passer au français'], switchToEnglish: ['Switch to English', 'Passer à l’anglais'],
   lobbyEyebrow: ['The game library', 'La ludothèque'],
   gamesIntro: ['Try four built-in games with simulated funds. Imported provider listings are shown separately for the demo and are not playable.', 'Essayez quatre jeux intégrés avec des fonds fictifs. Les fiches de jeux provenant des fournisseurs sont présentées séparément dans la version de démonstration; elles ne sont pas jouables.'],
   simpleEyebrow: ['A clear, simple start', 'Un départ clair et simple'], simpleHeading: ['Your visit, at your pace.', 'Votre visite, à votre rythme.'],
@@ -47,7 +49,11 @@ const copy = {
   faqQuestionEn: ['Question · English', 'Question · anglais'], faqQuestionFr: ['Question · Canadian French', 'Question · français canadien'],
   faqAnswerEn: ['Answer · English', 'Réponse · anglais'], faqAnswerFr: ['Answer · Canadian French', 'Réponse · français canadien'],
   faqOne: ['FAQ entry 1', 'Entrée FAQ 1'], faqTwo: ['FAQ entry 2', 'Entrée FAQ 2'], faqThree: ['FAQ entry 3', 'Entrée FAQ 3'],
-  all: ['All games', 'Tous les jeux'], slots: ['Slots', 'Machines à sous'], table: ['Table games', 'Jeux de table'], live: ['Live games', 'Jeux avec croupier en direct'], favorites: ['Favorites', 'Favoris'],
+  all: ['All games', 'Tous les jeux'], slots: ['Slots', 'Machines à sous'], table: ['Table games', 'Jeux de table'], live: ['Live games', 'Jeux avec croupier en direct'], favorites: ['Favorites', 'Favoris'], recentGames: ['Recently played', 'Joués récemment'],
+  browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
+  clearGameSearch: ['Clear search', 'Effacer la recherche'],
+  providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
+  catalogResultSummary: ['Showing {games} playable demo games · {previews} non-playable provider previews', 'Jeux fictifs jouables : {games} · Aperçus de fournisseurs non jouables : {previews}'],
   addFavorite: ['Add {game} to favorites', 'Ajouter {game} aux favoris'], removeFavorite: ['Remove {game} from favorites', 'Retirer {game} des favoris'], noFavoriteGames: ['You have not saved any games yet.', 'Vous n’avez pas encore enregistré de jeux.'],
   favoritesLocal: ['Favorites saved in this browser.', 'Favoris enregistrés dans ce navigateur.'], favoritesSynced: ['Favorites saved to your account.', 'Favoris enregistrés dans votre compte.'], favoriteSaveFailed: ['Could not sync favorites to your account. The change was reverted.', 'Impossible de synchroniser les favoris avec votre compte. Le changement a été annulé.'],
   disclaimer: ['Simulated funds only. No cash value.', 'Fonds fictifs uniquement. Aucune valeur monétaire.'],
@@ -56,11 +62,13 @@ const copy = {
   emailVerification: ['Verify your email', 'Confirmer votre courriel'], emailVerificationHelp: ['Check your email for a verification link. It expires after 24 hours.', 'Consultez votre courriel pour ouvrir le lien de confirmation. Il expire après 24 heures.'], emailVerificationRequired: ['Verify your email before signing in. You can request another link below.', 'Confirmez votre courriel avant de vous connecter. Vous pouvez demander un nouveau lien ci-dessous.'], emailVerificationRequested: ['If this address has an unverified account, a verification link has been sent.', 'Si cette adresse correspond à un compte non confirmé, un lien de confirmation a été envoyé.'], emailVerificationSend: ['Resend verification email', 'Renvoyer le courriel de confirmation'], emailVerificationInvalid: ['This verification link is invalid or expired. Request a new one.', 'Ce lien de confirmation est invalide ou expiré. Demandez-en un nouveau.'], emailVerified: ['Email verified. You can now sign in.', 'Courriel confirmé. Vous pouvez maintenant vous connecter.'], emailVerificationSubmit: ['Verify email address', 'Confirmer le courriel'],
   passwordChangeTitle: ['Change password', 'Changer le mot de passe'], currentPassword: ['Current password', 'Mot de passe actuel'], newPassword: ['New password (10 characters minimum)', 'Nouveau mot de passe (au moins 10 caractères)'], confirmPassword: ['Confirm new password', 'Confirmer le nouveau mot de passe'], passwordMismatch: ['The new passwords do not match.', 'Les nouveaux mots de passe ne correspondent pas.'], passwordChanged: ['Password updated. Other sessions have been signed out.', 'Mot de passe modifié. Les autres sessions ont été fermées.'],
   balanceLabel: ['Simulated balance', 'Solde fictif'], history: ['Recent activity', 'Activité récente'],
+  resetDemoBalance: ['Restore demo balance to $100 CAD', 'Rétablir le solde fictif à 100 $ CA'], confirmResetDemoBalance: ['Restore your simulated balance to $100 CAD? Your activity history and daily wager limit will be kept.', 'Rétablir votre solde fictif à 100 $ CA? Votre historique et votre limite quotidienne de mises seront conservés.'], demoBalanceReset: ['Demo balance restored to $100 CAD. Your activity history and daily wager usage were unchanged.', 'Solde fictif rétabli à 100 $ CA. Votre historique et vos mises quotidiennes demeurent inchangés.'], demoBalanceAlreadyAtStart: ['Your simulated balance is already $100 CAD.', 'Votre solde fictif est déjà de 100 $ CA.'], demoBalanceResetHistory: ['Demo balance restored to {balance}', 'Solde fictif rétabli à {balance}'], demoBalanceResetCsv: ['Demo balance reset', 'Réinitialisation du solde fictif'], demoBalanceResetCsvDetail: ['Restored to {balance}', 'Rétabli à {balance}'],
   dailyLimitProgress: ['Today’s demo wagers (UTC): {used} of {limit} · {remaining} remaining', 'Mises fictives aujourd’hui (UTC) : {used} sur {limit} · {remaining} restantes'], dailyLimitProgressLabel: ['Daily simulated wager limit progress', 'Progression vers la limite quotidienne de mises fictives'],
   preferredLanguage: ['Preferred language', 'Langue de préférence'], englishLanguage: ['English (Canada)', 'anglais (Canada)'], frenchLanguage: ['French (Canada)', 'français (Canada)'],
   savedLanguageLabel: ['Saved language', 'Langue enregistrée'],
   emailStatusLabel: ['Email status', 'État du courriel'], emailVerifiedStatus: ['Verified', 'Confirmé'], emailUnverifiedStatus: ['Not verified', 'Non confirmé'],
   accountProfileTitle: ['Player profile', 'Profil joueur'], displayName: ['Display name (optional)', 'Nom affiché (facultatif)'],
+  welcomeBackName: ['Welcome back, {name}!', 'Bon retour, {name} !'],
   displayNameHelp: ['Up to 40 characters. This name is used only for this casino demo account.', 'Jusqu’à 40 caractères. Ce nom est utilisé uniquement pour ce compte de démonstration.'],
   displayNameCount: ['{count} of 40 characters', '{count} sur 40 caractères'],
   saveProfile: ['Save profile', 'Enregistrer le profil'], profileSaved: ['Profile saved.', 'Profil enregistré.'],
@@ -87,11 +95,22 @@ const copy = {
   tenantSettings: ['Casino settings', 'Paramètres du casino'],
   tenantSettingsHelp: ['Save changes as a draft, then publish the version players should see.', 'Enregistrez les changements comme brouillon, puis publiez la version destinée aux joueurs.'],
   operatorOverview: ['Casino overview', 'Aperçu du casino'],
-  operatorOverviewHelp: ['Tenant-scoped demo activity. Wager totals are simulated CAD values for the last 30 days.', 'Activité fictive propre au casino. Les mises sont des montants fictifs en CAD des 30 derniers jours.'],
-  refreshOverview: ['Refresh overview', 'Actualiser l’aperçu'],
+  operatorOverviewHelp: ['Tenant-scoped demo activity. Gameplay metrics use the selected period, and wager totals are simulated CAD values with no cash value.', 'Activité fictive propre au casino. Les statistiques de jeu utilisent la période choisie et les mises sont des montants fictifs en CAD sans valeur monétaire.'],
+  overviewShowcaseData: ['Fictional showcase records are included in these demo metrics and support examples.', 'Ces statistiques de démonstration et exemples de soutien comprennent des données fictives.'],
+  overviewShowcasePrompt: ['For a presentation example, initialize a fresh demo folder, stop the server, double-click Load Northplay Showcase Data.bat, then restart the demo.', 'Pour préparer un aperçu, initialisez un nouveau dossier de démonstration, arrêtez le serveur, double-cliquez sur Load Northplay Showcase Data.bat, puis redémarrez la démo.'],
+  refreshOverview: ['Refresh overview', 'Actualiser l’aperçu'], overviewExport: ['Export demo metrics (CSV)', 'Exporter les statistiques de démo (CSV)'], overviewExportReady: ['Demo overview CSV downloaded. It contains aggregate demo metrics only.', 'Le fichier CSV de l’aperçu de démo a été téléchargé. Il ne contient que des statistiques agrégées.'],
+  overviewPeriodLabel: ['Activity period', 'Période d’activité'], overviewPeriod7: ['Last 7 days', '7 derniers jours'], overviewPeriod30: ['Last 30 days', '30 derniers jours'], overviewPeriod90: ['Last 90 days', '90 derniers jours'],
+  overviewActivityChart: ['Demo rounds by day (UTC)', 'Parties de démo par jour (UTC)'], overviewActivityHelp: ['Bar heights show daily demo rounds for the selected period.', 'La hauteur des barres représente les parties de démo quotidiennes pour la période choisie.'], overviewActivityDetails: ['View daily values', 'Voir les valeurs quotidiennes'], overviewActivitySummary: ['{total} demo rounds across {days} days. Busiest day: {date} ({rounds} rounds).', '{total} parties de démo sur {days} jours. Journée la plus active : {date} ({rounds} parties).'], overviewActivityDay: ['{date}: {rounds} demo rounds', '{date} : {rounds} parties de démo'],
+  overviewGameBreakdown: ['Built-in demo game activity', 'Activité des jeux de démo intégrés'], overviewGameName: ['Game', 'Jeu'], overviewGameRounds: ['Rounds', 'Parties'], overviewGameShare: ['Round share', 'Part des parties'], overviewGameActivePlayers: ['Active players', 'Joueurs actifs'], overviewGameWagered: ['Simulated wagers (CAD; no cash value)', 'Mises fictives (CAD; aucune valeur monétaire)'],
   overviewPlayers: ['Player accounts', 'Comptes joueurs'], overviewVerified: ['Email verified', 'Courriel confirmé'],
-  overviewRounds: ['Demo rounds · 30 days', 'Parties fictives · 30 jours'], overviewWagered: ['Simulated wagers · 30 days', 'Mises fictives · 30 jours'],
+  overviewRounds: ['Demo rounds · {days} days', 'Parties fictives · {days} jours'], overviewActivePlayers: ['Players active in demo · {days} days', 'Joueurs ayant joué à la démo · {days} jours'], overviewWagered: ['Simulated wagers · {days} days', 'Mises fictives · {days} jours'],
   overviewTickets: ['Open support tickets', 'Demandes de soutien ouvertes'], overviewCatalog: ['Enabled catalog listings', 'Fiches actives du catalogue'],
+  overviewCatalogStatus: ['Preview catalog status', 'État du catalogue de prévisualisation'], overviewCatalogReady: ['Ready for lobby preview', 'Prêt pour l’aperçu dans le hall'], overviewCatalogEmpty: ['No enabled preview listings', 'Aucune fiche de prévisualisation activée'],
+  overviewCatalogNote: ['Preview listings are display-only; no external games are connected.', 'Les fiches sont uniquement visuelles; aucun jeu externe n’est connecté.'],
+  overviewBrandingStatus: ['Published casino settings', 'Paramètres du casino publiés'], overviewBrandingReady: ['Published version {version} is current', 'La version publiée {version} est à jour'], overviewBrandingPending: ['Saved draft needs publishing · live version {version}', 'Le brouillon enregistré doit être publié · version en vigueur {version}'],
+  overviewBrandingNote: ['Saved draft changes appear in the player lobby after publishing.', 'Les changements du brouillon enregistré apparaissent dans le hall après leur publication.'],
+  goToCasinoSettings: ['Open casino settings', 'Ouvrir les paramètres du casino'], goToCatalogManagement: ['Open catalog management', 'Ouvrir la gestion du catalogue'], goToCatalogSetup: ['Set up catalog previews', 'Préparer les aperçus du catalogue'],
+  overviewMfaStatus: ['Your two-step verification', 'Votre vérification en deux étapes'], overviewMfaEnabled: ['Enabled for this staff account', 'Activée pour ce compte du personnel'], overviewMfaDisabled: ['Not enabled for this staff account', 'Non activée pour ce compte du personnel'], overviewMfaNote: ['This status applies only to the signed-in staff account.', 'Cet état concerne uniquement le compte du personnel connecté.'], goToMfa: ['Manage two-step verification', 'Gérer la vérification en deux étapes'],
   overviewUpdated: ['Updated {time}', 'Mis à jour à {time}'],
   featuredDemoGames: ['Featured demo games', 'Jeux de démonstration en vedette'],
   featuredDemoGamesHelp: ['Choose up to three built-in demo games to show first in the lobby. Provider catalog listings are managed separately.', 'Choisissez jusqu’à trois jeux de démonstration intégrés à afficher en premier dans le hall. Les fiches des fournisseurs sont gérées séparément.'],
@@ -119,22 +138,23 @@ const copy = {
   supportCategory: ['What can we help with?', 'Quel est le sujet de votre demande?'],
   supportMessage: ['Message (10 to 3,000 characters)', 'Message (de 10 à 3 000 caractères)'], supportSend: ['Send support request', 'Envoyer la demande'], supportSent: ['Your request was sent to casino support.', 'Votre demande a été envoyée au soutien du casino.'],
   supportThread: ['Conversation', 'Conversation'], supportPlayerAuthor: ['You', 'Vous'], supportStaffAuthor: ['Casino support', 'Soutien du casino'], supportFollowup: ['Reply to this request (up to 3,000 characters)', 'Répondez à cette demande (3 000 caractères maximum)'], supportFollowupSend: ['Send reply', 'Envoyer la réponse'], supportFollowupSent: ['Your reply was sent. The request is open again.', 'Votre réponse a été envoyée. La demande est rouverte.'],
-  supportTickets: ['Your requests', 'Vos demandes'], supportNoTickets: ['You have no support requests yet.', 'Vous n’avez pas encore de demandes de soutien.'], supportReply: ['Reply', 'Répondre'], supportReplyLabel: ['Response', 'Réponse'], supportReplyPlaceholder: ['Write a reply for the player', 'Rédigez une réponse au joueur'], supportRateLimited: ['You have sent several requests recently. Please try again later.', 'Vous avez envoyé plusieurs demandes récemment. Veuillez réessayer plus tard.'],
+  supportTickets: ['Your requests', 'Vos demandes'], supportNoTickets: ['You have no support requests yet.', 'Vous n’avez pas encore de demandes de soutien.'], supportReference: ['Reference', 'Référence'], supportCreated: ['Opened', 'Ouverte'], supportLastUpdated: ['Last updated', 'Dernière mise à jour'], supportReply: ['Reply', 'Répondre'], supportReplyLabel: ['Response', 'Réponse'], supportReplyPlaceholder: ['Write a reply for the player', 'Rédigez une réponse au joueur'], supportRateLimited: ['You have sent several requests recently. Please try again later.', 'Vous avez envoyé plusieurs demandes récemment. Veuillez réessayer plus tard.'],
   supportNewReplies: ['New support replies ({count})', 'Réponses de soutien non lues ({count})'], supportUnreadLabel: ['You have {count} unread support replies.', 'Vous avez {count} réponses de soutien non lues.'],
-  supportInbox: ['Support inbox', 'Boîte de soutien'], supportInboxHelp: ['Review requests and formal complaints, then reply in English or French.', 'Consultez les demandes et les plaintes officielles, puis répondez en anglais ou en français.'], supportRefresh: ['Refresh inbox', 'Actualiser la boîte'], supportNoInbox: ['There are no support requests.', 'Il n’y a aucune demande de soutien.'], supportSaved: ['Support reply saved.', 'La réponse de soutien a été enregistrée.'],
+  supportInbox: ['Support inbox', 'Boîte de soutien'], supportInboxHelp: ['Review requests and formal complaints, then reply in English or French.', 'Consultez les demandes et les plaintes officielles, puis répondez en anglais ou en français.'], supportRefresh: ['Refresh inbox', 'Actualiser la boîte'], supportNoInbox: ['There are no support requests.', 'Il n’y a aucune demande de soutien.'], supportSaved: ['Support reply saved.', 'La réponse de soutien a été enregistrée.'], supportConflict: ['This request changed since it was loaded. The inbox was refreshed; review the latest details before trying again.', 'Cette demande a changé depuis son chargement. La boîte a été actualisée; vérifiez les détails les plus récents avant de réessayer.'],
+  supportPlayerProtectionContext: ['Relevant player protection controls', 'Mesures de protection pertinentes du compte'], supportPlayerExcluded: ['The account is self-excluded.', 'Le compte est en autoexclusion.'], supportPlayerCoolingOffUntil: ['Cooling-off period active until {date}.', 'Suspension temporaire en cours jusqu’au {date}.'], supportPlayerPauseUntil: ['Play break active until {date}.', 'Pause de jeu en cours jusqu’à {date}.'], supportPlayerNoActiveRestriction: ['No active pause, cooling-off period, or self-exclusion is recorded.', 'Aucune pause, suspension temporaire ou autoexclusion n’est active actuellement.'],
   supportCloseNoReply: ['Close without reply', 'Fermer sans répondre'], supportConfirmClose: ['Close this request without sending a reply?', 'Fermer cette demande sans envoyer de réponse?'], supportClosedNoReply: ['Request closed without sending a reply.', 'La demande a été fermée sans réponse.'],
   supportInternalNotes: ['Internal staff notes', 'Notes internes du personnel'], supportNoNotes: ['No internal notes yet.', 'Aucune note interne pour le moment.'], supportNotePlaceholder: ['Add information for other support staff (up to 2,000 characters)', 'Ajoutez une information pour l’équipe de soutien (2 000 caractères maximum)'], supportAddNote: ['Add internal note', 'Ajouter une note interne'], supportNoteSaved: ['Internal note added.', 'La note interne a été ajoutée.'],
   supportAssignedTo: ['Assigned to', 'Attribuée à'], supportUnassigned: ['Unassigned', 'Non attribuée'], supportAssign: ['Assign ticket', 'Attribuer la demande'], supportAssignmentSaved: ['Ticket assignment saved.', 'L’attribution de la demande a été enregistrée.'],
   supportAssigneeFilter: ['Assignment', 'Attribution'], supportAssigneeAll: ['All tickets', 'Toutes les demandes'], supportAssigneeMine: ['Assigned to me', 'Les miennes'],
-  supportStatusOpen: ['Open', 'Ouverte'], supportStatusAnswered: ['Answered', 'Répondue'], supportStatusClosed: ['Closed', 'Fermée'], supportCategoryAccount: ['Account', 'Compte'], supportCategoryGame: ['Game listing', 'Jeu'], supportCategoryResponsible: ['Safer play', 'Jeu responsable'], supportCategoryOther: ['Other', 'Autre'], supportCategoryComplaint: ['Complaint', 'Plainte'], supportComplaintBadge: ['Formal complaint', 'Plainte officielle'], supportComplaintFilter: ['Case type', 'Type de dossier'], supportComplaintAll: ['All cases', 'Tous les dossiers'], supportComplaintOnly: ['Complaints only', 'Plaintes seulement'], supportNonComplaints: ['Other requests', 'Autres demandes'],
+  supportStatusOpen: ['Open', 'Ouverte'], supportStatusAnswered: ['Answered', 'Répondue'], supportStatusClosed: ['Closed', 'Fermée'], supportCategoryAccount: ['Account', 'Compte'], supportCategoryGame: ['Game listing', 'Jeu'], supportCategoryResponsible: ['Safer play', 'Jeu responsable'], supportCategoryOther: ['Other', 'Autre'], supportCategoryComplaint: ['Complaint', 'Plainte'], supportTopicFilter: ['Request topic', 'Sujet de la demande'], supportTopicAll: ['All topics', 'Tous les sujets'], supportComplaintBadge: ['Formal complaint', 'Plainte officielle'], supportComplaintFilter: ['Case type', 'Type de dossier'], supportComplaintAll: ['All cases', 'Tous les dossiers'], supportComplaintOnly: ['Complaints only', 'Plaintes seulement'], supportNonComplaints: ['Other requests', 'Autres demandes'],
   supportStatusLabel: ['Ticket status', 'État de la demande'],
   supportPriority: ['Priority', 'Priorité'], supportPriorityAll: ['All priorities', 'Toutes les priorités'], supportPriorityLow: ['Low', 'Faible'], supportPriorityNormal: ['Normal', 'Normale'], supportPriorityHigh: ['High', 'Élevée'], supportPriorityUrgent: ['Urgent', 'Urgente'],
-  supportSearch: ['Search email or ticket text', 'Rechercher un courriel ou le texte de la demande'], supportFilter: ['Filter by status', 'Filtrer par état'], supportFilterAll: ['All statuses', 'Tous les états'], supportNoMatches: ['No tickets match these filters.', 'Aucune demande ne correspond à ces filtres.'], supportQueueSummary: ['Showing {loaded} of {total} · Open: {open} · Answered: {answered} · Closed: {closed}', 'Affichées : {loaded} sur {total} · Ouvertes : {open} · Répondues : {answered} · Fermées : {closed}'], supportLoadMore: ['Load more requests', 'Charger plus de demandes'], supportLoadingMore: ['Loading…', 'Chargement…'],
+  supportSearch: ['Search email or ticket text', 'Rechercher un courriel ou le texte de la demande'], supportFilter: ['Filter by status', 'Filtrer par état'], supportFilterAll: ['All statuses', 'Tous les états'], supportNoMatches: ['No tickets match these filters.', 'Aucune demande ne correspond à ces filtres.'], supportClearFilters: ['Clear filters', 'Effacer les filtres'], supportQueueSummary: ['Showing {matching} matching of {loaded} loaded · {total} total · Open: {open} · Answered: {answered} · Closed: {closed}', '{matching} correspondantes sur {loaded} chargées · {total} au total · Ouvertes : {open} · Répondues : {answered} · Fermées : {closed}'], supportLoadMore: ['Load more requests', 'Charger plus de demandes'], supportLoadingMore: ['Loading…', 'Chargement…'],
   loadConfig: ['Load draft', 'Charger le brouillon'],
   saveDraft: ['Save draft', 'Enregistrer le brouillon'], publishConfig: ['Publish version', 'Publier la version'],
   draftSaved: ['Draft saved.', 'Brouillon enregistré.'], configPublished: ['Configuration published.', 'Configuration publiée.'],
   staffLogin: ['Staff sign in', 'Connexion du personnel'],
-  staffLoginHelp: ['Use your individual casino staff account.', 'Utilisez votre compte personnel du casino.'],
+  staffLoginHelp: ['Use your staff account. On the Windows demo’s first run, the launcher asks you to create the operator email and password.', 'Utilisez votre compte du personnel. Au premier démarrage de la démo Windows, le lanceur vous demandera de créer l’adresse courriel et le mot de passe du compte opérateur.'],
   staffEmail: ['Staff email', 'Courriel du membre du personnel'], staffPassword: ['Password', 'Mot de passe'],
   staffChangePasswordTitle: ['Change my staff password', 'Changer mon mot de passe du personnel'],
   staffChangePasswordHelp: ['Enter your current password and choose a new one. Other staff sessions will be signed out.', 'Saisissez votre mot de passe actuel et choisissez-en un nouveau. Les autres sessions du personnel seront fermées.'],
@@ -145,29 +165,56 @@ const copy = {
   showPassword: ['Show password', 'Afficher le mot de passe'], hidePassword: ['Hide password', 'Masquer le mot de passe'],
   staffSignIn: ['Sign in', 'Se connecter'], staffSigningIn: ['Signing in…', 'Connexion…'], staffSignOut: ['Sign out', 'Se déconnecter'],
   staffManagement: ['Staff access', 'Accès du personnel'], temporaryPassword: ['Initial password for a new account (12 characters minimum); leave blank for an existing account', 'Mot de passe initial pour un nouveau compte (au moins 12 caractères); laissez vide pour un compte existant'],
-  staffRole: ['Role', 'Rôle'], staffCreate: ['Add staff member', 'Ajouter un membre du personnel'], staffDisable: ['Disable', 'Désactiver'],
+  staffRole: ['Role', 'Rôle'], staffCreate: ['Add staff member', 'Ajouter un membre du personnel'], staffDisable: ['Disable', 'Désactiver'], staffAccountsHeading: ['Staff accounts', 'Comptes du personnel'],
+  roleAdminHelp: ['Full access to staff, casino settings, provider tools, support and audit history.', 'Accès complet au personnel, aux paramètres du casino, aux outils des fournisseurs, au soutien et à l’historique d’audit.'], roleContentHelp: ['Manage bilingual lobby content, branding, policies and publishing.', 'Gérer le contenu bilingue du hall, l’image de marque, les politiques et la publication.'], roleProviderHelp: ['Manage provider records, stored credentials and catalog previews.', 'Gérer les dossiers des fournisseurs, les identifiants enregistrés et les aperçus du catalogue.'], roleSupportHelp: ['Manage player support requests, assignments, private notes and replies.', 'Gérer les demandes de soutien, les attributions, les notes internes et les réponses.'],
+  staffSearch: ['Search staff email', 'Rechercher un courriel du personnel'], staffFilterRole: ['Filter by role', 'Filtrer par rôle'], staffFilterStatus: ['Filter by status', 'Filtrer par état'], staffFilterMfa: ['Filter by two-step verification', 'Filtrer par vérification en deux étapes'], staffFilterMfaEnabled: ['Enabled', 'Activée'], staffFilterMfaDisabled: ['Not enabled', 'Non activée'], staffFilterAll: ['All', 'Tous'], staffNoMatches: ['No staff accounts match these filters.', 'Aucun compte du personnel ne correspond à ces filtres.'], staffCount: ['Showing {shown} of {total} staff accounts', 'Membres du personnel affichés : {shown} sur {total}'], staffSort: ['Sort by', 'Trier par'], staffSortNewest: ['Newest first', 'Les plus récents'], staffSortOldest: ['Oldest first', 'Les plus anciens'], staffSortEmail: ['Email A to Z', 'Courriel de A à Z'], staffAddedOn: ['Added (UTC) {date}', 'Ajouté le {date} (UTC)'], staffLastActivity: ['Last recorded activity (UTC): {date}', 'Dernière activité enregistrée (UTC) : {date}'], staffNoActivity: ['No recorded activity', 'Aucune activité enregistrée'],
+  staffSortActivity: ['Most recently active', 'Activité la plus récente'],
+  staffFilterActivity: ['Filter by recorded activity', 'Filtrer selon l’activité enregistrée'], staffActivityHas: ['Has recorded activity', 'Activité enregistrée'], staffActivityNone: ['No recorded activity', 'Aucune activité enregistrée'],
+  staffMfaEnabled: ['Two-step verification enabled', 'Vérification en deux étapes activée'], staffMfaDisabled: ['Two-step verification not enabled', 'Vérification en deux étapes non activée'],
   roleAdmin: ['Operator admin', 'Administrateur du casino'], roleContent: ['Content', 'Contenu'], roleProvider: ['Providers', 'Fournisseurs'], roleSupport: ['Support', 'Soutien'],
   active: ['active', 'actif'], disabled: ['disabled', 'désactivé'],
-  staffAdded: ['Staff account added.', 'Compte du personnel ajouté.'], staffDisabled: ['Staff account disabled.', 'Compte du personnel désactivé.'],
+  staffAdded: ['Staff account added.', 'Compte du personnel ajouté.'], staffDisabled: ['Staff account disabled.', 'Compte du personnel désactivé.'], staffReenable: ['Re-enable', 'Réactiver'], staffReenabled: ['Staff account re-enabled.', 'Compte du personnel réactivé.'], staffChangeRole: ['Change role', 'Changer le rôle'], staffSaveRole: ['Save role', 'Enregistrer le rôle'], staffRoleUpdated: ['Staff role updated.', 'Rôle du membre du personnel modifié.'],
+  staffConfirmDisable: ['Disable this staff account? The person will be signed out and cannot access this casino again until an admin re-enables the account.', 'Désactiver ce compte du personnel ? La personne sera déconnectée et ne pourra plus accéder à ce casino tant qu’un membre de l’administration n’aura pas réactivé le compte.'],
+  staffConfirmRoleChange: ["Change {email}'s role from {oldRole} to {newRole}? Their permissions will change immediately.", 'Changer le rôle de {email}, de {oldRole} à {newRole} ? Les autorisations de ce compte changeront immédiatement.'],
+  staffConfirmReenable: ['Re-enable {email} as {role}? This restores access to the casino admin console.', 'Réactiver {email} avec le rôle {role} ? L’accès à l’interface d’administration du casino sera rétabli.'],
+  staffExport: ['Export filtered staff list (CSV)', 'Exporter la liste filtrée du personnel (CSV)'], staffExportReady: ['Filtered staff CSV downloaded.', 'Le fichier CSV filtré du personnel a été téléchargé.'],
   staffAudit: ['View staff activity', 'Voir l’activité du personnel'],
+  staffAuditHeading: ['Staff activity history', 'Historique des activités du personnel'], staffAuditSearch: ['Search staff email, action, or target', 'Rechercher un courriel, une action ou une cible'], staffAuditFilter: ['Filter by category', 'Filtrer par catégorie'], staffAuditCategoryStaff: ['Staff access', 'Accès du personnel'], staffAuditCategoryAuth: ['Sign-in and passwords', 'Connexion et mots de passe'], staffAuditCategoryMfa: ['Two-step verification', 'Vérification en deux étapes'], staffAuditCategoryCasino: ['Casino settings', 'Paramètres du casino'], staffAuditCategorySupport: ['Support', 'Soutien'], staffAuditCategoryProviders: ['Providers and catalog', 'Fournisseurs et catalogue'], staffAuditCategoryOther: ['Other', 'Autre'], staffAuditSummary: ['Showing {shown} of {loaded} loaded events', 'Affichage de {shown} des {loaded} événements chargés'],
+  staffAuditNoMatches: ['No activity matches these filters.', 'Aucune activité ne correspond à ces filtres.'], staffAuditClearFilters: ['Clear audit filters', 'Effacer les filtres du journal'], staffAuditExport: ['Export all matching events (CSV)', 'Exporter tous les événements correspondants (CSV)'], staffAuditExporting: ['Preparing the full audit export…', 'Préparation de l’exportation complète du journal…'], staffAuditExportReady: ['Full filtered audit CSV downloaded.', 'Le fichier CSV complet filtré du journal d’audit a été téléchargé.'],
+  staffAuditLoadMore: ['Load more events', 'Charger plus d’événements'],
+  staffAuditFrom: ['From date (UTC)', 'Date de début (UTC)'], staffAuditTo: ['To date (UTC)', 'Date de fin (UTC)'], staffAuditRangeInvalid: ['The start date must be on or before the end date.', 'La date de début doit être antérieure ou égale à la date de fin.'],
+  staffAuditTimestamp: ['Date and time (local)', 'Date et heure (locale)'], staffAuditActor: ['Staff member', 'Membre du personnel'], staffAuditAction: ['Action', 'Action'], staffAuditTarget: ['Target', 'Cible'], staffAuditRequestId: ['Request ID', 'ID de requête'],
   mfaTitle: ['Two-step verification', 'Vérification en deux étapes'],
-  mfaHelp: ['Add this account to an authenticator app with the secret below, then enter its six-digit code to enable two-step verification.', 'Ajoutez ce compte à une application d’authentification avec le secret ci-dessous, puis saisissez le code à six chiffres pour activer la vérification en deux étapes.'],
+  mfaHelp: ['Add this account to an authenticator app with the secret or copied setup link below, then enter its six-digit code to enable two-step verification.', 'Ajoutez ce compte à une application d’authentification avec le secret ou le lien copié ci-dessous, puis saisissez le code à six chiffres pour activer la vérification en deux étapes.'],
   mfaSetup: ['Set up authenticator', 'Configurer l’authentificateur'], mfaCode: ['Authenticator code', 'Code de l’authentificateur'],
+  mfaCopySetup: ['Copy authenticator setup link', 'Copier le lien de configuration de l’authentificateur'], mfaSetupCopied: ['Setup link copied.', 'Lien de configuration copié.'], mfaCopyFailed: ['Could not copy the setup link. Select and copy it from the text above.', 'Impossible de copier le lien. Sélectionnez-le et copiez-le à partir du texte ci-dessus.'],
   mfaLoginHint: ['Leave blank unless two-step verification is already enabled for this account.', 'Laissez ce champ vide si la vérification en deux étapes n’est pas déjà activée pour ce compte.'],
   mfaEnable: ['Enable two-step verification', 'Activer la vérification en deux étapes'], mfaDisable: ['Disable two-step verification', 'Désactiver la vérification en deux étapes'],
   mfaEnabled: ['Two-step verification enabled.', 'Vérification en deux étapes activée.'], mfaDisabled: ['Two-step verification disabled.', 'Vérification en deux étapes désactivée.'],
+  mfaConfirmDisable: ['Disable two-step verification for this account? Sign-in will no longer require an authenticator code.', 'Désactiver la vérification en deux étapes pour ce compte ? L’ouverture de session ne demandera plus de code d’authentification.'],
   staffCredentials: ['Email, password, or authenticator code is incorrect.', 'Le courriel, le mot de passe ou le code est incorrect.'],
   staffAuth: ['Please sign in again.', 'Veuillez vous reconnecter.'], staffForbidden: ['Your account does not have permission for this action.', 'Votre compte n’a pas la permission d’effectuer cette action.'],
   staffLifecycle: ['This staff account cannot be changed in its current state.', 'Ce compte du personnel ne peut pas être modifié dans son état actuel.'],
   staffExists: ['This staff member already has access to this casino.', 'Cette personne a déjà accès à ce casino.'],
   staffMfaInvalid: ['The authenticator code is invalid or expired.', 'Le code de l’authentificateur est invalide ou expiré.'],
+  staffMfaAlreadyEnabled: ['Two-step verification is already enabled for this account.', 'La vérification en deux étapes est déjà activée pour ce compte.'],
+  configDraftMissing: ['There is no saved configuration draft to publish.', 'Aucun brouillon de configuration enregistré ne peut être publié.'],
+  platformAdminAuth: ['Platform administrator credentials are invalid.', 'Les identifiants d’administration de la plateforme sont invalides.'],
+  platformAdminDisabled: ['Platform administration is not enabled.', 'L’administration de la plateforme n’est pas activée.'],
+  tenantSlugTaken: ['This casino address is already in use.', 'Cette adresse de casino est déjà utilisée.'],
+  tenantAdminExists: ['This casino already has an operator administrator.', 'Ce casino a déjà un administrateur du casino.'],
+  tenantLifecycle: ['This casino cannot move to that status from its current state.', 'Ce casino ne peut pas passer à cet état à partir de son état actuel.'],
+  domainInUse: ['This domain is already assigned to another casino.', 'Ce domaine est déjà associé à un autre casino.'],
+  domainUnknown: ['There is no verification request for this domain.', 'Aucune demande de vérification n’existe pour ce domaine.'],
+  domainNotVerified: ['The domain verification record could not be found.', 'L’enregistrement de vérification du domaine est introuvable.'],
   catalogEmptyTitle: ['The lobby is getting ready', 'Le hall se prépare'],
   catalogEmpty: ['Games will appear here after an approved provider is connected and its catalog is synced.', 'Les jeux apparaîtront ici après la connexion d’un fournisseur approuvé et la synchronisation de son catalogue.'],
   noFavoriteGamesTitle: ['No favorites yet', 'Aucun favori pour le moment'],
+  noRecentGamesTitle: ['No recent games yet', 'Aucun jeu récent'], noRecentGames: ['Games you play will appear here.', 'Les jeux auxquels vous jouez apparaîtront ici.'],
   searchGames: ['Search games or providers', 'Rechercher un jeu ou un fournisseur'],
   catalogNoMatchesTitle: ['No matching games', 'Aucun jeu correspondant'],
   catalogNoMatches: ['Try another search or choose a different category.', 'Essayez une autre recherche ou choisissez une autre catégorie.'],
-  catalogListing: ['Imported catalog listing · preview only', 'Fiche de catalogue importée · aperçu seulement'],
+  catalogListing: ['Provider preview · not playable', 'Aperçu fournisseur · non jouable'],
   demoGameLabel: ['Playable demo game', 'Jeu de démonstration jouable'],
   playNow: ['Play demo', 'Jouer à la démo'],
   catalogSync: ['Catalog data', 'Données du catalogue'],
@@ -221,7 +268,28 @@ const copy = {
 };
 
 const $ = (selector) => document.querySelector(selector);
+const auditActionLabels = {
+  staff_login: ['Staff sign-in', 'Connexion du personnel'], staff_logout: ['Staff sign-out', 'Déconnexion du personnel'], staff_password_changed: ['Staff password changed', 'Mot de passe du personnel modifié'],
+  staff_mfa_setup: ['Authenticator setup started', 'Configuration de l’authentificateur commencée'], staff_mfa_enabled: ['Two-step verification enabled', 'Vérification en deux étapes activée'], staff_mfa_disabled: ['Two-step verification disabled', 'Vérification en deux étapes désactivée'],
+  staff_created: ['Staff account added', 'Compte du personnel ajouté'], staff_disabled: ['Staff account disabled', 'Compte du personnel désactivé'], staff_reenabled: ['Staff account re-enabled', 'Compte du personnel réactivé'], staff_role_changed: ['Staff role changed', 'Rôle du membre du personnel modifié'],
+  tenant_config_saved: ['Casino settings saved as draft', 'Paramètres du casino enregistrés comme brouillon'], tenant_config_published: ['Casino settings published', 'Paramètres du casino publiés'],
+  support_ticket_assigned: ['Support ticket assigned', 'Demande de soutien attribuée'], support_ticket_unassigned: ['Support ticket unassigned', 'Demande de soutien désattribuée'], support_ticket_note_added: ['Private support note added', 'Note privée ajoutée à la demande de soutien'],
+  provider_key_added: ['Provider credentials added', 'Identifiants du fournisseur ajoutés'], provider_key_rotated: ['Provider credentials changed', 'Identifiants du fournisseur modifiés'], provider_catalog_synced: ['Provider catalog imported', 'Catalogue du fournisseur importé'], catalog_listing_enabled: ['Catalog listing enabled', 'Fiche du catalogue activée'], catalog_listing_disabled: ['Catalog listing disabled', 'Fiche du catalogue désactivée'],
+};
+function auditActionLabel(action) {
+  if (auditActionLabels[action]) return auditActionLabels[action][language];
+  const supportUpdate = action.match(/^support_ticket_(answered|closed)_priority_(low|normal|high|urgent)$/);
+  if (supportUpdate) return language ? `Demande de soutien ${supportUpdate[1] === 'answered' ? 'répondue' : 'fermée'} · priorité ${supportUpdate[2]}` : `Support ticket ${supportUpdate[1]} · ${supportUpdate[2]} priority`;
+  const withoutReply = action.match(/^support_ticket_closed_without_reply_priority_(low|normal|high|urgent)$/);
+  if (withoutReply) return language ? `Demande de soutien fermée sans réponse · priorité ${withoutReply[1]}` : `Support ticket closed without reply · ${withoutReply[1]} priority`;
+  const readableAction = action.replaceAll('_', ' ');
+  return language ? `Action : ${readableAction}` : `Action: ${readableAction}`;
+}
 let language = localStorage.getItem('northplay-language') === 'fr' ? 1 : 0;
+let staffMemberCache = [];
+let staffAuditCache = [];
+let staffAuditNextCursor = null;
+let staffAuditLoading = false;
 let tenantBrandName = 'Northplay';
 let savedTenantDraftSignature;
 const resetToken = new URLSearchParams(location.search).get('reset');
@@ -239,6 +307,7 @@ let displayedReminderPeriod;
 let displayedReminderLanguage;
 let filter = 'all';
 let searchQuery = '';
+let providerSort = localStorage.getItem('northplay-provider-sort') === 'alpha' ? 'alpha' : 'recent';
 let guestFavorites;
 try {
   const saved = JSON.parse(localStorage.getItem('northplay-favorites') || '[]');
@@ -289,6 +358,16 @@ function element(tag, value, className) {
   if (value) node.textContent = value;
   if (className) node.className = className;
   return node;
+}
+
+function demoBalanceResetDetails(rawOutcome) {
+  if (typeof rawOutcome !== 'string' || !rawOutcome) return null;
+  try {
+    const outcome = JSON.parse(rawOutcome);
+    return outcome?.type === 'demo_balance_reset' && Number.isSafeInteger(outcome.newBalance) ? outcome : null;
+  } catch {
+    return null;
+  }
 }
 
 function updateSessionReminder() {
@@ -542,6 +621,7 @@ function tenantConfigSignature(config) {
 
 function updateDocumentTitle() {
   document.title = language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
+  document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
 
 function updateAccount() {
@@ -573,9 +653,23 @@ function supportMessageElement(author, message, createdAt, kind) {
   return item;
 }
 
+function supportThreadEntries(ticket) {
+  const entries = ticket.messages || [];
+  const initialIndex = entries.findIndex((entry) => entry.authorType === 'player' && entry.createdAt === ticket.createdAt && entry.message === ticket.message);
+  if (initialIndex >= 0) return entries.filter((_, index) => index !== initialIndex);
+  return [{ authorType: 'player', message: ticket.message, createdAt: ticket.createdAt }, ...entries];
+}
+
 function historyEntryElement(entry) {
   const game = games.find(({ id }) => id === entry.game);
-  if (!entry.game) return element('li', `${t('starter')} · +${money(entry.amount)}`);
+  if (!entry.game) {
+    const reset = demoBalanceResetDetails(entry.outcome);
+    if (reset) {
+      const date = entry.createdAt ? ` · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}` : '';
+      return element('li', `${t('demoBalanceResetHistory').replace('{balance}', money(reset.newBalance))}${date}`);
+    }
+    return element('li', `${t('starter')} · +${money(entry.amount)}`);
+  }
   const date = entry.createdAt ? ` · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}` : '';
   const change = `${entry.amount > 0 ? '+' : ''}${money(entry.amount)}`;
   const summary = describeOutcome(entry.game, entry.outcome);
@@ -673,7 +767,10 @@ function renderDialog() {
   $('#status').textContent = dialogError ? t(dialogError) : '';
   const title = element('h2', screen === 'play' ? gameName(selectedGame) : screen === 'support' ? t('supportTitle') : screen === 'passwordReset' ? t('passwordResetTitle') : screen === 'emailVerification' ? t('emailVerification') : screen === 'emailChange' ? t('emailChangeTitle') : t(screen));
   title.id = 'dialog-title';
+  title.tabIndex = -1;
+  $('#dialog').setAttribute('aria-labelledby', title.id);
   panel.append(title);
+  if ($('#dialog').open) title.focus();
   if (screen === 'signin' || screen === 'signup') {
     const signup = screen === 'signup';
     panel.append(submitForm([
@@ -797,6 +894,21 @@ function renderDialog() {
     return;
   }
   panel.append(element('p', t('balanceLabel') + ' · ' + money(player.balance)));
+  const resetBalanceButton = action(t('resetDemoBalance'), async () => {
+    if (!window.confirm(t('confirmResetDemoBalance'))) return;
+    resetBalanceButton.disabled = true;
+    try {
+      player = await api('account/demo-balance/reset', {});
+      renderDialog();
+      $('#status').textContent = t(player.balanceReset ? 'demoBalanceReset' : 'demoBalanceAlreadyAtStart');
+    } catch (error) {
+      dialogError = error.message;
+      $('#status').textContent = t(dialogError);
+    } finally {
+      resetBalanceButton.disabled = false;
+    }
+  }, 'ghost');
+  panel.append(resetBalanceButton);
   const wageredToday = player.safety.dailyWagered ?? 0;
   const dailyLimit = player.safety.dailyLimit;
   const usage = element('div', '', 'daily-limit-usage');
@@ -842,12 +954,17 @@ function renderDialog() {
       panel.append(colorLabel);
     }
     if (result !== undefined) {
-      panel.append(element('p', result.amount > 0 ? t('won') + ' · +' + money(result.amount) : result.amount === 0 ? t('push') : t('lost') + ' · ' + money(result.amount), 'round-result'));
+      const resultAnnouncement = element('div');
+      resultAnnouncement.setAttribute('role', 'status');
+      resultAnnouncement.setAttribute('aria-live', 'polite');
+      resultAnnouncement.setAttribute('aria-atomic', 'true');
+      resultAnnouncement.append(element('p', result.amount > 0 ? t('won') + ' · +' + money(result.amount) : result.amount === 0 ? t('push') : t('lost') + ' · ' + money(result.amount), 'round-result'));
       const outcomeSummary = describeOutcome(selectedGame.id, result.outcome);
       if (outcomeSummary) {
         const resultClass = ['gold', 'aurora'].includes(selectedGame.id) ? 'reel-result' : selectedGame.id === 'blackjack' ? 'hand-result' : 'round-detail';
-        panel.append(element('p', outcomeSummary, resultClass));
+        resultAnnouncement.append(element('p', outcomeSummary, resultClass));
       }
+      panel.append(resultAnnouncement);
     }
     let pending;
     const fields = colorSelect ? [label, colorSelect.parentElement] : [label];
@@ -893,10 +1010,10 @@ function renderDialog() {
     for (const ticket of tickets) {
       const article = element('article', '', 'support-ticket');
       article.append(element('strong', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])}`));
-      article.append(element('small', new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')));
+      article.append(element('small', `${t('supportReference')} #${ticket.id}`));
+      article.append(element('small', `${t('supportCreated')}: ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')} · ${t('supportLastUpdated')}: ${new Date(ticket.updatedAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
       article.append(element('h3', t('supportThread')));
-      article.append(supportMessageElement(t('supportPlayerAuthor'), ticket.message, ticket.createdAt, 'from-player'));
-      for (const message of ticket.messages || []) {
+      for (const message of supportThreadEntries(ticket)) {
         const author = message.authorType === 'staff' ? t('supportStaffAuthor') : t('supportPlayerAuthor');
         article.append(supportMessageElement(author, message.message, message.createdAt, message.authorType === 'staff' ? 'from-staff' : 'from-player'));
       }
@@ -916,6 +1033,7 @@ function renderDialog() {
     }
     return;
   }
+  if (player.displayName) panel.append(element('p', t('welcomeBackName').replace('{name}', player.displayName), 'profile-greeting'));
   panel.append(element('p', player.email), element('p', `${t('emailStatusLabel')}: ${t(player.emailVerified ? 'emailVerifiedStatus' : 'emailUnverifiedStatus')}`), element('p', `${t('savedLanguageLabel')}: ${t(player.preferredLocale === 'fr-CA' ? 'frenchLanguage' : 'englishLanguage')}`), action(t('changeEmail'), () => openPanel('emailChange'), 'ghost'), element('h3', t('accountProfileTitle')));
   const displayNameLabel = element('label', t('displayName'));
   const displayNameInput = element('input');
@@ -1053,10 +1171,11 @@ function renderDialog() {
         : ['Date (UTC)', 'Activity', 'Round result', 'Wager (CAD)', 'Balance change (CAD)', 'Currency'];
       const rows = data.activity.map((entry) => {
         const game = games.find(({ id }) => id === entry.game);
+        const reset = demoBalanceResetDetails(entry.outcome);
         return [
           entry.createdAt ? new Date(entry.createdAt).toISOString() : '',
-          (game ? gameName(game) : entry.game) || (language ? 'Crédit de départ' : 'Starting credit'),
-          describeOutcome(entry.game, entry.outcome),
+          reset ? t('demoBalanceResetCsv') : (game ? gameName(game) : entry.game) || (language ? 'Crédit de départ' : 'Starting credit'),
+          reset ? t('demoBalanceResetCsvDetail').replace('{balance}', money(reset.newBalance)) : describeOutcome(entry.game, entry.outcome),
           (entry.wager / 100).toFixed(2),
           (entry.amount / 100).toFixed(2),
           'CAD'
@@ -1299,24 +1418,46 @@ function renderCatalog() {
     const searchable = values.filter(Boolean).join(' ').toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
     return searchable.includes(normalizedQuery);
   };
+  const recentGameOrder = new Map();
+  for (const entry of player?.history || []) {
+    if (entry.game && !recentGameOrder.has(entry.game)) recentGameOrder.set(entry.game, recentGameOrder.size);
+  }
   const demoGames = games.filter((game) => {
     const key = `demo:${game.id}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
-    if (filter !== 'all' && filter !== 'favorites' && filter !== game.type) return false;
+    if (filter === 'recent' && !recentGameOrder.has(game.id)) return false;
+    if (filter !== 'all' && filter !== 'favorites' && filter !== 'recent' && filter !== game.type) return false;
     return matchesQuery([...game.name, demoProviderName()]);
-  }).sort((a, b) => Number(tenantFeaturedGameIds.includes(b.id)) - Number(tenantFeaturedGameIds.includes(a.id)));
+  }).sort((a, b) => filter === 'recent'
+    ? recentGameOrder.get(a.id) - recentGameOrder.get(b.id)
+    : Number(tenantFeaturedGameIds.includes(b.id)) - Number(tenantFeaturedGameIds.includes(a.id)));
+  const providerTitleCollator = new Intl.Collator(language ? 'fr-CA' : 'en-CA', { sensitivity: 'base', numeric: true });
   const visibleGames = providerGames.filter((game) => {
     const key = `provider:${game.provider}:${game.externalId}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
     if (filter !== 'all' && filter !== 'favorites' && filter !== game.category) return false;
     return matchesQuery([game.titleEn, game.titleFr, game.provider]);
-  });
+  }).sort((a, b) => providerSort === 'recent'
+    ? b.id - a.id
+    : providerTitleCollator.compare(language ? a.titleFr : a.titleEn, language ? b.titleFr : b.titleEn));
   const hasListings = demoGames.length + visibleGames.length > 0;
   $('#catalog-controls').hidden = !games.length && !providerGames.length;
+  $('#provider-sort-control').hidden = !providerGames.length;
+  $('#provider-sort').value = providerSort;
+  const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
+  $('#catalog-summary').textContent = t('catalogResultSummary')
+    .replace('{games}', countFormat.format(demoGames.length))
+    .replace('{previews}', countFormat.format(visibleGames.length));
+  $('#catalog-summary').hidden = !games.length && !providerGames.length;
   $('#catalog-empty').hidden = hasListings;
-  const noFavorites = filter === 'favorites' && favorites.size === 0;
-  $('[data-copy="catalogEmptyTitle"]').textContent = noFavorites ? t('noFavoriteGamesTitle') : (games.length || providerGames.length) ? t('catalogNoMatchesTitle') : t('catalogEmptyTitle');
-  $('[data-copy="catalogEmpty"]').textContent = noFavorites ? t('noFavoriteGames') : (games.length || providerGames.length) ? t('catalogNoMatches') : t('catalogEmpty');
+  const hasAvailableFavorite = games.some((game) => favorites.has(`demo:${game.id}`)) ||
+    providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
+  const noFavorites = filter === 'favorites' && !hasAvailableFavorite;
+  const noRecentGames = filter === 'recent' && recentGameOrder.size === 0;
+  $('#browse-all-games').hidden = hasListings || filter === 'all';
+  $('#clear-game-search').hidden = hasListings || !searchQuery.trim() || noFavorites || noRecentGames;
+  $('[data-copy="catalogEmptyTitle"]').textContent = noFavorites ? t('noFavoriteGamesTitle') : noRecentGames ? t('noRecentGamesTitle') : (games.length || providerGames.length) ? t('catalogNoMatchesTitle') : t('catalogEmptyTitle');
+  $('[data-copy="catalogEmpty"]').textContent = noFavorites ? t('noFavoriteGames') : noRecentGames ? t('noRecentGames') : (games.length || providerGames.length) ? t('catalogNoMatches') : t('catalogEmpty');
   for (const game of demoGames) {
     const card = element('article', '', 'card demo-card');
     const art = createArt(game.icon, game.id);
@@ -1351,6 +1492,9 @@ let providerStatus;
 let currentStaffEmail;
 let currentStaffId;
 let currentStaffRole;
+let renderedLanguage = language;
+let currentStaffMfaEnabled = false;
+let currentMfaSetupUri;
 let providerGames = [];
 let catalogReview;
 let supportInboxEntries;
@@ -1360,13 +1504,17 @@ let supportInboxPageCount = 0;
 let supportInboxTotal = 0;
 let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
+let latestOverview = null;
 function render() {
+  const languageChanged = renderedLanguage !== language;
+  renderedLanguage = language;
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
   $('#skip-link').href = location.pathname === '/admin' ? '#admin' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
+  updateStaffRoleHelp();
   const announcement = $('#lobby-announcement');
   announcement.textContent = t('announcement');
   announcement.hidden = !announcement.textContent;
@@ -1377,7 +1525,14 @@ function render() {
   updatePolicyLinks();
   $('.welcome-rail').setAttribute('aria-label', t('infoLabel'));
   $('#language').textContent = language ? 'EN' : 'FR';
-  $('#language').setAttribute('aria-label', language ? 'Switch to English' : 'Passer au français');
+  $('#language').setAttribute('aria-label', t(language ? 'switchToEnglish' : 'switchToFrench'));
+  if (languageChanged && currentStaffEmail && currentStaffRole) {
+    $('#staff-identity').textContent = `${currentStaffEmail} · ${staffRoleLabel(currentStaffRole)}`;
+  }
+  if (languageChanged && currentStaffRole === 'operator_admin') {
+    renderStaffList();
+    renderStaffAudit();
+  }
   $('#close').setAttribute('aria-label', t('close'));
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
@@ -1414,6 +1569,12 @@ $('#account').addEventListener('click', () => {
   openPanel(player ? 'account' : 'signin');
 });
 $('#safety-controls').addEventListener('click', () => openPanel(player ? 'account' : 'signin'));
+$('#dialog').addEventListener('cancel', () => {
+  if (!player) {
+    selectedGame = undefined;
+    sessionStorage.removeItem('northplay-pending-game');
+  }
+});
 $('#close').addEventListener('click', () => {
   if (!player) {
     selectedGame = undefined;
@@ -1421,15 +1582,31 @@ $('#close').addEventListener('click', () => {
   }
   $('#dialog').close();
 });
-$('#dialog').setAttribute('aria-labelledby', 'dialog-title');
 $('#filters').addEventListener('click', (event) => {
   if (!event.target.dataset.filter) return;
   filter = event.target.dataset.filter;
   for (const button of $('#filters').children) button.setAttribute('aria-pressed', button === event.target);
   renderCatalog();
 });
+$('#browse-all-games').addEventListener('click', () => {
+  filter = 'all';
+  searchQuery = '';
+  $('#game-search').value = '';
+  for (const button of $('#filters').children) button.setAttribute('aria-pressed', String(button.dataset.filter === 'all'));
+  renderCatalog();
+});
+$('#clear-game-search').addEventListener('click', () => {
+  searchQuery = '';
+  $('#game-search').value = '';
+  renderCatalog();
+});
 $('#game-search').addEventListener('input', (event) => {
   searchQuery = event.currentTarget.value;
+  renderCatalog();
+});
+$('#provider-sort').addEventListener('change', (event) => {
+  providerSort = event.currentTarget.value === 'alpha' ? 'alpha' : 'recent';
+  localStorage.setItem('northplay-provider-sort', providerSort);
   renderCatalog();
 });
 $('#provider').addEventListener('submit', async (event) => {
@@ -1796,6 +1973,7 @@ $('#tenant-config').addEventListener('submit', async (event) => {
     savedTenantDraftSignature = tenantConfigSignature(config);
     updateTenantPreview();
     $('#tenant-config-status').textContent = `${t('draftSaved')} v${result.version}`;
+    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
 });
 $('#publish-config').addEventListener('click', async () => {
@@ -1804,26 +1982,158 @@ $('#publish-config').addEventListener('click', async () => {
     const published = await api('tenant', undefined, 'GET');
     applyTenant(published.config);
     $('#tenant-config-status').textContent = `${t('configPublished')} v${result.version}`;
+    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
 });
 
 async function refreshStaffList() {
-  const members = await api('admin/staff', undefined, 'GET');
-  $('#staff-list').replaceChildren(...members.map((member) => {
-    const roleLabel = ({ operator_admin: t('roleAdmin'), operator_content: t('roleContent'), operator_provider: t('roleProvider'), operator_support: t('roleSupport') })[member.role] || member.role;
-    const item = element('li', `${member.email} · ${roleLabel} · ${t(member.status)}`);
+  staffMemberCache = await api('admin/staff', undefined, 'GET');
+  renderStaffList();
+}
+function updateStaffRoleHelp() {
+  const helpKey = ({ operator_admin: 'roleAdminHelp', operator_content: 'roleContentHelp', operator_provider: 'roleProviderHelp', operator_support: 'roleSupportHelp' })[$('#staff-create select[name="role"]').value];
+  $('#staff-role-help').textContent = t(helpKey);
+}
+function staffRoleLabel(role) {
+  const copyKey = ({ operator_admin: 'roleAdmin', operator_content: 'roleContent', operator_provider: 'roleProvider', operator_support: 'roleSupport' })[role];
+  return copyKey ? t(copyKey) : role;
+}
+function getFilteredStaffMembers() {
+  const query = $('#staff-search').value.trim().toLocaleLowerCase(language ? 'fr-CA' : 'en-CA');
+  const selectedRole = $('#staff-filter-role').value;
+  const selectedStatus = $('#staff-filter-status').value;
+  const selectedMfa = $('#staff-filter-mfa').value;
+  const selectedActivity = $('#staff-filter-activity').value;
+  const sort = $('#staff-sort').value;
+  return staffMemberCache.filter((member) => member.email.toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').includes(query) && (selectedRole === 'all' || member.role === selectedRole) && (selectedStatus === 'all' || member.status === selectedStatus) && (selectedMfa === 'all' || Boolean(member.mfaEnabled) === (selectedMfa === 'enabled')) && (selectedActivity === 'all' || Boolean(member.lastActivityAt) === (selectedActivity === 'has'))).sort((a, b) => sort === 'email' ? a.email.localeCompare(b.email, language ? 'fr-CA' : 'en-CA') : sort === 'activity' ? (b.lastActivityAt || 0) - (a.lastActivityAt || 0) : sort === 'oldest' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt);
+}
+function renderStaffList() {
+  const filteredMembers = getFilteredStaffMembers();
+  const number = (value) => new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(value);
+  $('#staff-count').textContent = t('staffCount').replace('{shown}', number(filteredMembers.length)).replace('{total}', number(staffMemberCache.length));
+  $('#staff-export').disabled = filteredMembers.length === 0;
+  $('#staff-list').replaceChildren(...(filteredMembers.length ? filteredMembers : [null]).map((member) => {
+    if (!member) return element('li', t('staffNoMatches'));
+    const roleLabel = staffRoleLabel(member.role);
+    const item = element('li', `${member.email} · ${roleLabel} · ${t(member.status)}`, 'staff-list-item');
+    const dateLocale = language ? 'fr-CA' : 'en-CA';
+    const addedDate = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(member.createdAt));
+    item.append(element('small', t('staffAddedOn').replace('{date}', addedDate), 'staff-created-at'));
+    const activityDate = member.lastActivityAt ? new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(member.lastActivityAt)) : null;
+    item.append(element('small', activityDate ? t('staffLastActivity').replace('{date}', activityDate) : t('staffNoActivity'), 'staff-activity-at'));
+    const mfaBadge = element('span', t(member.mfaEnabled ? 'staffMfaEnabled' : 'staffMfaDisabled'), `staff-mfa-badge ${member.mfaEnabled ? 'is-enabled' : 'is-disabled'}`);
+    mfaBadge.setAttribute('aria-label', `${language ? 'État de la vérification en deux étapes' : 'Two-step verification status'}: ${t(member.mfaEnabled ? 'staffMfaEnabled' : 'staffMfaDisabled')}`);
+    item.append(mfaBadge);
     if (member.status === 'active' && member.email !== currentStaffEmail) {
+      const roleControl = element('label', t('staffChangeRole'), 'staff-role-control');
+      const roleSelect = element('select');
+      roleSelect.dataset.staffRole = 'true';
+      for (const [value, copyKey] of [['operator_admin', 'roleAdmin'], ['operator_content', 'roleContent'], ['operator_provider', 'roleProvider'], ['operator_support', 'roleSupport']]) {
+        const option = element('option', t(copyKey));
+        option.value = value;
+        option.selected = member.role === value;
+        roleSelect.append(option);
+      }
+      roleControl.append(roleSelect);
+      item.append(roleControl);
+      const saveRole = element('button', t('staffSaveRole'), 'ghost');
+      saveRole.type = 'button';
+      saveRole.dataset.updateRoleEmail = member.email;
+      saveRole.disabled = true;
+      roleSelect.addEventListener('change', () => { saveRole.disabled = roleSelect.value === member.role; });
+      item.append(saveRole);
       const disable = element('button', t('staffDisable'), 'ghost');
       disable.type = 'button';
       disable.dataset.disableEmail = member.email;
       item.append(disable);
+    } else if (member.status === 'disabled') {
+      const enable = element('button', t('staffReenable'), 'ghost');
+      enable.type = 'button';
+      enable.dataset.enableEmail = member.email;
+      enable.dataset.enableRole = member.role;
+      item.append(enable);
     }
     return item;
   }));
 }
 async function refreshStaffAudit() {
-  const events = await api('admin/audit', undefined, 'GET');
-  $('#staff-audit').replaceChildren(...events.map((entry) => element('li', `${entry.actor} · ${entry.action} · ${entry.target} · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')} · ${entry.correlationId || ''}`)));
+  await loadStaffAuditPage(true);
+}
+async function loadStaffAuditPage(reset = false) {
+  if (staffAuditLoading) return;
+  staffAuditLoading = true;
+  $('#staff-audit-load-more').disabled = true;
+  const cursor = reset ? null : staffAuditNextCursor;
+  try {
+    const page = await api(`admin/audit${cursor ? `?before=${encodeURIComponent(cursor)}` : ''}`, undefined, 'GET');
+    staffAuditCache = reset ? page.events : [...staffAuditCache, ...page.events];
+    staffAuditNextCursor = page.nextCursor;
+    renderStaffAudit();
+  } finally {
+    staffAuditLoading = false;
+    $('#staff-audit-load-more').hidden = !staffAuditNextCursor;
+    $('#staff-audit-load-more').disabled = false;
+  }
+}
+async function loadAllStaffAuditEvents() {
+  const events = [];
+  let cursor = null;
+  while (true) {
+    const page = await api(`admin/audit${cursor ? `?before=${encodeURIComponent(cursor)}` : ''}`, undefined, 'GET');
+    events.push(...page.events);
+    if (page.nextCursor === null) break;
+    if (page.nextCursor === cursor) throw new Error('unavailable');
+    cursor = page.nextCursor;
+  }
+  return events;
+}
+function renderStaffAudit() {
+  const entries = getFilteredStaffAuditEntries();
+  const locale = language ? 'fr-CA' : 'en-CA';
+  const number = (value) => new Intl.NumberFormat(locale).format(value);
+  $('#staff-audit-summary').textContent = t('staffAuditSummary').replace('{shown}', number(entries.length)).replace('{loaded}', number(staffAuditCache.length));
+  $('#staff-audit-export').disabled = staffAuditCache.length === 0 && !staffAuditNextCursor;
+  $('#staff-audit tbody').replaceChildren(...(entries.length ? entries : [null]).map((entry) => {
+    const row = element('tr');
+    if (!entry) {
+      const cell = element('td', t('staffAuditNoMatches'));
+      cell.colSpan = 5;
+      const hasFilters = $('#staff-audit-search').value.trim() || $('#staff-audit-filter').value !== 'all' || $('#staff-audit-from').value || $('#staff-audit-to').value;
+      if (hasFilters) {
+        const clearFilters = element('button', t('staffAuditClearFilters'), 'ghost');
+        clearFilters.type = 'button';
+        clearFilters.addEventListener('click', () => {
+          $('#staff-audit-search').value = '';
+          $('#staff-audit-filter').value = 'all';
+          $('#staff-audit-from').value = '';
+          $('#staff-audit-to').value = '';
+          renderStaffAudit();
+        });
+        cell.append(document.createElement('br'), clearFilters);
+      }
+      row.append(cell);
+      return row;
+    }
+    row.append(element('td', new Date(entry.createdAt).toLocaleString(locale)), element('td', entry.actor), element('td', auditActionLabel(entry.action)), element('td', entry.target), element('td', entry.correlationId || ''));
+    return row;
+  }));
+}
+function getFilteredStaffAuditEntries(source = staffAuditCache) {
+  const locale = language ? 'fr-CA' : 'en-CA';
+  const query = $('#staff-audit-search').value.trim().toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  const category = $('#staff-audit-filter').value;
+  const from = $('#staff-audit-from').value;
+  const to = $('#staff-audit-to').value;
+  const invalidRange = Boolean(from && to && from > to);
+  $('#staff-audit-range-error').hidden = !invalidRange;
+  $('#staff-audit-range-error').textContent = invalidRange ? t('staffAuditRangeInvalid') : '';
+  if (invalidRange) return [];
+  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : action.startsWith('provider_') || action.startsWith('catalog_') ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
+  return source.filter((entry) => {
+    const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
+    return searchable.includes(query) && (category === 'all' || categoryFor(entry.action) === category) && (!from || eventDate >= from) && (!to || eventDate <= to);
+  });
 }
 function supportPlayerIdentity(ticket) {
   return ticket.displayName ? `${ticket.displayName} (${ticket.email})` : ticket.email;
@@ -1836,10 +2146,10 @@ function renderSupportInbox() {
   const query = $('#support-search').value.trim().toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
   const selectedStatus = $('#support-filter').value;
   const selectedComplaint = $('#support-complaint-filter').value;
+  const selectedTopic = $('#support-topic-filter').value;
   const selectedPriority = $('#support-priority-filter').value;
   const selectedAssignee = $('#support-assignee-filter').value;
   const number = (value) => new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(value);
-  summary.textContent = t('supportQueueSummary').replace('{loaded}', number(supportInboxEntries.length)).replace('{total}', number(supportInboxTotal)).replace('{open}', number(supportInboxCounts.open)).replace('{answered}', number(supportInboxCounts.answered)).replace('{closed}', number(supportInboxCounts.closed));
   const loadMore = $('#support-load-more');
   loadMore.hidden = !supportInboxHasMore;
   loadMore.disabled = false;
@@ -1850,13 +2160,31 @@ function renderSupportInbox() {
     if ((selectedStatus !== 'all' && ticket.status !== selectedStatus) || (selectedPriority !== 'all' && ticket.priority !== selectedPriority)) return false;
     if (selectedComplaint === 'complaints' && !ticket.isComplaint) return false;
     if (selectedComplaint === 'requests' && ticket.isComplaint) return false;
+    if (selectedTopic !== 'all' && (ticket.isComplaint || ticket.category !== selectedTopic)) return false;
     if (selectedAssignee === 'mine' && ticket.assignedTo !== currentStaffId) return false;
     if (selectedAssignee === 'unassigned' && ticket.assignedTo) return false;
     const searchable = `${supportPlayerIdentity(ticket)} ${ticket.email} ${ticket.assignedEmail || ''} ${ticket.message} ${(ticket.messages || []).map((message) => message.message).join(' ')} ${(ticket.notes || []).map((note) => note.note).join(' ')}`.toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
     return searchable.includes(query);
   });
+  summary.textContent = t('supportQueueSummary').replace('{matching}', number(tickets.length)).replace('{loaded}', number(supportInboxEntries.length)).replace('{total}', number(supportInboxTotal)).replace('{open}', number(supportInboxCounts.open)).replace('{answered}', number(supportInboxCounts.answered)).replace('{closed}', number(supportInboxCounts.closed));
   if (!tickets.length) {
-    container.replaceChildren(element('p', supportInboxEntries.length ? t('supportNoMatches') : t('supportNoInbox')));
+    const emptyMessage = element('p', supportInboxTotal ? t('supportNoMatches') : t('supportNoInbox'));
+    if (supportInboxTotal) {
+      const clearFilters = element('button', t('supportClearFilters'), 'ghost');
+      clearFilters.type = 'button';
+      clearFilters.addEventListener('click', () => {
+        $('#support-search').value = '';
+        $('#support-filter').value = 'all';
+        $('#support-complaint-filter').value = 'all';
+        $('#support-topic-filter').value = 'all';
+        $('#support-priority-filter').value = 'all';
+        $('#support-assignee-filter').value = 'all';
+        renderSupportInbox();
+      });
+      container.replaceChildren(emptyMessage, clearFilters);
+      return;
+    }
+    container.replaceChildren(emptyMessage);
     return;
   }
   container.replaceChildren(...tickets.map((ticket) => {
@@ -1865,10 +2193,20 @@ function renderSupportInbox() {
     article.append(element('h3', `#${ticket.id} · ${playerIdentity}`));
     article.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
     if (ticket.isComplaint) article.append(element('strong', t('supportComplaintBadge'), 'complaint-badge'));
+    if (!ticket.isComplaint && ticket.category === 'responsible_play') {
+      const locale = language ? 'fr-CA' : 'en-CA';
+      const now = Date.now();
+      const protectionStates = [];
+      if (ticket.playerExcludedAt) protectionStates.push(t('supportPlayerExcluded'));
+      if (ticket.playerCoolingOffUntil > now) protectionStates.push(t('supportPlayerCoolingOffUntil').replace('{date}', new Date(ticket.playerCoolingOffUntil).toLocaleString(locale)));
+      if (ticket.playerPauseUntil > now) protectionStates.push(t('supportPlayerPauseUntil').replace('{date}', new Date(ticket.playerPauseUntil).toLocaleString(locale)));
+      const context = element('aside', '', 'support-safety-context');
+      context.append(element('strong', t('supportPlayerProtectionContext')), element('p', protectionStates.join(' ') || t('supportPlayerNoActiveRestriction')));
+      article.append(context);
+    }
     article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
     article.append(element('h4', t('supportThread')));
-    article.append(supportMessageElement(playerIdentity, ticket.message, ticket.createdAt, 'from-player'));
-    for (const message of ticket.messages || []) {
+    for (const message of supportThreadEntries(ticket)) {
       const author = message.authorType === 'staff' ? message.author || t('supportStaffAuthor') : playerIdentity;
       article.append(supportMessageElement(author, message.message, message.createdAt, message.authorType === 'staff' ? 'from-staff' : 'from-player'));
     }
@@ -1902,10 +2240,12 @@ function renderSupportInbox() {
       assignButton.disabled = true;
       try {
         const staffId = assignment.value && assignment.value !== 'inactive' ? Number(assignment.value) : null;
-        await api('admin/support/assign', { ticketId: ticket.id, staffId });
+        await api('admin/support/assign', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, staffId });
         if (await refreshSupportInbox()) status.textContent = t('supportAssignmentSaved');
       } catch (error) {
-        status.textContent = t(error.message);
+        if (error.message === 'supportConflict') {
+          if (await refreshSupportInbox()) status.textContent = t('supportConflict');
+        } else status.textContent = t(error.message);
       } finally {
         assignButton.disabled = false;
       }
@@ -1933,10 +2273,12 @@ function renderSupportInbox() {
       noteSubmit.disabled = true;
       try {
         const data = Object.fromEntries(new FormData(noteForm));
-        await api('admin/support/note', { ticketId: ticket.id, ...data });
+        await api('admin/support/note', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, ...data });
         if (await refreshSupportInbox()) status.textContent = t('supportNoteSaved');
       } catch (error) {
-        status.textContent = t(error.message);
+        if (error.message === 'supportConflict') {
+          if (await refreshSupportInbox()) status.textContent = t('supportConflict');
+        } else status.textContent = t(error.message);
       } finally {
         noteSubmit.disabled = false;
       }
@@ -1975,10 +2317,12 @@ function renderSupportInbox() {
       submit.disabled = true;
       try {
         const data = Object.fromEntries(new FormData(form));
-        await api('admin/support/reply', { ticketId: ticket.id, ...data });
+        await api('admin/support/reply', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, ...data });
         if (await refreshSupportInbox()) status.textContent = t('supportSaved');
       } catch (error) {
-        status.textContent = t(error.message);
+        if (error.message === 'supportConflict') {
+          if (await refreshSupportInbox()) status.textContent = t('supportConflict');
+        } else status.textContent = t(error.message);
       } finally {
         submit.disabled = false;
       }
@@ -1989,10 +2333,12 @@ function renderSupportInbox() {
         if (!window.confirm(t('supportConfirmClose'))) return;
         closeWithoutReply.disabled = true;
         try {
-          await api('admin/support/reply', { ticketId: ticket.id, status: 'closed', priority: priority.value });
+          await api('admin/support/reply', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, status: 'closed', priority: priority.value });
           if (await refreshSupportInbox()) status.textContent = t('supportClosedNoReply');
         } catch (error) {
-          status.textContent = t(error.message);
+          if (error.message === 'supportConflict') {
+            if (await refreshSupportInbox()) status.textContent = t('supportConflict');
+          } else status.textContent = t(error.message);
         } finally {
           closeWithoutReply.disabled = false;
         }
@@ -2014,7 +2360,7 @@ async function refreshSupportInbox(restart = false) {
     const loaded = [];
     let pagesLoaded = 0;
     while (pagesLoaded < targetPageCount) {
-      const path = cursor === null ? 'admin/support' : `admin/support?beforeId=${cursor}`;
+      const path = cursor === null ? 'admin/support' : `admin/support?beforeUpdatedAt=${cursor.updatedAt}&beforeId=${cursor.id}`;
       page = await api(path, undefined, 'GET');
       loaded.push(...page.tickets);
       pagesLoaded += 1;
@@ -2042,7 +2388,7 @@ async function loadMoreSupportInbox() {
   button.textContent = t('supportLoadingMore');
   $('#support-inbox-status').textContent = '';
   try {
-    const path = supportInboxCursor === null ? 'admin/support' : `admin/support?beforeId=${supportInboxCursor}`;
+    const path = supportInboxCursor === null ? 'admin/support' : `admin/support?beforeUpdatedAt=${supportInboxCursor.updatedAt}&beforeId=${supportInboxCursor.id}`;
     const page = await api(path, undefined, 'GET');
     const existingIds = new Set(supportInboxEntries.map((ticket) => ticket.id));
     supportInboxEntries.push(...page.tickets.filter((ticket) => !existingIds.has(ticket.id)));
@@ -2063,31 +2409,153 @@ $('#support-load-more').addEventListener('click', loadMoreSupportInbox);
 $('#support-search').addEventListener('input', renderSupportInbox);
 $('#support-filter').addEventListener('change', renderSupportInbox);
 $('#support-complaint-filter').addEventListener('change', renderSupportInbox);
+$('#support-topic-filter').addEventListener('change', renderSupportInbox);
 $('#support-priority-filter').addEventListener('change', renderSupportInbox);
 $('#support-assignee-filter').addEventListener('change', renderSupportInbox);
 async function refreshOperatorOverview() {
-  const overview = await api('admin/overview', undefined, 'GET');
+  $('#overview-export').disabled = true;
+  const requestedDays = Number($('#overview-period').value);
+  const overview = await api(`admin/overview?days=${requestedDays}`, undefined, 'GET');
+  latestOverview = overview;
+  $('#overview-export').disabled = false;
+  $('#overview-showcase-note').hidden = !overview.showcaseDataLoaded;
+  $('#overview-showcase-prompt').hidden = Boolean(overview.showcaseDataLoaded || overview.playerAccounts > 0);
   const locale = language ? 'fr-CA' : 'en-CA';
   const number = new Intl.NumberFormat(locale);
+  for (const id of ['overview-rounds', 'overview-active-players', 'overview-wagered']) {
+    const label = $(`#${id}`).previousElementSibling;
+    const copyKey = id === 'overview-rounds' ? 'overviewRounds' : id === 'overview-active-players' ? 'overviewActivePlayers' : 'overviewWagered';
+    label.textContent = t(copyKey).replace('{days}', String(overview.periodDays));
+  }
   $('#overview-players').textContent = number.format(overview.playerAccounts);
   $('#overview-verified').textContent = number.format(overview.verifiedAccounts);
-  $('#overview-rounds').textContent = number.format(overview.demoRounds30Days);
-  $('#overview-wagered').textContent = money(overview.simulatedWagersCents30Days);
+  $('#overview-rounds').textContent = number.format(overview.demoRoundsInPeriod);
+  $('#overview-active-players').textContent = number.format(overview.activeDemoPlayersInPeriod);
+  $('#overview-wagered').textContent = money(overview.simulatedWagersCentsInPeriod);
+  renderOverviewActivity(overview);
+  renderOverviewGameActivity(overview);
   $('#overview-tickets').textContent = number.format(overview.openSupportTickets);
   $('#overview-catalog').textContent = number.format(overview.enabledCatalogListings);
+  const catalogReady = overview.enabledCatalogListings > 0;
+  $('#overview-catalog-readiness').textContent = t(catalogReady ? 'overviewCatalogReady' : 'overviewCatalogEmpty');
+  const catalogLink = $('#catalog-readiness-link');
+  catalogLink.href = catalogReady ? '#catalog-management' : '#provider-tools';
+  catalogLink.textContent = t(catalogReady ? 'goToCatalogManagement' : 'goToCatalogSetup');
+  const brandingStatus = overview.configNeedsPublish ? 'overviewBrandingPending' : 'overviewBrandingReady';
+  $('#overview-branding-readiness').textContent = t(brandingStatus).replace('{version}', number.format(overview.publishedConfigVersion));
+  $('#overview-mfa-readiness').textContent = t(currentStaffMfaEnabled ? 'overviewMfaEnabled' : 'overviewMfaDisabled');
   $('#overview-status').textContent = t('overviewUpdated').replace('{time}', new Date(overview.generatedAt).toLocaleTimeString(locale));
+}
+function renderOverviewActivity(overview) {
+  const locale = language ? 'fr-CA' : 'en-CA';
+  const number = new Intl.NumberFormat(locale);
+  const data = overview.demoRoundsByDay || [];
+  const total = data.reduce((sum, item) => sum + item.rounds, 0);
+  const peak = data.reduce((best, item) => item.rounds > best.rounds ? item : best, { day: '', rounds: 0 });
+  const peakDate = peak.day ? new Date(`${peak.day}T00:00:00Z`).toLocaleDateString(locale, { timeZone: 'UTC', dateStyle: 'medium' }) : '—';
+  const summary = t('overviewActivitySummary').replace('{total}', number.format(total)).replace('{days}', number.format(overview.periodDays)).replace('{date}', peakDate).replace('{rounds}', number.format(peak.rounds));
+  const chart = $('#overview-activity-chart');
+  chart.style.setProperty('--bar-count', data.length);
+  chart.setAttribute('aria-label', `${t('overviewActivityChart')}. ${summary}`);
+  const maxRounds = Math.max(0, ...data.map(({ rounds }) => rounds));
+  chart.replaceChildren(...data.map(({ day, rounds }) => {
+    const column = element('span', '', 'overview-activity-column');
+    const bar = element('span', '', 'overview-activity-bar');
+    bar.style.height = maxRounds ? `${Math.max(rounds ? 2 : 0, (rounds / maxRounds) * 100)}%` : '0%';
+    column.title = `${day}: ${number.format(rounds)}`;
+    column.setAttribute('aria-hidden', 'true');
+    column.append(bar);
+    return column;
+  }));
+  $('#overview-activity-summary').textContent = summary;
+  $('#overview-activity-values').replaceChildren(...data.map(({ day, rounds }) => {
+    const date = new Date(`${day}T00:00:00Z`).toLocaleDateString(locale, { timeZone: 'UTC', dateStyle: 'medium' });
+    return element('li', t('overviewActivityDay').replace('{date}', date).replace('{rounds}', number.format(rounds)));
+  }));
+}
+function renderOverviewGameActivity(overview) {
+  const activity = new Map((overview.demoRoundsByGame || []).map((game) => [game.game, game]));
+  const totalRounds = overview.demoRoundsInPeriod;
+  const share = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA', { style: 'percent', maximumFractionDigits: 1 });
+  const rows = games.map((game) => {
+    const stats = activity.get(game.id) || { rounds: 0, active_players: 0, wagered_cents: 0 };
+    const row = element('tr');
+    row.append(element('th', gameName(game)), element('td', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(stats.rounds)), element('td', share.format(totalRounds ? stats.rounds / totalRounds : 0)), element('td', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(stats.active_players)), element('td', money(stats.wagered_cents)));
+    return { id: game.id, name: gameName(game), stats, row };
+  });
+  $('#overview-game-table tbody').replaceChildren(...rows.map(({ row }) => row));
+  return rows;
+}
+function exportOperatorOverview() {
+  if (!latestOverview) return;
+  const overview = latestOverview;
+  const rows = language ? [
+    ['Rapport', 'Démo seulement', ''],
+    ['Généré le', new Date(overview.generatedAt).toISOString(), 'UTC'],
+    ['Période', `${overview.periodDays} derniers jours`, ''],
+    ['Comptes joueurs', overview.playerAccounts, 'comptes'],
+    ['Comptes avec courriel confirmé', overview.verifiedAccounts, 'comptes'],
+    ['Joueurs actifs dans la démo', overview.activeDemoPlayersInPeriod, 'joueurs'],
+    ['Parties de démo', overview.demoRoundsInPeriod, 'parties'],
+    ['Mises fictives', (overview.simulatedWagersCentsInPeriod / 100).toFixed(2), 'CAD · aucune valeur monétaire'],
+    ['Demandes de soutien ouvertes', overview.openSupportTickets, 'demandes'],
+    ['Fiches d’aperçu du catalogue activées', overview.enabledCatalogListings, 'fiches']
+  ] : [
+    ['Report', 'Demo only', ''],
+    ['Generated at', new Date(overview.generatedAt).toISOString(), 'UTC'],
+    ['Period', `Last ${overview.periodDays} days`, ''],
+    ['Player accounts', overview.playerAccounts, 'accounts'],
+    ['Email-verified accounts', overview.verifiedAccounts, 'accounts'],
+    ['Active demo players', overview.activeDemoPlayersInPeriod, 'players'],
+    ['Demo rounds', overview.demoRoundsInPeriod, 'rounds'],
+    ['Simulated wagers', (overview.simulatedWagersCentsInPeriod / 100).toFixed(2), 'CAD · no cash value'],
+    ['Open support tickets', overview.openSupportTickets, 'tickets'],
+    ['Enabled catalog preview listings', overview.enabledCatalogListings, 'listings']
+  ];
+  if (overview.showcaseDataLoaded) rows.push(language
+    ? ['Données de présentation fictives', 'Incluses', 'Les statistiques agrégées comprennent des exemples fictifs.']
+    : ['Fictional showcase data', 'Included', 'Aggregate metrics include sample presentation activity.']);
+  rows.push([language ? 'Parties quotidiennes (UTC)' : 'Daily rounds (UTC)', '', '']);
+  rows.push(...overview.demoRoundsByDay.map(({ day, rounds }) => [day, rounds, language ? 'parties' : 'rounds']));
+  rows.push([language ? 'Activité par jeu de démo' : 'Demo activity by game', '', '']);
+  for (const game of games) {
+    const stats = (overview.demoRoundsByGame || []).find((entry) => entry.game === game.id) || { rounds: 0, active_players: 0, wagered_cents: 0 };
+    rows.push([`${gameName(game)} · ${t('overviewGameRounds')}`, stats.rounds, language ? 'parties' : 'rounds']);
+    rows.push([`${gameName(game)} · ${t('overviewGameShare')}`, overview.demoRoundsInPeriod ? ((stats.rounds / overview.demoRoundsInPeriod) * 100).toFixed(1) : '0.0', '%']);
+    rows.push([`${gameName(game)} · ${t('overviewGameActivePlayers')}`, stats.active_players, language ? 'joueurs' : 'players']);
+    rows.push([`${gameName(game)} · ${t('overviewGameWagered')}`, (stats.wagered_cents / 100).toFixed(2), language ? 'CAD; aucune valeur monétaire' : 'CAD; no cash value']);
+  }
+  const headers = language ? ['Mesure', 'Valeur', 'Unité / remarque'] : ['Metric', 'Value', 'Unit / note'];
+  const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const blobUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = element('a', t('overviewExport'));
+  link.href = blobUrl;
+  link.download = `northplay-demo-overview-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(link);
+  link.click();
+  setTimeout(() => { URL.revokeObjectURL(blobUrl); link.remove(); }, 60_000);
+  $('#overview-status').textContent = t('overviewExportReady');
 }
 $('#overview-refresh').addEventListener('click', () => {
   refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
 });
+$('#overview-period').addEventListener('change', () => {
+  refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
+});
+$('#overview-export').addEventListener('click', exportOperatorOverview);
 
 function showStaffSession(session) {
   currentStaffEmail = session.email;
   currentStaffId = session.id;
   currentStaffRole = session.role;
+  currentStaffMfaEnabled = Boolean(session.mfaEnabled);
+  currentMfaSetupUri = undefined;
+  $('#mfa-secret').hidden = true;
+  $('#mfa-copy-setup').hidden = true;
+  $('#mfa-status').textContent = '';
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
-  $('#staff-identity').textContent = `${session.email} · ${session.role}`;
+  $('#staff-identity').textContent = `${session.email} · ${staffRoleLabel(session.role)}`;
   for (const section of document.querySelectorAll('[data-roles]')) section.hidden = !section.dataset.roles.split(',').includes(session.role);
   refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   if (['operator_admin', 'operator_provider'].includes(session.role)) refreshManagedCatalog();
@@ -2149,9 +2617,21 @@ $('#staff-logout').addEventListener('click', async () => {
   currentStaffEmail = undefined;
   currentStaffId = undefined;
   currentStaffRole = undefined;
+  currentStaffMfaEnabled = false;
+  currentMfaSetupUri = undefined;
+  $('#mfa-secret').hidden = true;
+  $('#mfa-copy-setup').hidden = true;
+  $('#mfa-status').textContent = '';
   $('#admin-tools').hidden = true;
   $('#staff-login').hidden = false;
 });
+$('#staff-search').addEventListener('input', renderStaffList);
+$('#staff-filter-role').addEventListener('change', renderStaffList);
+$('#staff-filter-status').addEventListener('change', renderStaffList);
+$('#staff-filter-mfa').addEventListener('change', renderStaffList);
+$('#staff-filter-activity').addEventListener('change', renderStaffList);
+$('#staff-sort').addEventListener('change', renderStaffList);
+$('#staff-create select[name="role"]').addEventListener('change', updateStaffRoleHelp);
 $('#staff-create').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -2164,24 +2644,120 @@ $('#staff-create').addEventListener('submit', async (event) => {
   } catch (error) { $('#staff-status').textContent = t(error.message); }
 });
 $('#staff-list').addEventListener('click', async (event) => {
+  const roleEmail = event.target.dataset.updateRoleEmail;
+  if (roleEmail) {
+    const role = event.target.closest('li').querySelector('[data-staff-role]').value;
+    const currentMember = staffMemberCache.find((member) => member.email === roleEmail);
+    if (!currentMember || currentMember.role === role) return;
+    const roleLabels = { operator_admin: t('roleAdmin'), operator_content: t('roleContent'), operator_provider: t('roleProvider'), operator_support: t('roleSupport') };
+    const confirmation = t('staffConfirmRoleChange').replace('{email}', roleEmail).replace('{oldRole}', roleLabels[currentMember.role] || currentMember.role).replace('{newRole}', roleLabels[role] || role);
+    if (!window.confirm(confirmation)) return;
+    try {
+      await api('admin/staff/role', { email: roleEmail, role });
+      $('#staff-status').textContent = t('staffRoleUpdated');
+      await refreshStaffList();
+    } catch (error) { $('#staff-status').textContent = t(error.message); }
+    return;
+  }
+  const enableEmail = event.target.dataset.enableEmail;
+  if (enableEmail) {
+    const role = event.target.dataset.enableRole;
+    const roleLabels = { operator_admin: t('roleAdmin'), operator_content: t('roleContent'), operator_provider: t('roleProvider'), operator_support: t('roleSupport') };
+    const confirmation = t('staffConfirmReenable').replace('{email}', enableEmail).replace('{role}', roleLabels[role] || role);
+    if (!window.confirm(confirmation)) return;
+    try {
+      await api('admin/staff', { email: enableEmail, role });
+      $('#staff-status').textContent = t('staffReenabled');
+      await refreshStaffList();
+    } catch (error) { $('#staff-status').textContent = t(error.message); }
+    return;
+  }
   const email = event.target.dataset.disableEmail;
   if (!email) return;
+  if (!window.confirm(t('staffConfirmDisable'))) return;
   try {
     await api('admin/staff/disable', { email });
     $('#staff-status').textContent = t('staffDisabled');
     await refreshStaffList();
   } catch (error) { $('#staff-status').textContent = t(error.message); }
 });
+$('#staff-export').addEventListener('click', () => {
+  const members = getFilteredStaffMembers();
+  if (!members.length) return;
+  const headers = language
+    ? ['Courriel', 'Rôle', 'Code du rôle', 'État du compte', 'Vérification en deux étapes', 'Créé le (UTC)', 'Dernière activité enregistrée (UTC)']
+    : ['Email', 'Role', 'Role code', 'Account status', 'Two-step verification', 'Created at (UTC)', 'Last recorded activity (UTC)'];
+  const roleLabels = { operator_admin: t('roleAdmin'), operator_content: t('roleContent'), operator_provider: t('roleProvider'), operator_support: t('roleSupport') };
+  const rows = members.map((member) => [member.email, roleLabels[member.role] || member.role, member.role, t(member.status), t(member.mfaEnabled ? 'staffMfaEnabled' : 'staffMfaDisabled'), new Date(member.createdAt).toISOString(), member.lastActivityAt ? new Date(member.lastActivityAt).toISOString() : '']);
+  const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const blobUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = element('a', t('staffExport'));
+  link.href = blobUrl;
+  link.download = `northplay-staff-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(link);
+  link.click();
+  setTimeout(() => { URL.revokeObjectURL(blobUrl); link.remove(); }, 60_000);
+  $('#staff-status').textContent = t('staffExportReady');
+});
+$('#staff-audit-search').addEventListener('input', renderStaffAudit);
+$('#staff-audit-filter').addEventListener('change', renderStaffAudit);
+$('#staff-audit-from').addEventListener('change', renderStaffAudit);
+$('#staff-audit-to').addEventListener('change', renderStaffAudit);
 $('#staff-audit-refresh').addEventListener('click', async () => {
   try { await refreshStaffAudit(); }
   catch (error) { $('#staff-status').textContent = t(error.message); }
 });
+$('#staff-audit-load-more').addEventListener('click', async () => {
+  try { await loadStaffAuditPage(); }
+  catch (error) { $('#staff-status').textContent = t(error.message); }
+});
+$('#staff-audit-export').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  if (!$('#staff-audit-range-error').hidden) return;
+  button.disabled = true;
+  $('#staff-status').textContent = t('staffAuditExporting');
+  try {
+    const entries = getFilteredStaffAuditEntries(await loadAllStaffAuditEvents());
+    if (!entries.length) {
+      $('#staff-status').textContent = t('staffAuditNoMatches');
+      return;
+    }
+    const headers = language
+      ? ['Horodatage', 'Acteur', 'Action', 'Code de l’action', 'Cible', 'ID de corrélation']
+      : ['Timestamp', 'Actor', 'Action', 'Action code', 'Target', 'Correlation ID'];
+    const rows = entries.map((entry) => [new Date(entry.createdAt).toISOString(), entry.actor, auditActionLabel(entry.action), entry.action, entry.target, entry.correlationId || '']);
+    const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+    const blobUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = element('a', t('staffAuditExport'));
+    link.href = blobUrl;
+    link.download = `northplay-staff-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.append(link);
+    link.click();
+    setTimeout(() => { URL.revokeObjectURL(blobUrl); link.remove(); }, 60_000);
+    $('#staff-status').textContent = t('staffAuditExportReady');
+  } catch (error) {
+    $('#staff-status').textContent = t(error.message);
+  } finally {
+    button.disabled = staffAuditCache.length === 0 && !staffAuditNextCursor;
+  }
+});
 $('#mfa-setup').addEventListener('click', async () => {
   try {
     const setup = await api('admin/mfa/setup', {});
+    currentMfaSetupUri = setup.otpauth;
     $('#mfa-secret').hidden = false;
     $('#mfa-secret').textContent = `${setup.secret}\n${setup.otpauth}`;
+    $('#mfa-copy-setup').hidden = false;
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
+});
+$('#mfa-copy-setup').addEventListener('click', async () => {
+  try {
+    if (!currentMfaSetupUri || !navigator.clipboard?.writeText) throw new Error('clipboard');
+    await navigator.clipboard.writeText(currentMfaSetupUri);
+    $('#mfa-status').textContent = t('mfaSetupCopied');
+  } catch {
+    $('#mfa-status').textContent = t('mfaCopyFailed');
+  }
 });
 $('#mfa-verify').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -2191,11 +2767,16 @@ $('#mfa-verify').addEventListener('submit', async (event) => {
     $('#mfa-status').textContent = t('mfaEnabled');
     $('#mfa-setup').hidden = true;
     $('#mfa-secret').hidden = true;
+    $('#mfa-copy-setup').hidden = true;
+    currentMfaSetupUri = undefined;
     $('#mfa-verify').querySelector('button[type=submit]').hidden = true;
     $('#mfa-disable').hidden = false;
+    currentStaffMfaEnabled = true;
+    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 $('#mfa-disable').addEventListener('click', async () => {
+  if (!window.confirm(t('mfaConfirmDisable'))) return;
   const code = $('#mfa-verify').elements.code.value;
   try {
     await api('admin/mfa/disable', { code });
@@ -2203,6 +2784,11 @@ $('#mfa-disable').addEventListener('click', async () => {
     $('#mfa-setup').hidden = false;
     $('#mfa-verify').querySelector('button[type=submit]').hidden = false;
     $('#mfa-disable').hidden = true;
+    $('#mfa-copy-setup').hidden = true;
+    $('#mfa-secret').hidden = true;
+    currentMfaSetupUri = undefined;
+    currentStaffMfaEnabled = false;
+    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 

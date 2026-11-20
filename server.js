@@ -113,6 +113,9 @@ if (!db.prepare('PRAGMA table_info(support_tickets)').all().some(({ name }) => n
 }
 db.exec('CREATE INDEX IF NOT EXISTS support_tickets_triage ON support_tickets(tenant_id, priority, status, updated_at)');
 db.exec('CREATE INDEX IF NOT EXISTS support_tickets_assignee ON support_tickets(tenant_id, assigned_to, status, updated_at)');
+db.exec('CREATE INDEX IF NOT EXISTS support_tickets_player_updated ON support_tickets(tenant_id, player_id, updated_at DESC, id DESC)');
+db.exec('CREATE INDEX IF NOT EXISTS support_tickets_activity ON support_tickets(tenant_id, updated_at DESC, id DESC)');
+db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 transaction(() => {
   db.exec("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, staff_id, message, created_at) SELECT t.tenant_id, t.id, 'staff', t.replied_by, t.reply, t.updated_at FROM support_tickets t WHERE t.reply IS NOT NULL AND t.replied_by IS NOT NULL AND t.reply_thread_migrated = 0");
   db.exec('UPDATE support_tickets SET reply_thread_migrated = 1 WHERE reply_thread_migrated = 0');
@@ -122,6 +125,8 @@ for (const table of ['platform_events', 'staff_events']) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN correlation_id TEXT`);
   }
 }
+db.exec('CREATE INDEX IF NOT EXISTS staff_events_actor_activity ON staff_events(tenant_id, actor_id, created_at)');
+db.exec('CREATE INDEX IF NOT EXISTS staff_events_tenant_page ON staff_events(tenant_id, id)');
 for (const [column, definition] of [['verification_token', 'TEXT'], ['verified_at', 'INTEGER']]) {
   if (!db.prepare('PRAGMA table_info(tenant_domains)').all().some((entry) => entry.name === column)) {
     db.exec(`ALTER TABLE tenant_domains ADD COLUMN ${column} ${definition}`);
@@ -437,8 +442,7 @@ async function body(req, maxBytes = 8192) {
   }
 }
 
-function dailyWagered(id, tenantId) {
-  const today = new Date().toISOString().slice(0, 10);
+function dailyWagered(id, tenantId, today = new Date().toISOString().slice(0, 10)) {
   return db.prepare("SELECT coalesce(sum(wager), 0) AS total FROM ledger WHERE player = ? AND tenant_id = ? AND game IS NOT NULL AND date(created_at / 1000, 'unixepoch') = ?").get(id, tenantId, today).total;
 }
 
@@ -476,7 +480,7 @@ function account(id, tenantId) {
   const profile = db.prepare('SELECT display_name AS displayName, preferred_locale AS preferredLocale FROM player_profiles WHERE player_id = ? AND tenant_id = ?').get(id, tenantId);
   const safety = db.prepare('SELECT pause_until, excluded_at, daily_limit_cents, cooling_off_until, session_reminder_minutes FROM player_safety WHERE player = ?').get(id) || {};
   const marketingConsent = db.prepare("SELECT granted FROM player_consent_events WHERE player_id = ? AND tenant_id = ? AND consent_type = 'marketing_email' ORDER BY id DESC LIMIT 1").get(id, tenantId);
-  const supportReplies = db.prepare("SELECT count(*) AS count FROM support_tickets WHERE player_id = ? AND tenant_id = ? AND reply IS NOT NULL AND status IN ('answered', 'closed') AND updated_at > coalesce(player_seen_at, 0) AND id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id DESC LIMIT 50)").get(id, tenantId, id, tenantId).count;
+  const supportReplies = db.prepare("SELECT count(*) AS count FROM support_tickets t WHERE t.player_id = ? AND t.tenant_id = ? AND coalesce((SELECT max(m.created_at) FROM support_ticket_messages m WHERE m.tenant_id = t.tenant_id AND m.ticket_id = t.id AND m.author_type = 'staff'), 0) > coalesce(t.player_seen_at, 0) AND t.id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50)").get(id, tenantId, id, tenantId).count;
   const historyRows = db.prepare('SELECT id, game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id DESC LIMIT 21').all(id, tenantId);
   const availableFavorites = new Set(games.map(({ id: gameId }) => `demo:${gameId}`));
   for (const listing of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
@@ -528,18 +532,38 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'GET /api/admin/overview') {
     staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
-    const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const periodValue = new URL(req.url, 'http://localhost').searchParams.get('days') || '30';
+    if (!['7', '30', '90'].includes(periodValue)) fail(400, 'invalid');
+    const periodDays = Number(periodValue);
+    const dayMilliseconds = 24 * 60 * 60 * 1000;
+    const since = Math.floor(Date.now() / dayMilliseconds) * dayMilliseconds - (periodDays - 1) * dayMilliseconds;
     const players = db.prepare('SELECT count(*) AS total, coalesce(sum(email_verified), 0) AS verified FROM players WHERE tenant_id = ?').get(tenantId);
-    const gameplay = db.prepare('SELECT count(*) AS rounds, coalesce(sum(wager), 0) AS wagered_cents FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ?').get(tenantId, since);
+    const showcaseDataLoaded = Boolean(db.prepare("SELECT 1 FROM players WHERE tenant_id = ? AND email LIKE 'northplay-showcase-%@example.invalid' LIMIT 1").get(tenantId));
+    const gameplay = db.prepare('SELECT count(*) AS rounds, count(DISTINCT player) AS active_players, coalesce(sum(wager), 0) AS wagered_cents FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ?').get(tenantId, since);
+    const demoRoundsByGame = db.prepare('SELECT game, count(*) AS rounds, count(DISTINCT player) AS active_players, coalesce(sum(wager), 0) AS wagered_cents FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ? GROUP BY game ORDER BY rounds DESC, game').all(tenantId, since);
+    const dailyRounds = new Map(db.prepare("SELECT date(created_at / 1000, 'unixepoch') AS day, count(*) AS rounds FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ? GROUP BY day").all(tenantId, since).map(({ day, rounds }) => [day, rounds]));
+    const demoRoundsByDay = Array.from({ length: periodDays }, (_, index) => {
+      const day = new Date(since + index * dayMilliseconds).toISOString().slice(0, 10);
+      return { day, rounds: dailyRounds.get(day) || 0 };
+    });
     const support = db.prepare("SELECT count(*) AS open FROM support_tickets WHERE tenant_id = ? AND status = 'open'").get(tenantId);
     const catalog = db.prepare('SELECT count(*) AS enabled FROM game_catalog WHERE tenant_id = ? AND enabled = 1').get(tenantId);
+    const publishedConfig = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
+    const draftConfig = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
     return {
       playerAccounts: players.total,
       verifiedAccounts: players.verified,
-      demoRounds30Days: gameplay.rounds,
-      simulatedWagersCents30Days: gameplay.wagered_cents,
+      showcaseDataLoaded,
+      periodDays,
+      demoRoundsInPeriod: gameplay.rounds,
+      activeDemoPlayersInPeriod: gameplay.active_players,
+      simulatedWagersCentsInPeriod: gameplay.wagered_cents,
+      demoRoundsByDay,
+      demoRoundsByGame,
       openSupportTickets: support.open,
       enabledCatalogListings: catalog.enabled,
+      publishedConfigVersion: publishedConfig?.version ?? 0,
+      configNeedsPublish: Boolean(draftConfig && draftConfig.config !== publishedConfig?.config),
       generatedAt: Date.now()
     };
   }
@@ -597,10 +621,18 @@ async function api(req, res, path, tenantId, requestId) {
     db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_mfa_disabled', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
     return { enabled: false };
   }
-  if (['GET /api/admin/staff', 'POST /api/admin/staff', 'POST /api/admin/staff/disable', 'GET /api/admin/audit'].includes(route)) {
+  if (['GET /api/admin/staff', 'POST /api/admin/staff', 'POST /api/admin/staff/disable', 'POST /api/admin/staff/role', 'GET /api/admin/audit'].includes(route)) {
     const actor = staffContext(req, tenantId, ['operator_admin']);
-    if (route === 'GET /api/admin/staff') return db.prepare('SELECT a.email, m.role, m.status, m.created_at AS createdAt FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? ORDER BY m.created_at').all(tenantId);
-    if (route === 'GET /api/admin/audit') return db.prepare(`SELECT a.email AS actor, e.action, e.target, e.created_at AS createdAt, e.correlation_id AS correlationId FROM staff_events e JOIN staff_accounts a ON a.id = e.actor_id WHERE e.tenant_id = ? ORDER BY e.id DESC LIMIT 200`).all(tenantId);
+    if (route === 'GET /api/admin/staff') return db.prepare('SELECT a.email, a.mfa_enabled AS mfaEnabled, m.role, m.status, m.created_at AS createdAt, (SELECT max(e.created_at) FROM staff_events e WHERE e.tenant_id = m.tenant_id AND e.actor_id = a.id) AS lastActivityAt FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? ORDER BY m.created_at').all(tenantId);
+    if (route === 'GET /api/admin/audit') {
+      const beforeValue = new URL(req.url, 'http://localhost').searchParams.get('before');
+      const before = beforeValue === null ? null : Number(beforeValue);
+      if (before !== null && (!Number.isSafeInteger(before) || before < 1)) fail(400, 'invalid');
+      const rows = db.prepare(`SELECT e.id, a.email AS actor, e.action, e.target, e.created_at AS createdAt, e.correlation_id AS correlationId FROM staff_events e JOIN staff_accounts a ON a.id = e.actor_id WHERE e.tenant_id = ? AND e.id < coalesce(?, 9223372036854775807) ORDER BY e.id DESC LIMIT 51`).all(tenantId, before);
+      const hasMore = rows.length > 50;
+      const events = rows.slice(0, 50);
+      return { events, nextCursor: hasMore ? events.at(-1).id : null };
+    }
     const { email, password, role } = await body(req);
     if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail(400, 'invalid');
     const normalizedEmail = email.trim().toLowerCase();
@@ -614,6 +646,17 @@ async function api(req, res, path, tenantId, requestId) {
       return { email: normalizedEmail, status: 'disabled' };
     }
     if (typeof role !== 'string' || !['operator_admin', 'operator_content', 'operator_provider', 'operator_support'].includes(role)) fail(400, 'invalid');
+    if (route === 'POST /api/admin/staff/role') {
+      const member = db.prepare('SELECT a.id, m.role FROM staff_accounts a JOIN tenant_staff_memberships m ON m.staff_id = a.id WHERE m.tenant_id = ? AND a.email = ? AND m.status = \'active\'').get(tenantId, normalizedEmail);
+      if (!member || member.id === actor.id) fail(409, 'staffLifecycle');
+      if (member.role === role) return { email: normalizedEmail, role, changed: false };
+      if (member.role === 'operator_admin' && role !== 'operator_admin' && db.prepare("SELECT count(*) AS total FROM tenant_staff_memberships WHERE tenant_id = ? AND role = 'operator_admin' AND status = 'active'").get(tenantId).total <= 1) fail(409, 'staffLifecycle');
+      transaction(() => {
+        db.prepare('UPDATE tenant_staff_memberships SET role = ? WHERE tenant_id = ? AND staff_id = ? AND status = \'active\'').run(role, tenantId, member.id);
+        db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, \'staff_role_changed\', ?, ?, ?)').run(tenantId, actor.id, `${normalizedEmail}:${member.role}->${role}`, Date.now(), requestId);
+      });
+      return { email: normalizedEmail, role, changed: true };
+    }
     let target = db.prepare('SELECT id FROM staff_accounts WHERE email = ?').get(normalizedEmail);
     if (!target) {
       if (typeof password !== 'string' || password.length < 12 || password.length > 128) fail(400, 'invalid');
@@ -793,6 +836,19 @@ async function api(req, res, path, tenantId, requestId) {
     const session = db.prepare('SELECT created_at AS sessionStartedAt FROM sessions WHERE token = ? AND tenant_id = ?').get(hash(cookie), tenantId);
     return { ...account(player, tenantId), sessionStartedAt: session.sessionStartedAt };
   }
+  if (route === 'POST /api/account/demo-balance/reset') {
+    if (!player) fail(401, 'signin');
+    return transaction(() => {
+      const targetBalance = 10000;
+      const currentBalance = balance(player, tenantId);
+      const delta = targetBalance - currentBalance;
+      if (delta === 0) return { ...account(player, tenantId), balanceReset: false };
+      const now = Date.now();
+      const outcome = JSON.stringify({ type: 'demo_balance_reset', previousBalance: currentBalance, newBalance: targetBalance });
+      db.prepare('INSERT INTO ledger(player, game, wager, amount, created_at, outcome, tenant_id) VALUES (?, NULL, 0, ?, ?, ?, ?)').run(player, delta, now, outcome, tenantId);
+      return { ...account(player, tenantId), balanceReset: true };
+    });
+  }
   if (route === 'POST /api/account/favorites') {
     if (!player) fail(401, 'signin');
     const { favorites: requested } = await body(req, 128 * 1024);
@@ -934,6 +990,8 @@ async function api(req, res, path, tenantId, requestId) {
     const profile = db.prepare('SELECT p.email, p.email_verified AS emailVerified, profile.display_name AS displayName, profile.preferred_locale AS preferredLocale FROM players p JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = p.tenant_id WHERE p.id = ? AND p.tenant_id = ?').get(player, tenantId);
     const favorites = db.prepare('SELECT favorite_key AS key FROM player_favorites WHERE player_id = ? AND tenant_id = ? ORDER BY created_at, favorite_key').all(player, tenantId).map(({ key }) => key);
     const safety = db.prepare('SELECT pause_until AS pausedUntil, cooling_off_until AS coolingOffUntil, excluded_at AS excludedAt, daily_limit_cents AS dailyLimitCents, session_reminder_minutes AS sessionReminderMinutes FROM player_safety WHERE player = ?').get(player) || {};
+    const dailyWagerDateUtc = new Date().toISOString().slice(0, 10);
+    const dailyWageredCents = dailyWagered(player, tenantId, dailyWagerDateUtc);
     const transactions = db.prepare('SELECT game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
     const tickets = db.prepare('SELECT id, category, is_complaint AS isComplaint, message, status, created_at AS createdAt, updated_at AS updatedAt FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
     const consents = db.prepare('SELECT consent_type AS type, granted, locale, notice_version AS noticeVersion, source, captured_at AS capturedAt FROM player_consent_events WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId).map((entry) => ({ ...entry, granted: Boolean(entry.granted) }));
@@ -950,7 +1008,7 @@ async function api(req, res, path, tenantId, requestId) {
       account: { email: profile.email, displayName: profile.displayName, emailVerified: Boolean(profile.emailVerified), preferredLocale: profile.preferredLocale, tenantId },
       favorites,
       simulatedBalanceCents: balance(player, tenantId),
-      responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
+      responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, dailyWageredCents, dailyWagerDateUtc, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
       consentHistory: consents,
       activity: transactions,
@@ -1044,8 +1102,8 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'GET /api/support') {
     if (!player) fail(401, 'signin');
-    const tickets = db.prepare('SELECT id, category, is_complaint AS isComplaint, message, status, created_at AS createdAt, updated_at AS updatedAt FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id DESC LIMIT 50').all(player, tenantId);
-    db.prepare('UPDATE support_tickets SET player_seen_at = ? WHERE player_id = ? AND tenant_id = ? AND id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id DESC LIMIT 50)').run(Date.now(), player, tenantId, player, tenantId);
+    const tickets = db.prepare('SELECT id, category, is_complaint AS isComplaint, message, status, created_at AS createdAt, updated_at AS updatedAt FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50').all(player, tenantId);
+    db.prepare('UPDATE support_tickets SET player_seen_at = ? WHERE player_id = ? AND tenant_id = ? AND id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50)').run(Date.now(), player, tenantId, player, tenantId);
     return attachSupportMessages(tickets, tenantId);
   }
   if (route === 'POST /api/support') {
@@ -1069,11 +1127,11 @@ async function api(req, res, path, tenantId, requestId) {
     if (!player) fail(401, 'signin');
     const { ticketId, message } = await body(req, 8192);
     if (!Number.isSafeInteger(ticketId) || ticketId < 1 || typeof message !== 'string' || message.trim().length < 1 || message.trim().length > 3000) fail(400, 'invalid');
-    const ticket = db.prepare('SELECT id FROM support_tickets WHERE id = ? AND player_id = ? AND tenant_id = ?').get(ticketId, player, tenantId);
+    const ticket = db.prepare('SELECT id, updated_at AS updatedAt FROM support_tickets WHERE id = ? AND player_id = ? AND tenant_id = ?').get(ticketId, player, tenantId);
     if (!ticket) fail(404, 'invalid');
     const recent = db.prepare("SELECT count(*) AS count FROM support_ticket_messages WHERE player_id = ? AND tenant_id = ? AND author_type = 'player' AND created_at > ?").get(player, tenantId, Date.now() - 60 * 60 * 1000).count;
     if (recent >= 20) fail(429, 'supportRateLimited');
-    const now = Date.now();
+    const now = Math.max(Date.now(), ticket.updatedAt + 1);
     transaction(() => {
       db.prepare("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, player_id, message, created_at) VALUES (?, ?, 'player', ?, ?, ?)").run(tenantId, ticketId, player, message.trim(), now);
       db.prepare("UPDATE support_tickets SET status = 'open', updated_at = ?, player_seen_at = ? WHERE id = ? AND player_id = ? AND tenant_id = ?").run(now, now, ticketId, player, tenantId);
@@ -1082,15 +1140,17 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'GET /api/admin/support') {
     staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const cursorValue = new URL(req.url, 'http://localhost').searchParams.get('beforeId');
-    if (cursorValue !== null && (!/^\d{1,16}$/.test(cursorValue) || !Number.isSafeInteger(Number(cursorValue)) || Number(cursorValue) < 1)) fail(400, 'invalid');
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const cursorUpdatedAt = params.get('beforeUpdatedAt');
+    const cursorId = params.get('beforeId');
+    if ((cursorUpdatedAt === null) !== (cursorId === null) || (cursorUpdatedAt !== null && (!/^\d{1,16}$/.test(cursorUpdatedAt) || !Number.isSafeInteger(Number(cursorUpdatedAt)) || Number(cursorUpdatedAt) < 1 || !/^\d{1,16}$/.test(cursorId) || !Number.isSafeInteger(Number(cursorId)) || Number(cursorId) < 1))) fail(400, 'invalid');
     const total = db.prepare('SELECT count(*) AS count FROM support_tickets WHERE tenant_id = ?').get(tenantId).count;
     const counts = { open: 0, answered: 0, closed: 0 };
     for (const row of db.prepare('SELECT status, count(*) AS count FROM support_tickets WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = row.count;
-    const ticketQuery = 'SELECT t.id, t.player_id AS playerId, p.email, profile.display_name AS displayName, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to WHERE t.tenant_id = ?';
-    const pageRows = cursorValue === null
-      ? db.prepare(`${ticketQuery} ORDER BY t.id DESC LIMIT 201`).all(tenantId)
-      : db.prepare(`${ticketQuery} AND t.id < ? ORDER BY t.id DESC LIMIT 201`).all(tenantId, Number(cursorValue));
+    const ticketQuery = 'SELECT t.id, t.player_id AS playerId, p.email, profile.display_name AS displayName, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt, safety.excluded_at AS playerExcludedAt, safety.cooling_off_until AS playerCoolingOffUntil, safety.pause_until AS playerPauseUntil FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to LEFT JOIN player_safety safety ON safety.player = p.id AND t.category = \'responsible_play\' AND t.is_complaint = 0 WHERE t.tenant_id = ?';
+    const pageRows = cursorUpdatedAt === null
+      ? db.prepare(`${ticketQuery} ORDER BY t.updated_at DESC, t.id DESC LIMIT 201`).all(tenantId)
+      : db.prepare(`${ticketQuery} AND (t.updated_at < ? OR (t.updated_at = ? AND t.id < ?)) ORDER BY t.updated_at DESC, t.id DESC LIMIT 201`).all(tenantId, Number(cursorUpdatedAt), Number(cursorUpdatedAt), Number(cursorId));
     const hasMore = pageRows.length > 200;
     const tickets = pageRows.slice(0, 200);
     const ticketIds = tickets.map((ticket) => ticket.id);
@@ -1102,7 +1162,8 @@ async function api(req, res, path, tenantId, requestId) {
       notesByTicket.get(note.ticketId).push(note);
     }
     const items = attachSupportMessages(tickets.map((ticket) => ({ ...ticket, notes: notesByTicket.get(ticket.id) || [] })), tenantId, true);
-    return { tickets: items, total, counts, nextCursor: hasMore ? tickets.at(-1).id : null };
+    const lastTicket = tickets.at(-1);
+    return { tickets: items, total, counts, nextCursor: hasMore ? { updatedAt: lastTicket.updatedAt, id: lastTicket.id } : null };
   }
   if (route === 'GET /api/admin/support/team') {
     staffContext(req, tenantId, ['operator_admin', 'operator_support']);
@@ -1110,48 +1171,54 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/admin/support/assign') {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const { ticketId, staffId } = await body(req);
-    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || (staffId !== null && (!Number.isSafeInteger(staffId) || staffId < 1))) fail(400, 'invalid');
-    if (!db.prepare('SELECT id FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId)) fail(404, 'invalid');
+    const { ticketId, expectedUpdatedAt, staffId } = await body(req);
+    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt) || (staffId !== null && (!Number.isSafeInteger(staffId) || staffId < 1))) fail(400, 'invalid');
+    const ticket = db.prepare('SELECT updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
+    if (!ticket) fail(404, 'invalid');
+    if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
     if (staffId !== null && !db.prepare("SELECT 1 FROM tenant_staff_memberships WHERE tenant_id = ? AND staff_id = ? AND status = 'active' AND role IN ('operator_admin', 'operator_support')").get(tenantId, staffId)) fail(400, 'invalid');
-    const now = Date.now();
+    const now = Math.max(Date.now(), ticket.updatedAt + 1);
     transaction(() => {
-      db.prepare('UPDATE support_tickets SET assigned_to = ? WHERE id = ? AND tenant_id = ?').run(staffId, ticketId, tenantId);
+      db.prepare('UPDATE support_tickets SET assigned_to = ?, updated_at = ? WHERE id = ? AND tenant_id = ?').run(staffId, now, ticketId, tenantId);
       db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, staff.id, staffId === null ? 'support_ticket_unassigned' : 'support_ticket_assigned', `${ticketId}:${staffId ?? 'unassigned'}`, now, requestId);
     });
-    return { ticketId, staffId };
+    return { ticketId, staffId, updatedAt: now };
   }
   if (route === 'POST /api/admin/support/note') {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const { ticketId, note } = await body(req, 8192);
-    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || typeof note !== 'string' || note.trim().length < 1 || note.trim().length > 2000) fail(400, 'invalid');
-    if (!db.prepare('SELECT id FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId)) fail(404, 'invalid');
-    const now = Date.now();
+    const { ticketId, expectedUpdatedAt, note } = await body(req, 8192);
+    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt) || typeof note !== 'string' || note.trim().length < 1 || note.trim().length > 2000) fail(400, 'invalid');
+    const ticket = db.prepare('SELECT updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
+    if (!ticket) fail(404, 'invalid');
+    if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
+    const now = Math.max(Date.now(), ticket.updatedAt + 1);
     transaction(() => {
       db.prepare('INSERT INTO support_ticket_notes(tenant_id, ticket_id, staff_id, note, created_at) VALUES (?, ?, ?, ?, ?)').run(tenantId, ticketId, staff.id, note.trim(), now);
+      db.prepare('UPDATE support_tickets SET updated_at = ? WHERE id = ? AND tenant_id = ?').run(now, ticketId, tenantId);
       db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, \'support_ticket_note_added\', ?, ?, ?)').run(tenantId, staff.id, String(ticketId), now, requestId);
     });
     return { ticketId, createdAt: now };
   }
   if (route === 'POST /api/admin/support/reply') {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const { ticketId, reply, status, priority } = await body(req, 8192);
+    const { ticketId, expectedUpdatedAt, reply, status, priority } = await body(req, 8192);
     const hasReply = typeof reply === 'string' && reply.trim().length > 0;
-    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || (reply !== undefined && typeof reply !== 'string') || (typeof reply === 'string' && reply.trim().length > 3000) || (status === 'answered' && !hasReply) || !['answered', 'closed'].includes(status) || !['low', 'normal', 'high', 'urgent'].includes(priority)) fail(400, 'invalid');
+    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt) || (reply !== undefined && typeof reply !== 'string') || (typeof reply === 'string' && reply.trim().length > 3000) || (status === 'answered' && !hasReply) || !['answered', 'closed'].includes(status) || !['low', 'normal', 'high', 'urgent'].includes(priority)) fail(400, 'invalid');
     const ticket = db.prepare('SELECT id, updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
     if (!ticket) fail(404, 'invalid');
-    const now = Date.now();
+    if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
+    const now = Math.max(Date.now(), ticket.updatedAt + 1);
     transaction(() => {
       if (hasReply) {
         db.prepare('UPDATE support_tickets SET reply = ?, status = ?, priority = ?, replied_by = ?, updated_at = ?, reply_thread_migrated = 1 WHERE id = ? AND tenant_id = ?').run(reply.trim(), status, priority, staff.id, now, ticketId, tenantId);
         db.prepare("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, staff_id, message, created_at) VALUES (?, ?, 'staff', ?, ?, ?)").run(tenantId, ticketId, staff.id, reply.trim(), now);
       } else {
-        db.prepare('UPDATE support_tickets SET status = ?, priority = ? WHERE id = ? AND tenant_id = ?').run(status, priority, ticketId, tenantId);
+        db.prepare('UPDATE support_tickets SET status = ?, priority = ?, updated_at = ? WHERE id = ? AND tenant_id = ?').run(status, priority, now, ticketId, tenantId);
       }
       const action = hasReply ? `support_ticket_${status}_priority_${priority}` : `support_ticket_closed_without_reply_priority_${priority}`;
       db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, staff.id, action, String(ticketId), now, requestId);
     });
-    return { id: ticketId, status, priority, updatedAt: hasReply ? now : ticket.updatedAt, replied: hasReply };
+    return { id: ticketId, status, priority, updatedAt: now, replied: hasReply };
   }
   if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1 ORDER BY gc.title_en').all(tenantId);
   if (route === 'POST /api/signup' || route === 'POST /api/login') {
@@ -1251,13 +1318,13 @@ async function api(req, res, path, tenantId, requestId) {
       if (safety?.excluded_at) fail(403, 'excluded');
       if (safety?.pause_until > Date.now()) fail(403, 'paused');
       if (safety?.cooling_off_until > Date.now()) fail(403, 'coolingOffBlocked');
-      const wagered = dailyWagered(player, tenantId);
-      if (wagered + wager > (safety?.daily_limit_cents ?? 2500)) fail(409, 'dailyLimit');
       const existing = db.prepare('SELECT game, wager, amount, outcome FROM ledger WHERE player = ? AND tenant_id = ? AND request_id = ?').get(player, tenantId, requestId);
       if (existing) {
         if (existing.game !== game || existing.wager !== wager || (game === 'roulette' && JSON.parse(existing.outcome || '{}').choice !== choice)) fail(409, 'invalid');
         return { ...account(player, tenantId), amount: existing.amount, outcome: existing.outcome };
       }
+      const wagered = dailyWagered(player, tenantId);
+      if (wagered + wager > (safety?.daily_limit_cents ?? 2500)) fail(409, 'dailyLimit');
       if (balance(player, tenantId) < wager) fail(409, 'balance');
       let amount;
       let outcome;
@@ -1411,6 +1478,9 @@ createServer(async (req, res) => {
     console.log(JSON.stringify(entry));
   });
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   res.setHeader('Cache-Control', 'no-store');
   try {
