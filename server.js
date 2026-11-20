@@ -126,7 +126,12 @@ for (const [column, definition] of [['verification_token', 'TEXT'], ['verified_a
   }
 }
 db.prepare("INSERT OR IGNORE INTO tenants(id, slug, name, status, created_at) VALUES ('sandbox', 'sandbox', 'Northplay Sandbox', 'active', ?)").run(Date.now());
-const defaultTenantConfig = { brandName: 'Northplay', primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor: '#d7b45a', supportEmail: '' };
+const defaultTenantConfig = {
+  brandName: 'Northplay', primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor: '#d7b45a', supportEmail: '',
+  heroTitleEn: 'Your seat at the table.', heroTitleFr: 'Votre place à la table.',
+  heroIntroEn: 'Explore the game lobby and try a round with simulated CAD funds.',
+  heroIntroFr: 'Explorez le hall et essayez une partie avec des fonds fictifs en dollars canadiens.'
+};
 if (!db.prepare("SELECT 1 FROM tenant_config_versions WHERE tenant_id = 'sandbox' AND status = 'published'").get()) {
   db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES ('sandbox', 1, ?, 'published', ?)").run(JSON.stringify(defaultTenantConfig), Date.now());
 }
@@ -467,6 +472,26 @@ async function api(req, res, path, tenantId, requestId) {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
     return { id: staff.id, email: staff.email, role: staff.role, mfaEnabled: Boolean(staff.mfa_enabled) };
   }
+  if (route === 'POST /api/admin/password') {
+    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
+    limitAuthAttempts(req, route);
+    const { currentPassword, newPassword } = await body(req);
+    if (typeof currentPassword !== 'string' || currentPassword.length > 128 || typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 128) fail(400, 'invalid');
+    const row = db.prepare('SELECT password_hash FROM staff_accounts WHERE id = ?').get(staff.id);
+    const salt = row.password_hash.split(':')[0];
+    const candidate = `${salt}:${scryptSync(currentPassword.slice(0, 128), salt, 64).toString('hex')}`;
+    if (!matches(candidate, row.password_hash)) fail(401, 'staffCredentials');
+    const newSalt = randomBytes(16).toString('hex');
+    const passwordHash = `${newSalt}:${scryptSync(newPassword, newSalt, 64).toString('hex')}`;
+    const currentSessionToken = hash(staffCookie);
+    const revokedSessions = db.prepare('SELECT count(*) AS total FROM staff_sessions WHERE staff_id = ? AND token <> ? AND expires > ?').get(staff.id, currentSessionToken, Date.now()).total;
+    transaction(() => {
+      db.prepare('UPDATE staff_accounts SET password_hash = ? WHERE id = ?').run(passwordHash, staff.id);
+      db.prepare('DELETE FROM staff_sessions WHERE staff_id = ? AND token <> ?').run(staff.id, currentSessionToken);
+      db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_password_changed', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
+    });
+    return { changed: true, revokedSessions };
+  }
   if (route === 'POST /api/admin/logout') {
     if (staffCookie) {
       const staff = db.prepare('SELECT staff_id FROM staff_sessions WHERE token = ? AND tenant_id = ?').get(hash(staffCookie), tenantId);
@@ -484,8 +509,10 @@ async function api(req, res, path, tenantId, requestId) {
       const secret = encodeBase32(randomBytes(20));
       db.prepare('UPDATE staff_accounts SET mfa_secret = ? WHERE id = ?').run(encryptStaffSecret(secret), staff.id);
       db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_mfa_setup', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
-      const label = encodeURIComponent(`Northplay:${staff.email}`);
-      return { secret, issuer: 'Northplay', account: staff.email, otpauth: `otpauth://totp/${label}?secret=${secret}&issuer=Northplay&algorithm=SHA1&digits=6&period=30` };
+      const publishedConfig = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
+      const issuer = JSON.parse(publishedConfig.config).brandName || 'Northplay';
+      const label = encodeURIComponent(`${issuer}:${staff.email}`);
+      return { secret, issuer, account: staff.email, otpauth: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30` };
     }
     const { code } = await body(req);
     const current = db.prepare('SELECT mfa_secret, mfa_enabled FROM staff_accounts WHERE id = ?').get(staff.id);
@@ -649,12 +676,16 @@ async function api(req, res, path, tenantId, requestId) {
     }
     if (route === 'POST /api/admin/config') {
       const { config } = await body(req);
-      if (!config || Object.keys(config).sort().join(',') !== 'accentColor,brandName,enabledLocales,primaryLocale,supportEmail' ||
+      if (!config || Object.keys(config).sort().join(',') !== 'accentColor,brandName,enabledLocales,heroIntroEn,heroIntroFr,heroTitleEn,heroTitleFr,primaryLocale,supportEmail' ||
           typeof config.brandName !== 'string' || !config.brandName.trim() || config.brandName.length > 48 ||
           config.primaryLocale !== 'en-CA' || !Array.isArray(config.enabledLocales) || config.enabledLocales.length !== 2 ||
           !['en-CA', 'fr-CA'].every((locale) => config.enabledLocales.includes(locale)) ||
           typeof config.accentColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(config.accentColor) ||
-          typeof config.supportEmail !== 'string' || config.supportEmail.length > 254 || (config.supportEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(config.supportEmail))) fail(400, 'invalid');
+          typeof config.supportEmail !== 'string' || config.supportEmail.length > 254 || (config.supportEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(config.supportEmail)) ||
+          typeof config.heroTitleEn !== 'string' || !config.heroTitleEn.trim() || config.heroTitleEn.length > 120 ||
+          typeof config.heroTitleFr !== 'string' || !config.heroTitleFr.trim() || config.heroTitleFr.length > 120 ||
+          typeof config.heroIntroEn !== 'string' || !config.heroIntroEn.trim() || config.heroIntroEn.length > 300 ||
+          typeof config.heroIntroFr !== 'string' || !config.heroIntroFr.trim() || config.heroIntroFr.length > 300) fail(400, 'invalid');
       const draft = db.prepare("SELECT version FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
       const version = draft?.version ?? db.prepare('SELECT coalesce(max(version), 0) + 1 AS version FROM tenant_config_versions WHERE tenant_id = ?').get(tenantId).version;
       if (draft) db.prepare('UPDATE tenant_config_versions SET config = ?, created_at = ? WHERE tenant_id = ? AND version = ?').run(JSON.stringify(config), Date.now(), tenantId, version);

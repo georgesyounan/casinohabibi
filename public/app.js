@@ -3,16 +3,17 @@ import { games } from './catalog.js';
 const copy = {
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
+  skipToContent: ['Skip to main content', 'Passer au contenu principal'],
   playSafely: ['Play safely', 'Jouer de façon responsable'],
   signin: ['Sign in', 'Se connecter'], signup: ['Create an account', 'Créer un compte'],
   account: ['My account', 'Mon compte'], logout: ['Sign out', 'Se déconnecter'],
   sandbox: ['Play-money casino', 'Casino en argent fictif'],
   headline: ['Your seat at the table.', 'Votre place à la table.'],
-  intro: ['Explore the Northplay lobby and try your luck with a simulated CAD balance.', 'Explorez le hall Northplay et tentez votre chance avec un solde fictif en dollars canadiens.'],
+  intro: ['Explore the game lobby and try a round with simulated CAD funds.', 'Explorez le hall et essayez une partie avec des fonds fictifs en dollars canadiens.'],
   browse: ['Explore games', 'Explorer les jeux'], games: ['Casino games', 'Jeux de casino'],
   infoLabel: ['Key information', 'À savoir'], cadDisplay: ['CAD currency display', 'Affichage en dollars canadiens'],
   twoLanguages: ['English and Canadian French', 'Anglais et français canadien'], simulatedOnly: ['Simulated play only', 'Jeu simulé seulement'],
-  lobbyEyebrow: ['The Northplay library', 'La ludothèque Northplay'],
+  lobbyEyebrow: ['The game library', 'La ludothèque'],
   gamesIntro: ['Try four built-in games with simulated funds. Imported provider listings are shown separately for the demo and are not playable.', 'Essayez quatre jeux intégrés avec des fonds fictifs. Les fiches de jeux provenant des fournisseurs sont présentées séparément dans la version de démonstration; elles ne sont pas jouables.'],
   simpleEyebrow: ['A clear, simple start', 'Un départ clair et simple'], simpleHeading: ['Your visit, at your pace.', 'Votre visite, à votre rythme.'],
   simpleIntro: ['A few straightforward steps to explore the demo lobby.', 'Quelques étapes simples pour découvrir le hall de démonstration.'],
@@ -67,7 +68,12 @@ const copy = {
   tenantSettings: ['Casino settings', 'Paramètres du casino'],
   tenantSettingsHelp: ['Save changes as a draft, then publish the version players should see.', 'Enregistrez les changements comme brouillon, puis publiez la version destinée aux joueurs.'],
   brandName: ['Casino name', 'Nom du casino'], accentColor: ['Accent colour', 'Couleur d’accent'],
+  heroTitleEn: ['Lobby headline · English', 'Titre du hall · anglais'], heroTitleFr: ['Lobby headline · Canadian French', 'Titre du hall · français canadien'],
+  heroIntroEn: ['Lobby introduction · English', 'Présentation du hall · anglais'], heroIntroFr: ['Lobby introduction · Canadian French', 'Présentation du hall · français canadien'],
+  heroPreviewEn: ['English preview', 'Aperçu en anglais'], heroPreviewFr: ['Canadian French preview', 'Aperçu en français canadien'],
   supportEmail: ['Support email', 'Courriel du soutien'], supportContact: ['Contact support', 'Contacter le soutien'],
+  tenantPreviewTitle: ['Brand preview', 'Aperçu de la marque'], tenantPreviewHelp: ['Live preview of the settings in this form. Save the draft, then publish it for players to see.', 'Aperçu en direct des paramètres de ce formulaire. Enregistrez le brouillon, puis publiez-le pour que les joueurs le voient.'],
+  previewBrandPlaceholder: ['Your casino name', 'Le nom de votre casino'], previewEmailPlaceholder: ['No support email set', 'Aucun courriel de soutien défini'],
   supportTitle: ['Support centre', 'Centre de soutien'], supportIntro: ['Send a message to the casino support team and check replies here.', 'Écrivez à l’équipe de soutien du casino et consultez les réponses ici.'],
   supportCategory: ['What can we help with?', 'Quel est le sujet de votre demande?'],
   supportMessage: ['Message (10 to 3,000 characters)', 'Message (de 10 à 3 000 caractères)'], supportSend: ['Send support request', 'Envoyer la demande'], supportSent: ['Your request was sent to casino support.', 'Votre demande a été envoyée au soutien du casino.'],
@@ -89,6 +95,12 @@ const copy = {
   staffLogin: ['Staff sign in', 'Connexion du personnel'],
   staffLoginHelp: ['Use your individual casino staff account.', 'Utilisez votre compte personnel du casino.'],
   staffEmail: ['Staff email', 'Courriel du membre du personnel'], staffPassword: ['Password', 'Mot de passe'],
+  staffChangePasswordTitle: ['Change my staff password', 'Changer mon mot de passe du personnel'],
+  staffChangePasswordHelp: ['Enter your current password and choose a new one. Other staff sessions will be signed out.', 'Saisissez votre mot de passe actuel et choisissez-en un nouveau. Les autres sessions du personnel seront fermées.'],
+  staffNewPassword: ['New password (12 characters minimum)', 'Nouveau mot de passe (au moins 12 caractères)'],
+  staffConfirmPassword: ['Confirm new password', 'Confirmer le nouveau mot de passe'],
+  staffChangePasswordSave: ['Update staff password', 'Modifier le mot de passe du personnel'],
+  staffPasswordChanged: ['Password updated. Other staff sessions have been signed out.', 'Mot de passe modifié. Les autres sessions du personnel ont été fermées.'],
   showPassword: ['Show password', 'Afficher le mot de passe'], hidePassword: ['Hide password', 'Masquer le mot de passe'],
   staffSignIn: ['Sign in', 'Se connecter'], staffSigningIn: ['Signing in…', 'Connexion…'], staffSignOut: ['Sign out', 'Se déconnecter'],
   staffManagement: ['Staff access', 'Accès du personnel'], temporaryPassword: ['Initial password for a new account (12 characters minimum); leave blank for an existing account', 'Mot de passe initial pour un nouveau compte (au moins 12 caractères); laissez vide pour un compte existant'],
@@ -158,6 +170,8 @@ const copy = {
 
 const $ = (selector) => document.querySelector(selector);
 let language = localStorage.getItem('northplay-language') === 'fr' ? 1 : 0;
+let tenantBrandName = 'Northplay';
+let savedTenantDraftSignature;
 const resetToken = new URLSearchParams(location.search).get('reset');
 const verifyToken = new URLSearchParams(location.search).get('verify');
 const emailChangeToken = new URLSearchParams(location.search).get('email-change');
@@ -184,9 +198,11 @@ let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let result;
 let dialogError;
-const t = (key) => (copy[key] || copy.unavailable)[language];
+let tenantCopy = { headline: copy.headline, intro: copy.intro };
+const t = (key) => tenantCopy?.[key]?.[language] ?? (copy[key] || copy.unavailable)[language];
 const money = (cents) => new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(cents / 100);
 const gameName = (game) => game.name[language];
+const demoProviderName = () => language ? `Démo ${tenantBrandName}` : `${tenantBrandName} Demo`;
 function describeOutcome(gameId, rawOutcome) {
   if (typeof rawOutcome !== 'string' || !rawOutcome) return '';
   try {
@@ -267,7 +283,13 @@ async function api(path, data, method = 'POST') {
 }
 
 function applyTenant(config) {
-  document.title = `${config.brandName} Casino`;
+  tenantBrandName = config.brandName;
+  tenantCopy = {
+    headline: [config.heroTitleEn || copy.headline[0], config.heroTitleFr || copy.headline[1]],
+    intro: [config.heroIntroEn || copy.intro[0], config.heroIntroFr || copy.intro[1]]
+  };
+  updateDocumentTitle();
+  for (const node of document.querySelectorAll('[data-copy="headline"], [data-copy="intro"]')) node.textContent = t(node.dataset.copy);
   document.documentElement.style.setProperty('--green', config.accentColor);
   document.querySelector('meta[name="theme-color"]').content = config.accentColor;
   for (const brand of document.querySelectorAll('.brand')) {
@@ -283,6 +305,49 @@ function applyTenant(config) {
     supportLink.removeAttribute('href');
     supportLink.hidden = true;
   }
+}
+
+function updateTenantPreview() {
+  const form = $('#tenant-config');
+  if (!form) return;
+  const brandName = form.elements.brandName.value.trim();
+  const accentColor = form.elements.accentColor.value;
+  const supportEmail = form.elements.supportEmail.value.trim();
+  $('#tenant-preview-name').textContent = brandName || t('previewBrandPlaceholder');
+  $('#tenant-preview-email').textContent = supportEmail || t('previewEmailPlaceholder');
+  $('#tenant-preview-swatch').style.backgroundColor = accentColor || '#b8ec9d';
+  $('#tenant-preview-title-en').textContent = form.elements.heroTitleEn.value.trim() || copy.headline[0];
+  $('#tenant-preview-title-fr').textContent = form.elements.heroTitleFr.value.trim() || copy.headline[1];
+  $('#tenant-preview-intro-en').textContent = form.elements.heroIntroEn.value.trim() || copy.intro[0];
+  $('#tenant-preview-intro-fr').textContent = form.elements.heroIntroFr.value.trim() || copy.intro[1];
+  const publish = $('#publish-config');
+  if (publish) publish.disabled = !savedTenantDraftSignature || tenantConfigSignature() !== savedTenantDraftSignature;
+}
+
+function tenantConfigSignature(config) {
+  const form = $('#tenant-config');
+  config ||= {
+    brandName: form.elements.brandName.value,
+    accentColor: form.elements.accentColor.value,
+    supportEmail: form.elements.supportEmail.value,
+    heroTitleEn: form.elements.heroTitleEn.value,
+    heroTitleFr: form.elements.heroTitleFr.value,
+    heroIntroEn: form.elements.heroIntroEn.value,
+    heroIntroFr: form.elements.heroIntroFr.value
+  };
+  return JSON.stringify({
+    brandName: config.brandName.trim(),
+    accentColor: config.accentColor,
+    supportEmail: config.supportEmail.trim(),
+    heroTitleEn: config.heroTitleEn.trim(),
+    heroTitleFr: config.heroTitleFr.trim(),
+    heroIntroEn: config.heroIntroEn.trim(),
+    heroIntroFr: config.heroIntroFr.trim()
+  });
+}
+
+function updateDocumentTitle() {
+  document.title = language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
 }
 
 function updateAccount() {
@@ -909,7 +974,7 @@ function renderCatalog() {
     const key = `demo:${game.id}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
     if (filter !== 'all' && filter !== 'favorites' && filter !== game.type) return false;
-    return matchesQuery([...game.name, 'Northplay Demo']);
+    return matchesQuery([...game.name, demoProviderName()]);
   });
   const visibleGames = providerGames.filter((game) => {
     const key = `provider:${game.provider}:${game.externalId}`;
@@ -928,7 +993,7 @@ function renderCatalog() {
     const art = createArt(game.icon, game.id);
     addFavoriteButton(art, `demo:${game.id}`, gameName(game));
     const info = element('span', '', 'card-info');
-    info.append(element('small', t('demoGameLabel'), 'catalog-label'), element('strong', gameName(game)), element('small', `${t(game.type)} · Northplay Demo`));
+    info.append(element('small', t('demoGameLabel'), 'catalog-label'), element('strong', gameName(game)), element('small', `${t(game.type)} · ${demoProviderName()}`));
     const play = action(t('playNow'), () => {
       selectedGame = game;
       sessionStorage.setItem('northplay-pending-game', game.id);
@@ -966,6 +1031,9 @@ let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
 function render() {
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
+  updateDocumentTitle();
+  updateTenantPreview();
+  $('#skip-link').href = location.pathname === '/admin' ? '#admin' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
   for (const node of document.querySelectorAll('[data-copy][aria-label]')) node.setAttribute('aria-label', t(node.dataset.copy));
   $('header nav').setAttribute('aria-label', t('primaryNav'));
@@ -1131,7 +1199,7 @@ $('#catalog-review').addEventListener('click', async () => {
 
 $('#load-sample-catalog').addEventListener('click', async () => {
   const button = $('#load-sample-catalog');
-  const name = 'Northplay Demo Sample';
+  const name = `${tenantBrandName} Demo Sample`;
   const sampleKey = 'LOCAL-ONLY-NO-PROVIDER-CONNECTION';
   const sampleGames = [
     { externalId: 'northplay-sample-slots', titleEn: 'Northern Lights', titleFr: 'Aurores boréales', category: 'slots' },
@@ -1237,8 +1305,15 @@ async function loadTenantDraft() {
   form.elements.brandName.value = draft.config.brandName;
   form.elements.accentColor.value = draft.config.accentColor;
   form.elements.supportEmail.value = draft.config.supportEmail;
+  form.elements.heroTitleEn.value = draft.config.heroTitleEn || copy.headline[0];
+  form.elements.heroTitleFr.value = draft.config.heroTitleFr || copy.headline[1];
+  form.elements.heroIntroEn.value = draft.config.heroIntroEn || copy.intro[0];
+  form.elements.heroIntroFr.value = draft.config.heroIntroFr || copy.intro[1];
+  savedTenantDraftSignature = tenantConfigSignature();
+  updateTenantPreview();
   $('#tenant-config-status').textContent = `v${draft.version}`;
 }
+$('#tenant-config').addEventListener('input', updateTenantPreview);
 $('#load-config').addEventListener('click', async () => {
   try { await loadTenantDraft(); }
   catch (error) { $('#tenant-config-status').textContent = t(error.message); }
@@ -1248,7 +1323,14 @@ $('#tenant-config').addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   const { brandName, accentColor, supportEmail } = Object.fromEntries(new FormData(form));
   try {
-    const result = await api('admin/config', { config: { brandName: brandName.trim(), primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor, supportEmail: supportEmail.trim() } });
+    const config = {
+      brandName: brandName.trim(), primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor, supportEmail: supportEmail.trim(),
+      heroTitleEn: form.elements.heroTitleEn.value.trim(), heroTitleFr: form.elements.heroTitleFr.value.trim(),
+      heroIntroEn: form.elements.heroIntroEn.value.trim(), heroIntroFr: form.elements.heroIntroFr.value.trim()
+    };
+    const result = await api('admin/config', { config });
+    savedTenantDraftSignature = tenantConfigSignature(config);
+    updateTenantPreview();
     $('#tenant-config-status').textContent = `${t('draftSaved')} v${result.version}`;
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
 });
@@ -1554,6 +1636,26 @@ $('#staff-login-form').addEventListener('submit', async (event) => {
 });
 document.querySelector('[data-staff-password-toggle]').addEventListener('click', (event) => {
   togglePassword($('#staff-login-password'), event.currentTarget);
+});
+$('#staff-password-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const { currentPassword, newPassword, confirmPassword } = Object.fromEntries(new FormData(form));
+  const button = form.querySelector('button[type=submit]');
+  if (newPassword !== confirmPassword) {
+    $('#staff-password-status').textContent = t('passwordMismatch');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api('admin/password', { currentPassword, newPassword });
+    form.reset();
+    $('#staff-password-status').textContent = t('staffPasswordChanged');
+  } catch (error) {
+    $('#staff-password-status').textContent = t(error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 $('#staff-logout').addEventListener('click', async () => {
   await api('admin/logout', {});

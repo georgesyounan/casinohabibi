@@ -15,14 +15,14 @@ Keep `.env` private and with the demo database. The file contains the local oper
 
 ### 2. Show English and Canadian French
 
-The site opens in English. Use the language button in the header to switch to Canadian French and back. The lobby, account dialogs, game instructions, support area, and operator pages include localized copy.
+The site opens in English. Use the language button in the header to switch to Canadian French and back. The lobby, account dialogs, game instructions, support area, and operator pages include localized copy. Star games on their cards, then use the **Favorites** filter to find them later in the same browser; imported provider listings remain preview-only.
 
 ### 3. Try a player account
 
 1. Choose any built-in game and select **Play demo**.
 2. Create a player account with an email address and password of at least 10 characters.
 3. For a local signup, open the verification link shown in the browser dialog or the launcher window. Complete verification, then sign in. If you began from a game card in the same browser session, the selected game resumes after sign-in.
-4. The verified demo account receives $100 CAD in simulated credit. The default daily demo wager limit is $25 CAD.
+4. The verified demo account receives $100 CAD in simulated credit. The default daily demo wager limit is $25 CAD. The account and game dialogs show a progress bar with simulated wagers used and remaining for the UTC day.
 
 ### 4. Play a simulated round
 
@@ -30,14 +30,15 @@ The site opens in English. Use the language button in the header to switch to Ca
 - **Midnight Blackjack:** Receive two cards. The dealer draws until reaching 17; the higher hand wins. A tie leaves the simulated balance unchanged.
 - **Roulette Royale:** Choose red or black. A matching colour adds one times the wager. Zero is green and loses either bet.
 
-All results use simulated funds. Select the balance button to view recent activity, including each round’s outcome. The account panel can export activity as CSV.
+All results use simulated funds. Select the balance button to view recent activity, including each round’s outcome. The account panel can export activity as CSV and shows progress toward the daily simulated wager limit. The limit resets at UTC midnight.
 
 ### 5. Preview operator catalog tools
 
 1. Sign in at `/admin` using the operator email and password chosen by the launcher. Leave **Authenticator code** blank unless you have already enabled two-step verification for this account.
-2. In **Catalog data**, choose **Prepare sample catalog**. This saves a local placeholder key and prepares four bilingual sample listings.
-3. Review the catalog changes, then choose **Sync catalog**.
-4. Return to the player lobby. The sample provider titles appear as preview-only cards; they cannot be played and no external service is contacted.
+2. In **Casino settings**, edit the brand name, accent colour, support email, and lobby headline and introduction in both languages. Review the side-by-side preview, save the draft, then publish it for players to see.
+3. In **Catalog data**, choose **Prepare sample catalog**. This saves a local placeholder key and prepares four bilingual sample listings.
+4. Review the catalog changes, then choose **Sync catalog**.
+5. Return to the player lobby. The sample provider titles appear as preview-only cards; they cannot be played and no external service is contacted.
 
 The sample key is a local placeholder, not a real provider credential. Do not enter real provider keys in this demo.
 

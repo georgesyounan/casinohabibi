@@ -10,11 +10,11 @@ Northplay is a bilingual white-label **demonstration** of an online casino exper
 
 ### What the demo includes
 
-- **Player experience:** Bilingual lobby, localized game catalog, search and category filters, playable simulated games, and a demo balance.
+- **Player experience:** Bilingual lobby, localized game catalog, search, category filters, browser-local favorites, playable simulated games, and a demo balance.
 - **White-label foundation:** Tenant branding and locale settings, platform onboarding endpoints, environment configuration, health checks, and SQLite backup and restore tools.
-- **Operator tools:** Staff accounts and tenant roles, two-step verification, draft and publish casino settings, provider credential storage, a local sample provider catalog for preview, catalog import, and staff audit history.
+- **Operator tools:** Staff accounts with password rotation and tenant roles, two-step verification, bilingual lobby content editing with a live draft preview, provider credential storage, a local sample provider catalog for preview, catalog import, and staff audit history.
 - **Player accounts:** Email verification, password reset and change, verified email change, saved language preference, session revocation, and account data export in JSON and CSV.
-- **Player protection examples:** Simulated wager limits, a 15-minute break, one-, seven-, and 30-day cooling-off periods, self-exclusion, and hourly play-time reminders.
+- **Player protection examples:** Simulated wager limits with a live usage meter, a 15-minute break, one-, seven-, and 30-day cooling-off periods, self-exclusion, and hourly play-time reminders.
 - **Support workflows:** Player support conversations and complaint classification; staff inbox with search, filters, paging, assignment, priority, private notes, replies, and closure.
 - **Demo wallet records:** Simulated ledger, paginated account history, and downloadable activity export. Balances have no cash value.
 
