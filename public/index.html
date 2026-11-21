@@ -150,7 +150,7 @@
               <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" maxlength="120" required></label>
               <label><span data-copy="comingSoonCategory"></span><select name="category"><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
               <label><span data-copy="comingSoonStudio"></span><input name="studio" maxlength="64"></label>
-              <label><span data-copy="comingSoonMarket"></span><input name="displayMarket" maxlength="6" pattern="[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?" placeholder="CA-QC"></label>
+              <label><span data-copy="comingSoonMarket"></span><input name="cardMarket" maxlength="6" pattern="[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?" placeholder="CA-QC"></label>
               <label><span data-copy="comingSoonLanguages"></span><select name="locales"><option value="both" data-copy="comingSoonBoth"></option><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
               <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" rows="3" maxlength="800"></textarea></label>
               <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" rows="3" maxlength="800"></textarea></label>
@@ -229,6 +229,7 @@
               </form>
               <p role="status" id="player-action-status"></p>
               <details id="player-event-details"><summary data-copy="playerAccessHistory"></summary><ol id="player-events"></ol></details>
+              <details id="player-activity-details"><summary data-copy="playerFavoriteHistory"></summary><ol id="player-favorite-events"></ol><button type="button" class="ghost" id="player-more-activity" data-copy="playerOlder" hidden></button></details>
             </section>
             <h3 data-copy="playerSaveHistory"></h3>
             <p id="coming-soon-saves-status" role="status"></p>
@@ -236,6 +237,7 @@
               <thead><tr><th scope="col" data-copy="comingSoonSaveRef"></th><th scope="col" data-copy="email"></th><th scope="col" data-copy="comingSoon"></th><th scope="col" data-copy="supportFilter"></th><th scope="col" data-copy="comingSoonDate"></th></tr></thead>
               <tbody id="coming-soon-saves-body"></tbody>
             </table></div>
+            <div class="actions" id="saves-pages" hidden><button type="button" class="ghost" id="saves-previous" data-copy="playerPrevious"></button><span id="saves-page-count" role="status"></span><button type="button" class="ghost" id="saves-next" data-copy="playerNext"></button></div>
         </section>
         <section id="support-inbox" class="admin-page" data-admin-view data-roles="operator_admin,operator_support" aria-labelledby="support-inbox-title" hidden>
           <div class="admin-page-heading">

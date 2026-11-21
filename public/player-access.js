@@ -1,5 +1,12 @@
 export const playerAccessCopy = {
-  playerSearchLabel: ['Email, player ID or save reference', 'Courriel, numéro de joueur ou référence de favori'],
+  playerSearchLabel: ['Email, player ID, save or activity reference', 'Courriel, numéro de joueur, référence de favori ou d’activité'],
+  playerFavoriteHistory: ['Favorite activity', 'Historique des favoris'],
+  playerNoFavorites: ['No favorite activity yet.', 'Aucune activité de favoris.'],
+  playerAddedFavorite: ['Added to favorites', 'Ajout aux favoris'],
+  playerRemovedFavorite: ['Removed from favorites', 'Retrait des favoris'],
+  playerOlder: ['Show older activity', 'Afficher les activités précédentes'],
+  playerPrevious: ['Previous', 'Précédent'], playerNext: ['Next', 'Suivant'],
+  favoriteRequestConflict: ['This request was already used for a different change.', 'Cette demande a déjà servi à une autre modification.'],
   playerAccessGrant: ['Suspend and restore player access', 'Suspendre et réactiver les comptes joueurs'],
   playerSearchEmpty: ['No player found.', 'Aucun joueur trouvé.'],
   playerSearchCount: ['Player accounts found', 'Comptes joueurs trouvés'],
@@ -41,6 +48,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
   let busy = false;
   let message = '';
   let searched = false;
+  let activityQuery = '';
 
   function render() {
     byId('player-search-status').textContent = searched
@@ -67,6 +75,14 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-confirm-status').disabled = busy;
     byId('player-confirm-status').textContent = t(suspended ? 'playerConfirmRestore' : 'playerConfirmSuspend');
     byId('player-action-status').textContent = message ? t(message) : '';
+    const { entries, nextCursor } = player.savedActivity;
+    byId('player-favorite-events').replaceChildren(...(entries.length ? entries.map((event) => {
+      const row = element('li');
+      row.append(element('strong', t(event.action === 'save' ? 'playerAddedFavorite' : 'playerRemovedFavorite') + ' · ' + event.slug),
+        element('small', ['activity-' + event.id, 'save-' + event.saveId, new Date(event.createdAt).toLocaleString(locale())].join(' · ')));
+      return row;
+    }) : [element('li', t('playerNoFavorites'))]));
+    byId('player-more-activity').hidden = !nextCursor;
     byId('player-events').replaceChildren(...(player.events.length ? player.events.map((event) => {
       const line = element('li');
       line.append(element('strong', t(event.action)), element('small',
@@ -83,6 +99,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     statusForm.hidden = true;
     statusForm.reset();
     byId('player-event-details').open = false;
+    byId('player-activity-details').open = false;
   }
 
   async function open(id) {
@@ -90,9 +107,10 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     resetRecord();
     render();
     try {
-      const result = await api('admin/players/' + id, undefined, 'GET');
+      const result = await api('admin/players/' + id + activityQuery, undefined, 'GET');
       if (current !== generation) return;
       player = result;
+      byId('player-activity-details').open = Boolean(activityQuery);
       render();
       byId('player-record-title').focus();
     } catch (error) {
@@ -124,7 +142,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     }
     if (completed || message === 'playerAccessConflict') {
       try {
-        const fresh = await api('admin/players/' + id, undefined, 'GET');
+        const fresh = await api('admin/players/' + id + activityQuery, undefined, 'GET');
         if (current !== operation) return;
         player = fresh;
       } catch (error) {
@@ -146,6 +164,8 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     searched = false;
     render();
     const query = form.elements.query.value.trim();
+    const ref = /^activity-([1-9]\d*)$/i.exec(query);
+    activityQuery = ref ? '?activity=' + ref[1] : '';
     if (!query) return;
     byId('player-search-status').textContent = t('loading');
     try {
@@ -160,11 +180,28 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     }
   });
   statusForm.addEventListener('submit', (event) => { event.preventDefault(); void change('access'); });
+  byId('player-more-activity').addEventListener('click', async (event) => {
+    const target = player;
+    const cursor = target?.savedActivity.nextCursor;
+    if (!cursor) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await api('admin/players/' + target.id + '?beforeActivity=' + cursor, undefined, 'GET');
+      if (target === player) {
+        target.savedActivity.entries.push(...result.savedActivity.entries);
+        target.savedActivity.nextCursor = result.savedActivity.nextCursor;
+        render();
+      }
+    } catch (error) { if (target === player) byId('player-action-status').textContent = t(error.message); }
+    finally { button.disabled = false; }
+  });
   byId('player-cancel-status').addEventListener('click', () => { statusForm.hidden = true; statusForm.reset(); });
   return { open, render, clear() {
     ++generation;
     matches = [];
     searched = false;
+    activityQuery = '';
     resetRecord();
     render();
   } };

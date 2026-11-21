@@ -81,6 +81,11 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   let saving = false;
   let saves;
   let savesRequest = 0;
+  let savesPage = 0;
+  let savesHasNext = false;
+  let savesCursors = [null];
+  let savedSearch = '';
+  const pageSize = 10;
 
   const titleName = (title) => isFrench() ? title.titleFr : title.titleEn;
   const isFavorite = (key) => getFavorites().has(key);
@@ -205,7 +210,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     for (const name of fields) {
       if (title) form.elements[name].value = title[name];
     }
-    form.elements.displayMarket.value = title?.displayMarket || '';
+    form.elements.cardMarket.value = title?.displayMarket || '';
     form.elements.locales.value = title?.locales.length === 1 ? title.locales[0] : 'both';
     $('coming-soon-edit-title').textContent = title ? titleName(title) : t('comingSoonNew');
     $('coming-soon-remove-art').hidden = !artwork;
@@ -265,6 +270,10 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
       list.replaceChildren(...rows);
     }
     if (canReviewSaves.includes(staffRole) && saves) {
+      $('saves-pages').hidden = !savesPage && !savesHasNext;
+      $('saves-previous').disabled = savesPage === 0;
+      $('saves-next').disabled = !savesHasNext;
+      $('saves-page-count').textContent = 'Page ' + (savesPage + 1);
       $('coming-soon-saves-body').replaceChildren(...saves.map((entry) => {
         const row = element('tr');
         const player = element('td');
@@ -277,14 +286,21 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     }
   }
 
-  async function loadSaves() {
+  async function loadSaves(page = 0) {
     const request = ++savesRequest;
     $('coming-soon-saves-status').textContent = t('loading');
     try {
-      const query = new URLSearchParams({ q: saveForm.elements.query.value });
+      const search = page ? savedSearch : saveForm.elements.query.value.trim();
+      const query = new URLSearchParams({ q: search, limit: pageSize + 1 });
+      if (page) query.set('before', savesCursors[page]);
       const rows = await api(`admin/coming-soon/saves?${query}`, undefined, 'GET');
       if (request !== savesRequest) return;
-      saves = rows;
+      savedSearch = search;
+      savesPage = page;
+      saves = rows.slice(0, pageSize);
+      savesHasNext = rows.length > pageSize;
+      savesCursors = savesCursors.slice(0, page + 1);
+      if (savesHasNext) savesCursors.push(saves.at(-1).id);
       renderAdmin();
     } catch (error) {
       if (request === savesRequest) $('coming-soon-saves-status').textContent = t(error.message);
@@ -342,7 +358,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     if (saving) return;
     const file = form.elements.artworkFile.files[0];
     const data = Object.fromEntries(fields.map((name) => [name, form.elements[name].value]));
-    data.displayMarket = form.elements.displayMarket.value.trim().toUpperCase();
+    data.displayMarket = form.elements.cardMarket.value.trim().toUpperCase();
     data.locales = form.elements.locales.value === 'both' ? ['en-CA', 'fr-CA'] : [form.elements.locales.value];
     data.featuredRank = Number(data.featuredRank);
     try {
@@ -370,6 +386,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     event.preventDefault();
     void loadSaves();
   });
+  $('saves-previous').addEventListener('click', () => { void loadSaves(savesPage - 1); });
+  $('saves-next').addEventListener('click', () => { void loadSaves(savesPage + 1); });
 
   function favoriteStatus(message) {
     $('coming-soon-favorite-status').textContent = message;

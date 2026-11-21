@@ -337,6 +337,7 @@ try {
 let favorites = new Set(guestFavorites);
 let favoriteSavePending = false;
 let favoriteStatusKey;
+let favoriteActivityId;
 let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let result;
@@ -439,7 +440,8 @@ async function api(path, data, method = 'POST') {
     options.body = JSON.stringify(data);
   }
   const auditedMutation = data !== undefined && /^(admin\/(config|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
-  if (auditedMutation && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
+  const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
+  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
   const send = async () => {
     const response = await fetch(appPath('/api/' + path), options);
     return { response, payload: await response.json() };
@@ -1413,12 +1415,14 @@ async function toggleFavorite(key) {
   favoriteSavePending = true;
   renderCatalog();
   try {
-    const saved = await api('account/favorite', { key, saved: favorites.has(key) });
+    const preview = /^coming-soon:([1-9]\d*)$/.exec(key);
+    const saved = preview ? await api('me/saved/' + preview[1] + '?locale=' + (language ? 'fr-CA' : 'en-CA'), undefined, favorites.has(key) ? 'PUT' : 'DELETE')
+      : await api('account/favorite', { key, saved: favorites.has(key) });
     favorites = new Set(saved.favorites);
     player.favorites = [...favorites];
     guestFavorites = new Set();
     cacheGuestFavorites();
-    announceFavorite('favoritesSynced');
+    announceFavorite('favoritesSynced', saved.activityId);
   } catch {
     favorites = previous;
     announceFavorite('favoriteSaveFailed');
@@ -1428,10 +1432,12 @@ async function toggleFavorite(key) {
   }
 }
 
-function announceFavorite(message) {
+function announceFavorite(message, activityId) {
   favoriteStatusKey = message;
-  $('#favorites-status').textContent = t(message);
-  comingSoonUi.favoriteStatus(t(message));
+  favoriteActivityId = activityId;
+  const text = t(message) + (activityId ? ' · activity-' + activityId : '');
+  $('#favorites-status').textContent = text;
+  comingSoonUi.favoriteStatus(text);
 }
 
 function renderCatalog() {
@@ -1609,7 +1615,7 @@ function render() {
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
   renderCatalog();
-  if (favoriteStatusKey) announceFavorite(favoriteStatusKey);
+  if (favoriteStatusKey) announceFavorite(favoriteStatusKey, favoriteActivityId);
   comingSoonUi.renderAdmin();
   if (languageChanged) playerAccessUi.render();
   updateCatalogPreview();

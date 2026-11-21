@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import { createSavedTitles } from '../lib/saved-titles.js';
 
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
@@ -58,12 +59,12 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
 }
 
 function client(base, cookies = new Map()) {
-  return async function request(path, payload, host, headers = {}) {
+  return async function request(path, payload, host, headers = {}, method = payload === undefined ? 'GET' : 'POST') {
     const origin = new URL(base);
     if (host) origin.hostname = host;
     const pathname = origin.pathname.replace(/\/$/, '');
     const response = await fetch(new URL(pathname + '/api/' + path, origin), {
-      method: payload === undefined ? 'GET' : 'POST',
+      method,
       headers: {
         ...(payload !== undefined && { 'Content-Type': 'application/json' }),
         ...(cookies.size && { Cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join('; ') }),
@@ -629,4 +630,81 @@ test('Discover preserves surviving positions, fills vacancies and rotates expire
   const fresh = (await guest('coming-soon')).data;
   assert.notEqual(fresh.visitId, full.visitId);
   assert.equal(new Set(fresh.discover).size, 6);
+});
+
+test('saved shelves and support activity retain actual changes, historical references and retry identity', async (t) => {
+  const { base } = await startSandbox(t);
+  const [staff, phone, laptop, visitor] = Array.from({ length: 4 }, () => client(base));
+  await staff('admin/login', staffCredentials);
+  const card = (await staff('admin/coming-soon', cardDraft('Paper Moon'))).data.title;
+  await staff('admin/coming-soon', { action: 'publish', version: card.version, slug: card.slug });
+  const shelf = 'me/saved/' + card.id;
+  const key = 'coming-soon:' + card.id;
+  const put = (client, headers = {}) => client(shelf, undefined, undefined, headers, 'PUT');
+  const remove = () => laptop(shelf, undefined, undefined, {}, 'DELETE');
+  assert.equal((await put(visitor)).status, 401);
+  await register(phone);
+  const playerId = (await laptop('login', playerCredentials)).data.id;
+  const header = { 'X-Request-ID': randomUUID() };
+  const [first, repeat] = await Promise.all([put(phone, header), put(laptop)]);
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.data, repeat.data);
+  assert.ok(first.data.activityId);
+  const [title] = (await laptop('me/saved')).data.titles;
+  assert.equal(title.activityId, first.data.activityId);
+  assert.equal(title.saved, true);
+  assert.equal((await phone('me/saved')).data.titles.length, 1);
+  const one = (await staff('admin/players/' + playerId)).data.savedActivity.entries;
+  assert.deepEqual(one.map(({ id }) => id), [first.data.activityId]);
+  const deleted = await remove();
+  assert.equal(deleted.data.saved, false);
+  assert.notEqual(deleted.data.activityId, first.data.activityId);
+  assert.deepEqual((await remove()).data, deleted.data);
+  const lateRetry = await put(phone, header);
+  assert.equal(lateRetry.data.activityId, first.data.activityId);
+  assert.equal(lateRetry.data.saved, false);
+  assert.equal((await phone('me/saved')).data.titles.length, 0);
+  const savedAgain = await phone('account/favorite', { key, saved: true });
+  assert.notEqual(savedAgain.data.activityId, first.data.activityId);
+  await phone('account/favorites', { favorites: [] });
+  await laptop('account/favorites', { favorites: [key, key], merge: true });
+  const history = (await staff('admin/players/' + playerId)).data.savedActivity.entries;
+  assert.deepEqual(history.map(({ action }) => action), ['save', 'remove', 'save', 'remove', 'save']);
+  assert.ok(history.every((entry) => entry.saveId === title.saveId));
+  assert.deepEqual((await staff('admin/players?q=activity-' + deleted.data.activityId)).data.map(({ id }) => id), [playerId]);
+  const byReference = (await staff('admin/players/' + playerId + '?activity=' + deleted.data.activityId)).data.savedActivity.entries;
+  assert.deepEqual(byReference.map(({ id }) => id), [deleted.data.activityId]);
+  assert.equal((await staff('admin/coming-soon/saves?q=activity-' + first.data.activityId)).data[0].id, title.saveId);
+  assert.equal((await staff('admin/coming-soon/saves?q=player-' + playerId)).data.length, 1);
+  await staff('admin/coming-soon', { action: 'archive', version: 2, slug: card.slug });
+  assert.equal((await laptop('me/saved')).data.titles.length, 0);
+  assert.equal((await put(laptop)).status, 404);
+  const remaining = (await phone('account/export')).data.previewSaveActivity;
+  assert.deepEqual(remaining.map(({ id }) => id), history.map(({ id }) => id));
+  assert.ok(remaining.every(({ state }) => state === 'archived'));
+  for (let i = 1; i <= 10; i++) {
+    const { title } = (await staff('admin/coming-soon', cardDraft('Page ' + i))).data;
+    await staff('admin/coming-soon', { action: 'publish', version: title.version, slug: title.slug });
+    await phone('me/saved/' + title.id, undefined, undefined, {}, 'PUT');
+  }
+  const page1 = (await staff('admin/coming-soon/saves?limit=10')).data;
+  const page2 = (await staff('admin/coming-soon/saves?limit=10&before=' + page1.at(-1).id)).data;
+  assert.equal(page1.length, 10);
+  assert.deepEqual(page2.map(({ id }) => id), [title.saveId]);
+  assert.equal((await staff('admin/coming-soon/saves?before=-1')).status, 400);
+});
+
+test('existing first saves migrate once with original dates and references', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE players(id INTEGER PRIMARY KEY);
+      CREATE TABLE coming_soon_titles(tenant_id TEXT, id INTEGER, PRIMARY KEY(tenant_id, id));
+      CREATE TABLE player_favorites(player_id INTEGER, tenant_id TEXT, favorite_key TEXT, created_at INTEGER, PRIMARY KEY(player_id, tenant_id, favorite_key));
+      CREATE TABLE coming_soon_saves(id INTEGER PRIMARY KEY, tenant_id TEXT, player_id INTEGER, title_id INTEGER, created_at INTEGER, UNIQUE(tenant_id, player_id, title_id));
+      INSERT INTO coming_soon_saves VALUES(43, 'sandbox', 9, 7, 1000);`);
+    const transaction = (work) => { db.exec('BEGIN IMMEDIATE'); try { work(); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; } };
+    for (let i = 0; i < 2; i++) createSavedTitles(db, { transaction, fail: assert.fail });
+    assert.deepEqual(db.prepare('SELECT save_id, action, created_at FROM coming_soon_activity').all().map((row) => ({ ...row })),
+      [{ save_id: 43, action: 'save', created_at: 1000 }]);
+  } finally { db.close(); }
 });

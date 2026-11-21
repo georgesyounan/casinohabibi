@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
+import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
 
@@ -261,6 +262,7 @@ if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === '
 }
 db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 installComingSoon(db);
+const savedTitles = createSavedTitles(db, { fail, transaction });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 installPlayerAccess(db, transaction);
@@ -655,7 +657,7 @@ async function api(req, res, path, tenantId, requestId) {
     JOIN players p ON p.id = s.player AND p.tenant_id = s.tenant_id AND p.access_status = 'active'
     WHERE s.token = ? AND s.tenant_id = ? AND s.expires > ?`).get(hash(cookie), tenantId, Date.now())?.player;
   const player = activeSession();
-  if (player && req.method !== 'GET' && /^\/api\/(?:account\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
+  if (player && req.method !== 'GET' && /^\/api\/(?:account\/|me\/saved\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
     req.assertPlayerSession = () => { if (activeSession() !== player) fail(401, 'signin'); };
   }
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -666,7 +668,8 @@ async function api(req, res, path, tenantId, requestId) {
     if (permission && !staffPermissions(staff)[permission]) fail(403, 'staffForbidden');
     return staff;
   }, work);
-  if (req.method !== 'GET' && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
+  const savedResource = ['PUT', 'DELETE'].includes(req.method) && path.match(/^\/api\/me\/saved\/([1-9]\d{0,15})$/);
+  if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   if (route === 'GET /api/coming-soon') {
     const cookie = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1];
@@ -697,9 +700,13 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'GET /api/admin/coming-soon/saves') {
     staffContext(req, tenantId, supportRoles);
-    const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
-    if (query.length > 254) fail(400, 'invalid');
-    return comingSoon.saves(tenantId, query);
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const query = params.get('q')?.trim().toLowerCase() || '';
+    const before = params.has('before') ? Number(params.get('before')) : null;
+    const limit = params.has('limit') ? Number(params.get('limit')) : 100;
+    if (query.length > 254 || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        (before !== null && (!Number.isSafeInteger(before) || before < 1))) fail(400, 'invalid');
+    return comingSoon.saves(tenantId, query, before, limit);
   }
   if (route === 'GET /api/admin/players') {
     staffContext(req, tenantId, supportRoles);
@@ -711,7 +718,16 @@ async function api(req, res, path, tenantId, requestId) {
     const staff = staffContext(req, tenantId, supportRoles);
     const id = Number(playerRoute[1]);
     if (!Number.isSafeInteger(id)) fail(400, 'invalid');
-    if (req.method === 'GET' && !playerRoute[2]) return playerAccess.detail(tenantId, id);
+    if (req.method === 'GET' && !playerRoute[2]) {
+      const params = new URL(req.url, 'http://localhost').searchParams;
+      const cursor = (name) => {
+        if (!params.has(name)) return null;
+        const value = Number(params.get(name));
+        if (!Number.isSafeInteger(value) || value < 1) fail(400, 'invalid');
+        return value;
+      };
+      return { ...playerAccess.detail(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
+    }
     if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
     const input = await body(req);
     if (playerRoute[2] === 'access') return auditedChange(supportRoles, input, (actor) =>
@@ -1125,30 +1141,37 @@ async function api(req, res, path, tenantId, requestId) {
       return { ...account(player, tenantId), balanceReset: true };
     });
   }
-  if (route === 'POST /api/account/favorites' || route === 'POST /api/account/favorite') {
+  if (route === 'GET /api/me/saved') {
     if (!player) fail(401, 'signin');
-    const { favorites: requested, key, saved, merge = false } = await body(req, 128 * 1024) ?? {};
-    const single = route.endsWith('/favorite');
+    const preferred = db.prepare('SELECT preferred_locale AS locale FROM player_profiles WHERE tenant_id = ? AND player_id = ?').get(tenantId, player);
+    const audience = catalogueAudience(tenantId, catalogueLocale || preferred?.locale || 'default');
+    return { titles: comingSoonEnabled(tenantId) ? comingSoon.savedShelf(tenantId, player, audience) : [] };
+  }
+  if (savedResource || route === 'POST /api/account/favorites' || route === 'POST /api/account/favorite') {
+    if (!player) fail(401, 'signin');
+    const { favorites: requested, key, saved, merge = false } = savedResource
+      ? { key: 'coming-soon:' + savedResource[1], saved: req.method === 'PUT' } : await body(req, 128 * 1024);
+    const single = Boolean(savedResource) || route.endsWith('/favorite');
     const validKey = (value) => typeof value === 'string' && value.length <= 256;
     if (single ? !validKey(key) || typeof saved !== 'boolean'
       : !Array.isArray(requested) || requested.length > 1000 || requested.some((item) => !validKey(item)) || typeof merge !== 'boolean') fail(400, 'invalid');
     return transaction(() => {
-      const allowed = availableFavorites(tenantId);
-      if (single && saved && !allowed.has(key)) fail(404, 'comingSoonMissing');
-      const nextKeys = single ? (saved ? [key] : []) : [...new Set(requested)].filter((item) => allowed.has(item));
-      const remove = db.prepare('DELETE FROM player_favorites WHERE player_id = ? AND tenant_id = ? AND favorite_key = ?');
-      if (single && !saved) remove.run(player, tenantId, key);
-      if (!single && !merge) {
+      req.assertPlayerSession?.();
+      const allowed = availableFavorites(tenantId, single ? catalogueLocale : undefined);
+      if ((savedResource || (single && saved)) && !allowed.has(key)) fail(404, 'comingSoonMissing');
+      const now = Date.now();
+      if (single) {
+        const receiptId = req.headers['x-request-id']?.toLowerCase() === requestId ? requestId : null;
+        const result = savedTitles.set(tenantId, player, key, saved, now, receiptId);
+        return { ...result, favorites: accountFavorites(player, tenantId) };
+      }
+      const nextKeys = [...new Set(requested)].filter((item) => allowed.has(item));
+      if (!merge) {
         const keep = new Set(nextKeys);
         const existing = db.prepare('SELECT favorite_key FROM player_favorites WHERE player_id = ? AND tenant_id = ?').all(player, tenantId);
-        for (const row of existing) if (!keep.has(row.favorite_key)) remove.run(player, tenantId, row.favorite_key);
+        for (const row of existing) if (!keep.has(row.favorite_key)) savedTitles.set(tenantId, player, row.favorite_key, false, now);
       }
-      const now = Date.now();
-      const insert = db.prepare('INSERT OR IGNORE INTO player_favorites(player_id, tenant_id, favorite_key, created_at) VALUES (?, ?, ?, ?)');
-      for (const item of nextKeys) {
-        insert.run(player, tenantId, item, now);
-        comingSoon.recordSave(tenantId, player, item, now);
-      }
+      for (const item of nextKeys) savedTitles.set(tenantId, player, item, true, now);
       return { favorites: accountFavorites(player, tenantId) };
     });
   }
@@ -1297,6 +1320,7 @@ async function api(req, res, path, tenantId, requestId) {
       account: { email: profile.email, displayName: profile.displayName, emailVerified: Boolean(profile.emailVerified), preferredLocale: profile.preferredLocale, tenantId },
       favorites,
       previewSaveHistory: comingSoon.playerSaves(tenantId, player),
+      previewSaveActivity: savedTitles.history(tenantId, player, { limit: -1 }).entries,
       simulatedBalanceCents: balance(player, tenantId),
       responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, dailyWageredCents, dailyWagerDateUtc, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
