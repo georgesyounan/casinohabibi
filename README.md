@@ -56,6 +56,12 @@ To enable tenant administration manually, set `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRA
 
 The admin catalog section has a sample-data action that saves a local placeholder provider key and prepares a bilingual catalog for preview. Review the proposed changes and choose **Sync catalog** to display the listings as preview-only cards. This action does not contact an external provider or launch its games.
 
+### Coming Soon previews
+
+In **Coming Soon catalogue**, save a bilingual draft, then choose **Publish preview** to make its permanent URL available from the lobby. Content staff can edit drafts. Operator admins and provider staff can publish or archive previews. A positive rank places a published preview in **Featured**. Each visit shows up to six distinct previews drawn from the published catalogue in a stable **Discover** order.
+
+Signed-in players can keep their previews in Favorites across devices. Archiving removes the preview and its active favorites while preserving the first-save reference in **Preview saves** and the player's account export. The dashboard shows the published count and distinct first-save count. The staff audit history identifies each publish or archive by actor, preview, revision and request ID.
+
 In Windows Command Prompt, set the variables in the same window before starting the server:
 
 ```bat

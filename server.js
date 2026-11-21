@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { games } from './public/catalog.js';
+import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 
 const appEnvironment = process.env.APP_ENV || 'development';
 if (!['development', 'staging', 'production'].includes(appEnvironment)) throw new Error('APP_ENV must be development, staging, or production');
@@ -115,7 +116,6 @@ db.exec('CREATE INDEX IF NOT EXISTS support_tickets_triage ON support_tickets(te
 db.exec('CREATE INDEX IF NOT EXISTS support_tickets_assignee ON support_tickets(tenant_id, assigned_to, status, updated_at)');
 db.exec('CREATE INDEX IF NOT EXISTS support_tickets_player_updated ON support_tickets(tenant_id, player_id, updated_at DESC, id DESC)');
 db.exec('CREATE INDEX IF NOT EXISTS support_tickets_activity ON support_tickets(tenant_id, updated_at DESC, id DESC)');
-db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 transaction(() => {
   db.exec("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, staff_id, message, created_at) SELECT t.tenant_id, t.id, 'staff', t.replied_by, t.reply, t.updated_at FROM support_tickets t WHERE t.reply IS NOT NULL AND t.replied_by IS NOT NULL AND t.reply_thread_migrated = 0");
   db.exec('UPDATE support_tickets SET reply_thread_migrated = 1 WHERE reply_thread_migrated = 0');
@@ -181,6 +181,7 @@ if (!providerCols.includes('id') || !/UNIQUE\s*\(\s*tenant_id\s*,\s*name\s*\)/i.
 }
 const playerTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'players'").get().sql;
 if (!/UNIQUE\s*\(\s*tenant_id\s*,\s*email\s*\)/i.test(playerTableSql)) {
+  const columns = new Set(db.prepare('PRAGMA table_info(players)').all().map(({ name }) => name));
   db.exec(`
     PRAGMA foreign_keys = OFF;
     CREATE TABLE players_tenant_migration (
@@ -192,8 +193,9 @@ if (!/UNIQUE\s*\(\s*tenant_id\s*,\s*email\s*\)/i.test(playerTableSql)) {
       tenant_id TEXT NOT NULL DEFAULT 'sandbox',
       UNIQUE(tenant_id, email)
     );
-    INSERT INTO players_tenant_migration(id, email, password, tenant_id)
-      SELECT id, email, password, tenant_id FROM players;
+    INSERT INTO players_tenant_migration(id, email, password, tenant_id, email_verified, preferred_locale)
+      SELECT id, email, password, tenant_id, ${columns.has('email_verified') ? 'email_verified' : '1'},
+        ${columns.has('preferred_locale') ? 'preferred_locale' : "'en-CA'"} FROM players;
     DROP TABLE players;
     ALTER TABLE players_tenant_migration RENAME TO players;
     PRAGMA foreign_keys = ON;
@@ -221,6 +223,9 @@ if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === '
 if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === 'outcome')) {
   db.exec('ALTER TABLE ledger ADD COLUMN outcome TEXT');
 }
+db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
+installComingSoon(db);
+const comingSoon = createComingSoon(db, { fail, transaction, validArtwork: validBrandLogo });
 
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const adminEnabled = Boolean(encryptionKey);
@@ -476,17 +481,28 @@ function validPolicyUrl(value) {
   }
 }
 
+function availableFavorites(tenantId) {
+  const available = new Set(games.map(({ id }) => `demo:${id}`));
+  for (const { provider, externalId } of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
+    available.add(`provider:${provider}:${externalId}`);
+  }
+  for (const key of comingSoon.keys(tenantId)) available.add(key);
+  return available;
+}
+
+function accountFavorites(playerId, tenantId) {
+  const available = availableFavorites(tenantId);
+  return db.prepare('SELECT favorite_key AS key FROM player_favorites WHERE player_id = ? AND tenant_id = ? ORDER BY created_at, favorite_key')
+    .all(playerId, tenantId).map(({ key }) => key).filter((key) => available.has(key));
+}
+
 function account(id, tenantId) {
   const profile = db.prepare('SELECT display_name AS displayName, preferred_locale AS preferredLocale FROM player_profiles WHERE player_id = ? AND tenant_id = ?').get(id, tenantId);
   const safety = db.prepare('SELECT pause_until, excluded_at, daily_limit_cents, cooling_off_until, session_reminder_minutes FROM player_safety WHERE player = ?').get(id) || {};
   const marketingConsent = db.prepare("SELECT granted FROM player_consent_events WHERE player_id = ? AND tenant_id = ? AND consent_type = 'marketing_email' ORDER BY id DESC LIMIT 1").get(id, tenantId);
   const supportReplies = db.prepare("SELECT count(*) AS count FROM support_tickets t WHERE t.player_id = ? AND t.tenant_id = ? AND coalesce((SELECT max(m.created_at) FROM support_ticket_messages m WHERE m.tenant_id = t.tenant_id AND m.ticket_id = t.id AND m.author_type = 'staff'), 0) > coalesce(t.player_seen_at, 0) AND t.id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50)").get(id, tenantId, id, tenantId).count;
   const historyRows = db.prepare('SELECT id, game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id DESC LIMIT 21').all(id, tenantId);
-  const availableFavorites = new Set(games.map(({ id: gameId }) => `demo:${gameId}`));
-  for (const listing of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
-    availableFavorites.add(`provider:${listing.provider}:${listing.externalId}`);
-  }
-  const favorites = db.prepare('SELECT favorite_key AS key FROM player_favorites WHERE player_id = ? AND tenant_id = ? ORDER BY created_at, favorite_key').all(id, tenantId).map(({ key }) => key).filter((key) => availableFavorites.has(key));
+  const favorites = accountFavorites(id, tenantId);
   const hasMoreHistory = historyRows.length > 20;
   if (hasMoreHistory) historyRows.pop();
   return {
@@ -509,6 +525,34 @@ async function api(req, res, path, tenantId, requestId) {
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
   const route = `${req.method} ${path}`;
   if (req.method !== 'GET' && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
+  if (route === 'GET /api/coming-soon') {
+    const seed = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1] || randomBytes(16).toString('hex');
+    res.setHeader('Set-Cookie', `northplay_visit=${seed}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
+    return comingSoon.lobby(tenantId, seed);
+  }
+  const preview = route.match(/^GET \/api\/coming-soon\/([a-z0-9-]{1,64})$/);
+  if (preview) {
+    const title = comingSoon.published(tenantId, preview[1]);
+    if (!title) fail(404, 'comingSoonMissing');
+    return title;
+  }
+  if (route === 'GET /api/admin/coming-soon') {
+    staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider']);
+    return comingSoon.drafts(tenantId);
+  }
+  if (route === 'POST /api/admin/coming-soon') {
+    staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider']);
+    const input = await body(req, 96 * 1024);
+    const staff = staffContext(req, tenantId, input?.action === 'save'
+      ? ['operator_admin', 'operator_content', 'operator_provider'] : ['operator_admin', 'operator_provider']);
+    return comingSoon.mutate(tenantId, staff.id, requestId, input);
+  }
+  if (route === 'GET /api/admin/coming-soon/saves') {
+    staffContext(req, tenantId, ['operator_admin', 'operator_support']);
+    const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
+    if (query.length > 254) fail(400, 'invalid');
+    return comingSoon.saves(tenantId, query);
+  }
   if (route === 'POST /api/admin/login') {
     if (!adminEnabled) fail(503, 'adminDisabled');
     limitAuthAttempts(req, route);
@@ -562,6 +606,7 @@ async function api(req, res, path, tenantId, requestId) {
       demoRoundsByGame,
       openSupportTickets: support.open,
       enabledCatalogListings: catalog.enabled,
+      ...comingSoon.counts(tenantId),
       publishedConfigVersion: publishedConfig?.version ?? 0,
       configNeedsPublish: Boolean(draftConfig && draftConfig.config !== publishedConfig?.config),
       generatedAt: Date.now()
@@ -849,21 +894,32 @@ async function api(req, res, path, tenantId, requestId) {
       return { ...account(player, tenantId), balanceReset: true };
     });
   }
-  if (route === 'POST /api/account/favorites') {
+  if (route === 'POST /api/account/favorites' || route === 'POST /api/account/favorite') {
     if (!player) fail(401, 'signin');
-    const { favorites: requested } = await body(req, 128 * 1024);
-    if (!Array.isArray(requested) || requested.length > 1000 || requested.some((key) => typeof key !== 'string' || key.length > 256)) fail(400, 'invalid');
-    const allowed = new Set(games.map(({ id }) => `demo:${id}`));
-    for (const listing of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
-      allowed.add(`provider:${listing.provider}:${listing.externalId}`);
-    }
-    const saved = [...new Set(requested)].filter((key) => allowed.has(key));
-    transaction(() => {
-      db.prepare('DELETE FROM player_favorites WHERE player_id = ? AND tenant_id = ?').run(player, tenantId);
-      const insert = db.prepare('INSERT INTO player_favorites(player_id, tenant_id, favorite_key, created_at) VALUES (?, ?, ?, ?)');
-      for (const key of saved) insert.run(player, tenantId, key, Date.now());
+    const { favorites: requested, key, saved, merge = false } = await body(req, 128 * 1024) ?? {};
+    const single = route.endsWith('/favorite');
+    const validKey = (value) => typeof value === 'string' && value.length <= 256;
+    if (single ? !validKey(key) || typeof saved !== 'boolean'
+      : !Array.isArray(requested) || requested.length > 1000 || requested.some((item) => !validKey(item)) || typeof merge !== 'boolean') fail(400, 'invalid');
+    return transaction(() => {
+      const allowed = availableFavorites(tenantId);
+      if (single && saved && !allowed.has(key)) fail(404, 'comingSoonMissing');
+      const nextKeys = single ? (saved ? [key] : []) : [...new Set(requested)].filter((item) => allowed.has(item));
+      const remove = db.prepare('DELETE FROM player_favorites WHERE player_id = ? AND tenant_id = ? AND favorite_key = ?');
+      if (single && !saved) remove.run(player, tenantId, key);
+      if (!single && !merge) {
+        const keep = new Set(nextKeys);
+        const existing = db.prepare('SELECT favorite_key FROM player_favorites WHERE player_id = ? AND tenant_id = ?').all(player, tenantId);
+        for (const row of existing) if (!keep.has(row.favorite_key)) remove.run(player, tenantId, row.favorite_key);
+      }
+      const now = Date.now();
+      const insert = db.prepare('INSERT OR IGNORE INTO player_favorites(player_id, tenant_id, favorite_key, created_at) VALUES (?, ?, ?, ?)');
+      for (const item of nextKeys) {
+        insert.run(player, tenantId, item, now);
+        comingSoon.recordSave(tenantId, player, item, now);
+      }
+      return { favorites: accountFavorites(player, tenantId) };
     });
-    return { favorites: saved };
   }
   if (route === 'POST /api/account/email-change/request') {
     if (!player) fail(401, 'signin');
@@ -1007,6 +1063,7 @@ async function api(req, res, path, tenantId, requestId) {
       exportedAt: Date.now(),
       account: { email: profile.email, displayName: profile.displayName, emailVerified: Boolean(profile.emailVerified), preferredLocale: profile.preferredLocale, tenantId },
       favorites,
+      previewSaveHistory: comingSoon.playerSaves(tenantId, player),
       simulatedBalanceCents: balance(player, tenantId),
       responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, dailyWageredCents, dailyWagerDateUtc, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
@@ -1459,6 +1516,7 @@ const assets = {
   '/style.css': ['style.css', 'text/css'],
   '/app.js': ['app.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
+  '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
   '/hero.webp': ['hero.webp', 'image/webp'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml']
 };
@@ -1499,8 +1557,10 @@ createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.end(JSON.stringify(await api(req, res, path, tenantId, requestId)));
     }
-    if (req.method !== 'GET' || !Object.hasOwn(assets, path)) fail(404, 'invalid');
-    const [file, type] = assets[path];
+    const preview = req.method === 'GET' && path.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/);
+    if (req.method !== 'GET' || (!preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
+    if (preview && !comingSoon.published(tenantId, preview[1])) res.statusCode = 404;
+    const [file, type] = preview ? assets['/'] : assets[path];
     const content = readFileSync(new URL(`./public/${file}`, import.meta.url));
     res.setHeader('Content-Type', type.startsWith('text/') ? `${type}; charset=utf-8` : type);
     res.end(content);

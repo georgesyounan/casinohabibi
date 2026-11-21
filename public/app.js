@@ -1,6 +1,8 @@
 import { games } from './catalog.js';
+import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 
 const copy = {
+  ...comingSoonCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
   skipToContent: ['Skip to main content', 'Passer au contenu principal'],
@@ -53,7 +55,7 @@ const copy = {
   browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
   clearGameSearch: ['Clear search', 'Effacer la recherche'],
   providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
-  catalogResultSummary: ['Showing {games} playable demo games · {previews} non-playable provider previews', 'Jeux fictifs jouables : {games} · Aperçus de fournisseurs non jouables : {previews}'],
+  catalogResultSummary: ['Playable demo games: {games} · Previews: {previews}', 'Jeux fictifs jouables : {games} · Aperçus : {previews}'],
   addFavorite: ['Add {game} to favorites', 'Ajouter {game} aux favoris'], removeFavorite: ['Remove {game} from favorites', 'Retirer {game} des favoris'], noFavoriteGames: ['You have not saved any games yet.', 'Vous n’avez pas encore enregistré de jeux.'],
   favoritesLocal: ['Favorites saved in this browser.', 'Favoris enregistrés dans ce navigateur.'], favoritesSynced: ['Favorites saved to your account.', 'Favoris enregistrés dans votre compte.'], favoriteSaveFailed: ['Could not sync favorites to your account. The change was reverted.', 'Impossible de synchroniser les favoris avec votre compte. Le changement a été annulé.'],
   disclaimer: ['Simulated funds only. No cash value.', 'Fonds fictifs uniquement. Aucune valeur monétaire.'],
@@ -269,6 +271,9 @@ const copy = {
 
 const $ = (selector) => document.querySelector(selector);
 const auditActionLabels = {
+  coming_soon_draft_saved: comingSoonCopy.comingSoonAuditSaved,
+  coming_soon_published: comingSoonCopy.comingSoonAuditPublished,
+  coming_soon_archived: comingSoonCopy.comingSoonAuditArchived,
   staff_login: ['Staff sign-in', 'Connexion du personnel'], staff_logout: ['Staff sign-out', 'Déconnexion du personnel'], staff_password_changed: ['Staff password changed', 'Mot de passe du personnel modifié'],
   staff_mfa_setup: ['Authenticator setup started', 'Configuration de l’authentificateur commencée'], staff_mfa_enabled: ['Two-step verification enabled', 'Vérification en deux étapes activée'], staff_mfa_disabled: ['Two-step verification disabled', 'Vérification en deux étapes désactivée'],
   staff_created: ['Staff account added', 'Compte du personnel ajouté'], staff_disabled: ['Staff account disabled', 'Compte du personnel désactivé'], staff_reenabled: ['Staff account re-enabled', 'Compte du personnel réactivé'], staff_role_changed: ['Staff role changed', 'Rôle du membre du personnel modifié'],
@@ -317,6 +322,7 @@ try {
 }
 let favorites = new Set(guestFavorites);
 let favoriteSavePending = false;
+let favoriteStatusKey;
 let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let result;
@@ -1354,7 +1360,7 @@ async function adoptAccountFavorites(account) {
   favorites = merged;
   if (!guestFavorites.size) return true;
   try {
-    const saved = await api('account/favorites', { favorites: [...merged] });
+    const saved = await api('account/favorites', { favorites: [...guestFavorites], merge: true });
     favorites = new Set(saved.favorites);
     account.favorites = [...favorites];
     guestFavorites = new Set();
@@ -1373,29 +1379,41 @@ async function toggleFavorite(key) {
   if (!player) {
     guestFavorites = new Set(favorites);
     cacheGuestFavorites();
-    $('#favorites-status').textContent = t('favoritesLocal');
+    announceFavorite('favoritesLocal');
     renderCatalog();
     return;
   }
   favoriteSavePending = true;
   renderCatalog();
   try {
-    const saved = await api('account/favorites', { favorites: [...favorites] });
+    const saved = await api('account/favorite', { key, saved: favorites.has(key) });
     favorites = new Set(saved.favorites);
     player.favorites = [...favorites];
     guestFavorites = new Set();
     cacheGuestFavorites();
-    $('#favorites-status').textContent = t('favoritesSynced');
+    announceFavorite('favoritesSynced');
   } catch {
     favorites = previous;
-    $('#favorites-status').textContent = t('favoriteSaveFailed');
+    announceFavorite('favoriteSaveFailed');
   } finally {
     favoriteSavePending = false;
     renderCatalog();
   }
 }
 
+function announceFavorite(message) {
+  favoriteStatusKey = message;
+  $('#favorites-status').textContent = t(message);
+  comingSoonUi.favoriteStatus(t(message));
+}
+
 function renderCatalog() {
+  const editorial = comingSoonUi.renderLobby(filter, searchQuery);
+  const previewTitle = comingSoonUi.renderDetail();
+  if (previewTitle) {
+    updateDocumentTitle();
+    document.title = `${previewTitle} · ${document.title}`;
+  }
   const catalog = $('#catalog');
   catalog.replaceChildren();
   const createArt = (icon, theme) => {
@@ -1440,17 +1458,17 @@ function renderCatalog() {
   }).sort((a, b) => providerSort === 'recent'
     ? b.id - a.id
     : providerTitleCollator.compare(language ? a.titleFr : a.titleEn, language ? b.titleFr : b.titleEn));
-  const hasListings = demoGames.length + visibleGames.length > 0;
+  const hasListings = demoGames.length + visibleGames.length + editorial.count > 0;
   $('#catalog-controls').hidden = !games.length && !providerGames.length;
   $('#provider-sort-control').hidden = !providerGames.length;
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
   $('#catalog-summary').textContent = t('catalogResultSummary')
     .replace('{games}', countFormat.format(demoGames.length))
-    .replace('{previews}', countFormat.format(visibleGames.length));
+    .replace('{previews}', countFormat.format(visibleGames.length + editorial.count));
   $('#catalog-summary').hidden = !games.length && !providerGames.length;
   $('#catalog-empty').hidden = hasListings;
-  const hasAvailableFavorite = games.some((game) => favorites.has(`demo:${game.id}`)) ||
+  const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
   const noFavorites = filter === 'favorites' && !hasAvailableFavorite;
   const noRecentGames = filter === 'recent' && recentGameOrder.size === 0;
@@ -1505,6 +1523,17 @@ let supportInboxTotal = 0;
 let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
 let latestOverview = null;
+const comingSoonUi = createComingSoonUi({
+  api, t, element, action,
+  isFrench: () => Boolean(language),
+  getFavorites: () => favorites,
+  favoritePending: () => favoriteSavePending,
+  toggleFavorite,
+  onChange() {
+    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
+    if (currentStaffRole === 'operator_admin') refreshStaffAudit().catch(() => {});
+  }
+});
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
@@ -1512,7 +1541,7 @@ function render() {
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
-  $('#skip-link').href = location.pathname === '/admin' ? '#admin' : '#lobby';
+  $('#skip-link').href = location.pathname === '/admin' ? '#admin' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
   updateStaffRoleHelp();
   const announcement = $('#lobby-announcement');
@@ -1537,6 +1566,8 @@ function render() {
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
   renderCatalog();
+  if (favoriteStatusKey) announceFavorite(favoriteStatusKey);
+  comingSoonUi.renderAdmin();
   updateCatalogPreview();
   if (supportInboxEntries) renderSupportInbox();
   if ($('#dialog').open) renderDialog();
@@ -2128,7 +2159,7 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
   $('#staff-audit-range-error').hidden = !invalidRange;
   $('#staff-audit-range-error').textContent = invalidRange ? t('staffAuditRangeInvalid') : '';
   if (invalidRange) return [];
-  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : action.startsWith('provider_') || action.startsWith('catalog_') ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
+  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
   return source.filter((entry) => {
     const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
@@ -2436,6 +2467,8 @@ async function refreshOperatorOverview() {
   renderOverviewGameActivity(overview);
   $('#overview-tickets').textContent = number.format(overview.openSupportTickets);
   $('#overview-catalog').textContent = number.format(overview.enabledCatalogListings);
+  $('#overview-coming-soon').textContent = number.format(overview.publishedComingSoon);
+  $('#overview-coming-soon-saves').textContent = number.format(overview.firstComingSoonSaves);
   const catalogReady = overview.enabledCatalogListings > 0;
   $('#overview-catalog-readiness').textContent = t(catalogReady ? 'overviewCatalogReady' : 'overviewCatalogEmpty');
   const catalogLink = $('#catalog-readiness-link');
@@ -2557,6 +2590,7 @@ function showStaffSession(session) {
   $('#admin-tools').hidden = false;
   $('#staff-identity').textContent = `${session.email} · ${staffRoleLabel(session.role)}`;
   for (const section of document.querySelectorAll('[data-roles]')) section.hidden = !section.dataset.roles.split(',').includes(session.role);
+  void comingSoonUi.loadStaff(session.role);
   refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   if (['operator_admin', 'operator_provider'].includes(session.role)) refreshManagedCatalog();
   $('#mfa-setup').hidden = session.mfaEnabled;
@@ -2792,12 +2826,19 @@ $('#mfa-disable').addEventListener('click', async () => {
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 
-$('#lobby').hidden = location.pathname === '/admin';
-$('#admin').hidden = !$('#lobby').hidden;
+const isAdminPage = location.pathname === '/admin';
+$('#lobby').hidden = isAdminPage || comingSoonUi.isDetail;
+$('#admin').hidden = !isAdminPage;
+$('#coming-soon-detail').hidden = !comingSoonUi.isDetail;
 render();
-if (location.pathname === '/admin') {
+if (isAdminPage) {
   try { showStaffSession(await api('admin/session', undefined, 'GET')); }
   catch { $('#staff-login').hidden = false; $('#admin-tools').hidden = true; }
+}
+if (!isAdminPage) {
+  try { await comingSoonUi.loadLobby(); }
+  catch { /* The preview renders its localized unavailable state. */ }
+  renderCatalog();
 }
 try {
   const published = await api('tenant', undefined, 'GET');

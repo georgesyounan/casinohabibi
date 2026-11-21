@@ -1,0 +1,299 @@
+export const comingSoonCopy = {
+  comingSoon: ['Coming soon', 'À venir'],
+  comingSoonDiscover: ['Discover', 'À découvrir'],
+  comingSoonFeatured: ['Featured previews', 'Aperçus en vedette'],
+  comingSoonEmpty: ['New previews are on the way.', 'De nouveaux aperçus arrivent bientôt.'],
+  comingSoonMissing: ['This preview is unavailable.', 'Cet aperçu est indisponible.'],
+  comingSoonOpen: ['See preview', 'Voir l’aperçu'],
+  comingSoonBack: ['Back to the lobby', 'Retour au hall'],
+  comingSoonCatalogue: ['Coming Soon catalogue', 'Catalogue À venir'],
+  comingSoonAdminHelp: ['Save a draft in both languages. Publish it when it is ready for the lobby.', 'Enregistrez un brouillon dans les deux langues. Publiez-le quand il est prêt pour le hall.'],
+  comingSoonNew: ['New preview', 'Nouvel aperçu'],
+  comingSoonTitleEn: ['English title', 'Titre anglais'],
+  comingSoonTitleFr: ['French title', 'Titre français'],
+  comingSoonDescriptionEn: ['English description', 'Description anglaise'],
+  comingSoonDescriptionFr: ['French description', 'Description française'],
+  comingSoonStudio: ['Studio', 'Studio'],
+  comingSoonCategory: ['Category', 'Catégorie'],
+  comingSoonArtwork: ['Cover image (PNG, JPEG or WebP, up to 48 KB)', 'Image de couverture (PNG, JPEG ou WebP, jusqu’à 48 Ko)'],
+  comingSoonRemoveArt: ['Remove cover', 'Retirer la couverture'],
+  comingSoonAltEn: ['English image description', 'Description anglaise de l’image'],
+  comingSoonAltFr: ['French image description', 'Description française de l’image'],
+  comingSoonRank: ['Featured order (0 hides it from Featured)', 'Ordre en vedette (0 retire l’aperçu des vedettes)'],
+  comingSoonEdit: ['Edit draft', 'Modifier le brouillon'],
+  comingSoonPublish: ['Publish preview', 'Publier l’aperçu'],
+  comingSoonArchive: ['Archive preview', 'Archiver l’aperçu'],
+  comingSoonDraft: ['Draft', 'Brouillon'],
+  comingSoonPublished: ['Published', 'Publié'],
+  comingSoonArchived: ['Archived', 'Archivé'],
+  comingSoonUnpublishedEdit: ['Draft changes', 'Modifications en brouillon'],
+  comingSoonSaved: ['Draft saved.', 'Brouillon enregistré.'],
+  comingSoonPublishedMessage: ['Preview published.', 'Aperçu publié.'],
+  comingSoonArchivedMessage: ['Preview archived.', 'Aperçu archivé.'],
+  comingSoonAuditRef: ['Audit entry #{id}', 'Entrée d’audit no {id}'],
+  comingSoonConflict: ['This draft changed. Reload it from the catalogue before retrying.', 'Ce brouillon a changé. Rechargez-le depuis le catalogue avant de réessayer.'],
+  comingSoonSaves: ['Preview saves', 'Favoris des joueurs'],
+  comingSoonSavesSearch: ['Player email, player ID or save reference', 'Courriel, numéro de joueur ou référence du favori'],
+  comingSoonSearch: ['Search', 'Rechercher'],
+  comingSoonSavesEmpty: ['No preview saves found.', 'Aucun favori trouvé.'],
+  comingSoonSaveRef: ['Save reference', 'Référence du favori'],
+  comingSoonDate: ['Saved on', 'Enregistré le'],
+  comingSoonCount: ['Published previews', 'Aperçus publiés'],
+  comingSoonSaveCount: ['Distinct preview saves', 'Favoris distincts'],
+  comingSoonAuditSaved: ['Saved preview draft', 'Brouillon d’aperçu enregistré'],
+  comingSoonAuditPublished: ['Published Coming Soon preview', 'Aperçu À venir publié'],
+  comingSoonAuditArchived: ['Archived Coming Soon preview', 'Aperçu À venir archivé'],
+};
+
+const fields = ['titleEn', 'titleFr', 'studio', 'descriptionEn', 'descriptionFr', 'altEn', 'altFr', 'category', 'featuredRank'];
+const canEdit = ['operator_admin', 'operator_content', 'operator_provider'];
+const canPublish = ['operator_admin', 'operator_provider'];
+const canReviewSaves = ['operator_admin', 'operator_support'];
+const detailSlug = location.pathname.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
+
+export function createComingSoonUi({ api, t, element, action, isFrench, getFavorites, favoritePending, toggleFavorite, onChange }) {
+  const $ = (id) => document.getElementById(id);
+  const form = $('coming-soon-form');
+  const list = $('coming-soon-admin-list');
+  const adminStatus = $('coming-soon-admin-status');
+  const saveForm = $('coming-soon-save-search');
+  let lobby = { titles: [], featured: [], discover: [] };
+  let preview;
+  let detailLoaded = false;
+  let staffRole;
+  let drafts = [];
+  let selected;
+  let artwork = '';
+  let saving = false;
+  let saves;
+
+  const titleName = (title) => isFrench() ? title.titleFr : title.titleEn;
+  const isFavorite = (key) => getFavorites().has(key);
+  const dateTime = (time) => new Intl.DateTimeFormat(isFrench() ? 'fr-CA' : 'en-CA', { dateStyle: 'medium', timeStyle: 'short' }).format(time);
+  const stateText = (state) => t({ draft: 'comingSoonDraft', published: 'comingSoonPublished', archived: 'comingSoonArchived' }[state]);
+  const linkTo = (title, label, className) => {
+    const link = element('a', label, className);
+    link.href = `/coming-soon/${title.slug}`;
+    return link;
+  };
+
+  function cover(title) {
+    const art = element('div', '', `art coming-soon-art coming-soon-${title.category}`);
+    if (title.artwork) {
+      const image = element('img');
+      image.src = title.artwork;
+      image.alt = isFrench() ? title.altFr : title.altEn;
+      art.append(image);
+    } else {
+      const mark = element('span', { slots: '✦', table: '♢', live: '◈' }[title.category]);
+      mark.setAttribute('aria-hidden', 'true');
+      art.append(mark);
+    }
+    const saved = isFavorite(title.favoriteKey);
+    const favorite = action(saved ? '★' : '☆', () => { void toggleFavorite(title.favoriteKey); }, 'favorite-toggle');
+    favorite.disabled = favoritePending();
+    favorite.setAttribute('aria-pressed', String(saved));
+    favorite.setAttribute('aria-label', t(saved ? 'removeFavorite' : 'addFavorite').replace('{game}', titleName(title)));
+    art.append(favorite);
+    return art;
+  }
+
+  function card(title) {
+    const info = element('div', '', 'card-info');
+    info.append(element('small', t('comingSoon'), 'catalog-label'), element('strong', titleName(title)),
+      element('small', [t(title.category), title.studio].filter(Boolean).join(' · ')),
+      linkTo(title, t('comingSoonOpen'), 'button ghost'));
+    const node = element('article', '', 'card');
+    node.append(cover(title), info);
+    return node;
+  }
+
+  function showRow(id, items) {
+    const row = $(id);
+    row.hidden = !items.length;
+    row.querySelector('.cards').replaceChildren(...items.map(card));
+  }
+
+  function renderLobby(filter, search) {
+    const bySlug = new Map(lobby.titles.map((title) => [title.slug, title]));
+    const stars = lobby.titles.filter((title) => isFavorite(title.favoriteKey));
+    const normal = filter === 'all' && !search.trim();
+    const query = search.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    const filtered = normal ? [] : lobby.titles.filter((title) => {
+      if (filter === 'recent' || (filter === 'favorites' && !isFavorite(title.favoriteKey))) return false;
+      if (!['all', 'favorites'].includes(filter) && filter !== title.category) return false;
+      return [title.titleEn, title.titleFr, title.studio].join(' ').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(query);
+    });
+    if (filter === 'favorites') {
+      const order = new Map([...getFavorites()].map((key, index) => [key, index]));
+      filtered.sort((a, b) => order.get(b.favoriteKey) - order.get(a.favoriteKey));
+    }
+    $('coming-soon').hidden = !normal && !filtered.length;
+    $('coming-soon-empty').hidden = Boolean(lobby.titles.length) || !normal;
+    showRow('coming-soon-featured', normal ? lobby.featured.map((slug) => bySlug.get(slug)) : []);
+    showRow('coming-soon-discover', normal ? lobby.discover.map((slug) => bySlug.get(slug)) : []);
+    showRow('coming-soon-filtered', filtered);
+    return { count: normal ? lobby.titles.length : filtered.length, hasFavorites: stars.length > 0 };
+  }
+
+  function renderDetail() {
+    if (!detailSlug) return;
+    const target = $('coming-soon-detail-content');
+    if (!detailLoaded) return;
+    if (!preview) {
+      target.replaceChildren(element('h1', t('comingSoonMissing')));
+      return;
+    }
+    const name = titleName(preview);
+    const body = element('article', '', 'coming-soon-detail-card');
+    const info = element('div', '', 'coming-soon-detail-copy');
+    info.append(element('p', t('comingSoon'), 'eyebrow'), element('h1', name),
+      element('p', [t(preview.category), preview.studio].filter(Boolean).join(' · ')));
+    const description = isFrench() ? preview.descriptionFr : preview.descriptionEn;
+    if (description) info.append(element('p', description));
+    body.append(cover(preview), info);
+    target.replaceChildren(body);
+    return name;
+  }
+
+  async function loadLobby() {
+    if (detailSlug) {
+      try { preview = await api(`coming-soon/${detailSlug}`, undefined, 'GET'); }
+      finally { detailLoaded = true; }
+    } else {
+      lobby = await api('coming-soon', undefined, 'GET');
+    }
+  }
+
+  function selectDraft(title) {
+    selected = title;
+    artwork = title?.artwork || '';
+    form.reset();
+    for (const name of fields) {
+      if (title) form.elements[name].value = title[name];
+    }
+    $('coming-soon-edit-title').textContent = title ? titleName(title) : t('comingSoonNew');
+    $('coming-soon-remove-art').hidden = !artwork;
+  }
+
+  function renderAdmin() {
+    if (canEdit.includes(staffRole)) {
+      $('coming-soon-edit-title').textContent = selected ? titleName(selected) : t('comingSoonNew');
+      const rows = drafts.map((title) => {
+        const row = element('li', '', 'coming-soon-admin-row');
+        const name = element('div');
+        const status = title.state === 'published' && title.publishedVersion !== title.version
+          ? `${stateText(title.state)} · ${t('comingSoonUnpublishedEdit')}` : stateText(title.state);
+        name.append(element('strong', titleName(title)), element('small', status));
+        const controls = element('div', '', 'actions');
+        controls.append(action(t('comingSoonEdit'), () => {
+          selectDraft(title);
+          form.elements.titleEn.focus();
+        }, 'ghost'));
+        if (title.state === 'published') controls.append(linkTo(title, t('comingSoonOpen'), 'button ghost'));
+        if (canPublish.includes(staffRole)) {
+          if (title.state !== 'published' || title.publishedVersion !== title.version) {
+            controls.append(action(t('comingSoonPublish'), () => { void change('publish', title); }));
+          }
+          if (title.state === 'published') controls.append(action(t('comingSoonArchive'), () => { void change('archive', title); }, 'ghost'));
+        }
+        row.append(name, controls);
+        return row;
+      });
+      list.replaceChildren(...rows);
+    }
+    if (canReviewSaves.includes(staffRole) && saves) {
+      $('coming-soon-saves-body').replaceChildren(...saves.map((entry) => {
+        const row = element('tr');
+        for (const value of [`save-${entry.id}`, entry.email, entry.slug, stateText(entry.state), dateTime(entry.createdAt)]) row.append(element('td', value));
+        return row;
+      }));
+      $('coming-soon-saves-status').textContent = saves.length ? '' : t('comingSoonSavesEmpty');
+    }
+  }
+
+  async function loadSaves() {
+    $('coming-soon-saves-status').textContent = t('loading');
+    try {
+      const query = new URLSearchParams({ q: saveForm.elements.query.value });
+      saves = await api(`admin/coming-soon/saves?${query}`, undefined, 'GET');
+      renderAdmin();
+    } catch (error) {
+      $('coming-soon-saves-status').textContent = t(error.message);
+    }
+  }
+
+  async function loadStaff(role) {
+    staffRole = role;
+    if (canReviewSaves.includes(role)) void loadSaves();
+    if (!canEdit.includes(role)) return;
+    try {
+      drafts = await api('admin/coming-soon', undefined, 'GET');
+      renderAdmin();
+    } catch (error) {
+      adminStatus.textContent = t(error.message);
+    }
+  }
+
+  async function change(verb, title, draft = {}) {
+    if (saving) return;
+    saving = true;
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    adminStatus.textContent = t('loading');
+    try {
+      const result = await api('admin/coming-soon', { action: verb, slug: title?.slug, version: title?.version ?? 0, ...draft });
+      drafts = [result.title, ...drafts.filter(({ slug }) => slug !== result.title.slug)];
+      if (verb === 'save' || title?.slug === selected?.slug) selectDraft(result.title);
+      renderAdmin();
+      const message = t({ save: 'comingSoonSaved', publish: 'comingSoonPublishedMessage', archive: 'comingSoonArchivedMessage' }[verb]);
+      adminStatus.textContent = result.auditId ? `${message} ${t('comingSoonAuditRef').replace('{id}', result.auditId)}` : message;
+      onChange();
+    } catch (error) {
+      adminStatus.textContent = t(error.message);
+      if (error.message === 'comingSoonConflict') void loadStaff(staffRole);
+    } finally {
+      saving = false;
+      submit.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    const file = form.elements.artworkFile.files[0];
+    const data = Object.fromEntries(fields.map((name) => [name, form.elements[name].value]));
+    data.featuredRank = Number(data.featuredRank);
+    try {
+      if (file?.size > 48 * 1024) throw new Error('invalid');
+      data.artwork = file ? await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('invalid'));
+        reader.readAsDataURL(file);
+      }) : artwork;
+      await change('save', selected, data);
+    } catch (error) {
+      adminStatus.textContent = t(error.message);
+    }
+  });
+  $('coming-soon-new').addEventListener('click', () => {
+    selectDraft(null);
+    form.elements.titleEn.focus();
+  });
+  $('coming-soon-remove-art').addEventListener('click', () => {
+    artwork = '';
+    form.elements.artworkFile.value = '';
+    $('coming-soon-remove-art').hidden = true;
+  });
+  saveForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void loadSaves();
+  });
+
+  function favoriteStatus(message) {
+    $('coming-soon-favorite-status').textContent = message;
+  }
+
+  return { isDetail: Boolean(detailSlug), loadLobby, renderDetail, renderLobby, loadStaff, renderAdmin, favoriteStatus };
+}
