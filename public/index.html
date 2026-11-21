@@ -29,7 +29,8 @@
 </section>
 <section class="welcome-rail" aria-label="Key information"><div><span class="rail-mark">CAD</span><span data-copy="cadDisplay"></span></div><div><span class="rail-mark">EN / FR</span><span data-copy="twoLanguages"></span></div><div><span class="rail-mark">DEMO</span><span data-copy="simulatedOnly"></span></div></section>
 <section id="games" class="games"><div class="section-title"><div><p class="eyebrow" data-copy="lobbyEyebrow"></p><h2 data-copy="games"></h2><p class="section-intro" data-copy="gamesIntro"></p></div></div>
-<div id="catalog-controls" class="catalog-controls" hidden><label class="game-search"><span data-copy="searchGames"></span><input id="game-search" type="search" autocomplete="off"></label>
+<div id="catalog-controls" class="catalog-controls" hidden><label class="game-search"><span data-copy="searchGames"></span><input id="game-search" type="search" maxlength="120" autocomplete="off"></label>
+<label id="catalog-collection-control" class="provider-sort" hidden><span data-copy="catalogueCollection"></span><select id="catalog-collection"></select></label>
 <label id="provider-sort-control" class="provider-sort" hidden><span data-copy="providerSortLabel"></span><select id="provider-sort"><option value="recent" data-copy="providerSortRecent"></option><option value="alpha" data-copy="providerSortAlpha"></option></select></label>
 <div class="filters" id="filters"><button data-filter="all" data-copy="all" aria-pressed="true"></button><button data-filter="slots" data-copy="slots" aria-pressed="false"></button><button data-filter="table" data-copy="table" aria-pressed="false"></button><button data-filter="live" data-copy="live" aria-pressed="false"></button><button data-filter="favorites" data-copy="favorites" aria-pressed="false"></button><button data-filter="recent" data-copy="recentGames" aria-pressed="false"></button></div></div>
 <p id="catalog-summary" class="catalog-summary" role="status" aria-live="polite" hidden></p>
@@ -49,7 +50,7 @@
 <section id="faq" class="faq-section"><div class="section-heading"><p class="eyebrow" data-copy="helpEyebrow"></p><h2 data-copy="faqTitle"></h2></div><div id="faq-list" class="faq-list"></div><ul id="site-help-links" class="site-help-links" hidden></ul></section>
 </main>
 <main id="coming-soon-detail" class="shell coming-soon-detail" tabindex="-1" hidden>
-  <a href="/#coming-soon" data-copy="comingSoonBack"></a>
+  <a id="preview-back-to-results" href="/#games" data-copy="comingSoonBackToCatalogue"></a>
   <div id="coming-soon-detail-content"><p role="status" data-copy="loading"></p></div>
   <p id="coming-soon-favorite-status" role="status"></p>
 </main>
@@ -161,36 +162,58 @@
             <div class="admin-page-heading">
               <div>
                 <h3 id="coming-soon-admin-title" data-admin-heading data-copy="adminNavComingSoon" tabindex="-1"></h3>
-                <p data-copy="comingSoonAdminHelp"></p>
               </div>
               <button type="button" id="coming-soon-new" aria-controls="coming-soon-form" aria-expanded="false" data-copy="comingSoonNew"></button>
             </div>
             <p id="coming-soon-admin-status" role="status"></p>
             <p id="coming-soon-publish-help" data-copy="staffDraftOnly" hidden></p>
             <form id="coming-soon-form" class="coming-soon-editor admin-editor" aria-labelledby="coming-soon-edit-title" hidden>
-              <h4 id="coming-soon-edit-title"></h4>
-              <label><span data-copy="comingSoonTitleEn"></span><input name="titleEn" maxlength="120" required></label>
-              <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" maxlength="120" required></label>
-              <label><span data-copy="comingSoonCategory"></span><select name="category"><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
-              <label><span data-copy="comingSoonStudio"></span><input name="studio" maxlength="64"></label>
-              <label><span data-copy="comingSoonMarket"></span><input name="cardMarket" maxlength="6" pattern="[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?" placeholder="CA-QC"></label>
-              <label><span data-copy="comingSoonLanguages"></span><select name="locales"><option value="both" data-copy="comingSoonBoth"></option><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
-              <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" rows="3" maxlength="800"></textarea></label>
-              <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" rows="3" maxlength="800"></textarea></label>
-              <label><span data-copy="comingSoonArtwork"></span><input name="artworkFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-              <label><span data-copy="comingSoonRank"></span><input name="featuredRank" type="number" value="0" min="0" max="99" required></label>
-              <label><span data-copy="comingSoonAltEn"></span><input name="altEn" maxlength="200"></label>
-              <label><span data-copy="comingSoonAltFr"></span><input name="altFr" maxlength="200"></label>
-              <div class="actions"><button type="submit" data-copy="saveDraft"></button><button type="button" id="coming-soon-remove-art" class="ghost" data-copy="comingSoonRemoveArt" hidden></button><button type="button" id="coming-soon-close-editor" class="ghost" data-copy="adminCloseEditor"></button></div>
+              <div class="admin-page-heading"><h4 id="coming-soon-edit-title" tabindex="-1"></h4><button type="button" id="coming-soon-close-editor" class="ghost" data-copy="catalogueReturnList"></button></div>
+              <p id="catalogue-record-state" class="muted"></p>
+              <fieldset id="catalogue-edit-fields" class="catalogue-edit-fields">
+                <label><span data-copy="catalogueEditLanguage"></span><select id="catalogue-edit-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
+                <div data-card-locale="en-CA" class="catalogue-translation">
+                  <label><span data-copy="comingSoonTitleEn"></span><input name="titleEn" lang="en-CA" maxlength="120" required></label>
+                  <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" lang="en-CA" rows="3" maxlength="800"></textarea></label>
+                  <label><span data-copy="catalogueCollectionOptional"></span><input name="collectionEn" lang="en-CA" maxlength="64"></label>
+                </div>
+                <div data-card-locale="fr-CA" class="catalogue-translation" hidden>
+                  <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" lang="fr-CA" maxlength="120" required></label>
+                  <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" lang="fr-CA" rows="3" maxlength="800"></textarea></label>
+                  <label><span data-copy="catalogueCollectionOptional"></span><input name="collectionFr" lang="fr-CA" maxlength="64"></label>
+                </div>
+                <details id="catalogue-classification" class="catalogue-details"><summary data-copy="catalogueClassification"></summary><div>
+                  <label><span data-copy="comingSoonCategory"></span><select name="category"><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
+                  <label><span data-copy="comingSoonStudio"></span><input name="studio" maxlength="64"></label>
+                  <label><span data-copy="comingSoonRank"></span><input name="featuredRank" type="number" value="0" min="0" max="99" required></label>
+                  <label><span data-copy="comingSoonMarket"></span><input name="cardMarket" maxlength="6" pattern="[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?" placeholder="CA-QC"></label>
+                  <label><span data-copy="comingSoonLanguages"></span><select name="locales"><option value="both" data-copy="comingSoonBoth"></option><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
+                </div></details>
+                <details id="catalogue-cover" class="catalogue-details"><summary data-copy="catalogueCover"></summary><div>
+                  <label><span data-copy="comingSoonArtwork"></span><input name="artworkFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                  <label><span data-copy="comingSoonAltEn"></span><input name="altEn" lang="en-CA" maxlength="200"></label>
+                  <label><span data-copy="comingSoonAltFr"></span><input name="altFr" lang="fr-CA" maxlength="200"></label>
+                  <button type="button" id="coming-soon-remove-art" class="ghost" data-copy="comingSoonRemoveArt" hidden></button>
+                </div></details>
+              </fieldset>
+              <div class="actions admin-form-actions"><button type="submit" data-copy="saveDraft"></button><a id="catalogue-preview-action" class="button ghost" data-copy="comingSoonDraftPreview" hidden></a><button type="button" id="catalogue-publish" data-copy="comingSoonPublish" hidden></button><a id="catalogue-public-action" class="button ghost" data-copy="comingSoonOpen" hidden></a><button type="button" id="catalogue-archive" class="ghost" data-copy="comingSoonArchive" hidden></button><button type="button" id="catalogue-reload" class="ghost" data-copy="catalogueReload" hidden></button></div>
             </form>
             <section id="catalogue-draft-preview" class="admin-editor" aria-labelledby="draft-preview-heading" hidden>
               <div class="admin-page-heading"><h4 id="draft-preview-heading" data-copy="comingSoonDraftPreview" tabindex="-1"></h4><a id="close-draft-preview" class="button ghost" href="/admin#coming-soon-admin" data-copy="comingSoonBackToCatalogue"></a></div>
               <label><span data-copy="comingSoonPreviewLocale"></span><select id="draft-preview-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
               <p id="draft-preview-revision"></p><div id="draft-preview-content"></div>
             </section>
-            <label class="admin-preview-search" hidden><span data-copy="comingSoonFind"></span><input id="coming-soon-admin-search" type="search" autocomplete="off"></label>
+            <div id="catalogue-browser">
+            <div class="catalogue-library-filters">
+              <label><span data-copy="comingSoonFind"></span><input id="coming-soon-admin-search" type="search" maxlength="120" autocomplete="off"></label>
+              <label><span data-copy="catalogueState"></span><select id="catalogue-state-filter"><option value="" data-copy="catalogueAllStates"></option><option value="draft" data-copy="comingSoonDraft"></option><option value="changed" data-copy="comingSoonUnpublishedEdit"></option><option value="published" data-copy="comingSoonPublished"></option><option value="archived" data-copy="comingSoonArchived"></option></select></label>
+              <label><span data-copy="comingSoonCategory"></span><select id="catalogue-category-filter"><option value="" data-copy="catalogueAllCategories"></option><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
+            </div>
+            <p id="catalogue-range" role="status"></p>
             <p id="coming-soon-admin-empty" hidden></p>
             <ul id="coming-soon-admin-list" class="coming-soon-admin-list"></ul>
+            <div class="actions" id="catalogue-pages" hidden><button type="button" id="catalogue-previous" class="ghost" data-copy="playerPrevious"></button><button type="button" id="catalogue-next" class="ghost" data-copy="playerNext"></button></div>
+            </div>
           </section>
           <section id="catalog-management" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="catalog-management-title" hidden>
             <div class="admin-page-heading">

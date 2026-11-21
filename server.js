@@ -716,6 +716,10 @@ async function api(req, res, path, tenantId, requestId) {
     staffContext(req, tenantId, catalogueRoles);
     return comingSoon.drafts(tenantId);
   }
+  if (route === 'GET /api/admin/coming-soon/index') {
+    staffContext(req, tenantId, catalogueRoles);
+    return comingSoon.draftIndex(tenantId, new URL(req.url, 'http://localhost').searchParams);
+  }
   if (route === 'POST /api/admin/coming-soon') {
     staffContext(req, tenantId, catalogueRoles);
     const input = await body(req, 96 * 1024);
