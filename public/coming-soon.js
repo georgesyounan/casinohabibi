@@ -7,8 +7,11 @@ export const comingSoonCopy = {
   comingSoonOpen: ['See preview', 'Voir l’aperçu'],
   comingSoonBack: ['Back to the lobby', 'Retour au hall'],
   comingSoonCatalogue: ['Coming Soon catalogue', 'Catalogue À venir'],
-  comingSoonAdminHelp: ['Save a draft in both languages. Publish it when it is ready for the lobby.', 'Enregistrez un brouillon dans les deux langues. Publiez-le quand il est prêt pour le hall.'],
+  comingSoonAdminHelp: ['Create a bilingual draft, then publish it to the lobby.', 'Rédigez le brouillon bilingue, puis publiez-le dans le hall.'],
   comingSoonNew: ['New preview', 'Nouvel aperçu'],
+  comingSoonFind: ['Find previews', 'Rechercher des aperçus'],
+  comingSoonNoDrafts: ['There are no previews yet.', 'Il n’y a aucun aperçu pour le moment.'],
+  comingSoonNoMatches: ['No previews match your search.', 'Aucun aperçu ne correspond à votre recherche.'],
   comingSoonTitleEn: ['English title', 'Titre anglais'],
   comingSoonTitleFr: ['French title', 'Titre français'],
   comingSoonDescriptionEn: ['English description', 'Description anglaise'],
@@ -50,18 +53,22 @@ const canEdit = ['operator_admin', 'operator_content', 'operator_provider'];
 const canPublish = ['operator_admin', 'operator_provider'];
 const canReviewSaves = ['operator_admin', 'operator_support'];
 const detailSlug = location.pathname.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
+const searchable = (text) => text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-export function createComingSoonUi({ api, t, element, action, isFrench, getFavorites, favoritePending, toggleFavorite, onChange }) {
+export function createComingSoonUi({ api, t, element, action, isFrench, getFavorites, favoritePending, toggleFavorite }) {
   const $ = (id) => document.getElementById(id);
   const form = $('coming-soon-form');
   const list = $('coming-soon-admin-list');
   const adminStatus = $('coming-soon-admin-status');
+  const newButton = $('coming-soon-new');
+  const search = $('coming-soon-admin-search');
   const saveForm = $('coming-soon-save-search');
   let lobby = { titles: [], featured: [], discover: [] };
   let preview;
   let detailLoaded = false;
   let staffRole;
   let drafts = [];
+  let draftsLoaded = false;
   let selected;
   let artwork = '';
   let saving = false;
@@ -118,11 +125,11 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
     const bySlug = new Map(lobby.titles.map((title) => [title.slug, title]));
     const stars = lobby.titles.filter((title) => isFavorite(title.favoriteKey));
     const normal = filter === 'all' && !search.trim();
-    const query = search.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    const query = searchable(search.trim());
     const filtered = normal ? [] : lobby.titles.filter((title) => {
       if (filter === 'recent' || (filter === 'favorites' && !isFavorite(title.favoriteKey))) return false;
       if (!['all', 'favorites'].includes(filter) && filter !== title.category) return false;
-      return [title.titleEn, title.titleFr, title.studio].join(' ').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(query);
+      return searchable([title.titleEn, title.titleFr, title.studio].join(' ')).includes(query);
     });
     if (filter === 'favorites') {
       const order = new Map([...getFavorites()].map((key, index) => [key, index]));
@@ -176,20 +183,33 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
     $('coming-soon-remove-art').hidden = !artwork;
   }
 
+  function openEditor(title) {
+    selectDraft(title);
+    form.hidden = false;
+    newButton.setAttribute('aria-expanded', 'true');
+    form.elements.titleEn.focus();
+  }
+
+  function closeEditor() {
+    form.hidden = true;
+    newButton.setAttribute('aria-expanded', 'false');
+    newButton.focus();
+  }
+
   function renderAdmin() {
     if (canEdit.includes(staffRole)) {
       $('coming-soon-edit-title').textContent = selected ? titleName(selected) : t('comingSoonNew');
-      const rows = drafts.map((title) => {
+      search.closest('label').hidden = drafts.length === 0;
+      const query = searchable(search.value.trim());
+      const matches = drafts.filter((title) => searchable([title.titleEn, title.titleFr, title.studio, title.slug].join(' ')).includes(query));
+      const rows = matches.map((title) => {
         const row = element('li', '', 'coming-soon-admin-row');
         const name = element('div');
         const status = title.state === 'published' && title.publishedVersion !== title.version
           ? `${stateText(title.state)} · ${t('comingSoonUnpublishedEdit')}` : stateText(title.state);
         name.append(element('strong', titleName(title)), element('small', status));
         const controls = element('div', '', 'actions');
-        controls.append(action(t('comingSoonEdit'), () => {
-          selectDraft(title);
-          form.elements.titleEn.focus();
-        }, 'ghost'));
+        controls.append(action(t('comingSoonEdit'), () => openEditor(title), 'ghost'));
         if (title.state === 'published') controls.append(linkTo(title, t('comingSoonOpen'), 'button ghost'));
         if (canPublish.includes(staffRole)) {
           if (title.state !== 'published' || title.publishedVersion !== title.version) {
@@ -200,6 +220,9 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
         row.append(name, controls);
         return row;
       });
+      const empty = $('coming-soon-admin-empty');
+      empty.hidden = !draftsLoaded || matches.length > 0;
+      empty.textContent = t(drafts.length ? 'comingSoonNoMatches' : 'comingSoonNoDrafts');
       list.replaceChildren(...rows);
     }
     if (canReviewSaves.includes(staffRole) && saves) {
@@ -223,12 +246,13 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
     }
   }
 
-  async function loadStaff(role) {
-    staffRole = role;
-    if (canReviewSaves.includes(role)) void loadSaves();
-    if (!canEdit.includes(role)) return;
+  async function loadDrafts(showLoading = true) {
+    if (!canEdit.includes(staffRole)) return;
+    if (showLoading) adminStatus.textContent = t('loading');
     try {
       drafts = await api('admin/coming-soon', undefined, 'GET');
+      draftsLoaded = true;
+      if (showLoading) adminStatus.textContent = '';
       renderAdmin();
     } catch (error) {
       adminStatus.textContent = t(error.message);
@@ -244,14 +268,17 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
     try {
       const result = await api('admin/coming-soon', { action: verb, slug: title?.slug, version: title?.version ?? 0, ...draft });
       drafts = [result.title, ...drafts.filter(({ slug }) => slug !== result.title.slug)];
+      if (verb === 'save') {
+        search.value = '';
+        closeEditor();
+      }
       if (verb === 'save' || title?.slug === selected?.slug) selectDraft(result.title);
       renderAdmin();
       const message = t({ save: 'comingSoonSaved', publish: 'comingSoonPublishedMessage', archive: 'comingSoonArchivedMessage' }[verb]);
       adminStatus.textContent = result.auditId ? `${message} ${t('comingSoonAuditRef').replace('{id}', result.auditId)}` : message;
-      onChange();
     } catch (error) {
       adminStatus.textContent = t(error.message);
-      if (error.message === 'comingSoonConflict') void loadStaff(staffRole);
+      if (error.message === 'comingSoonConflict') void loadDrafts(false);
     } finally {
       saving = false;
       submit.disabled = false;
@@ -277,10 +304,9 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
       adminStatus.textContent = t(error.message);
     }
   });
-  $('coming-soon-new').addEventListener('click', () => {
-    selectDraft(null);
-    form.elements.titleEn.focus();
-  });
+  newButton.addEventListener('click', () => openEditor(null));
+  $('coming-soon-close-editor').addEventListener('click', closeEditor);
+  search.addEventListener('input', renderAdmin);
   $('coming-soon-remove-art').addEventListener('click', () => {
     artwork = '';
     form.elements.artworkFile.value = '';
@@ -295,5 +321,8 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
     $('coming-soon-favorite-status').textContent = message;
   }
 
-  return { isDetail: Boolean(detailSlug), loadLobby, renderDetail, renderLobby, loadStaff, renderAdmin, favoriteStatus };
+  return {
+    isDetail: Boolean(detailSlug), loadLobby, renderDetail, renderLobby, loadDrafts, loadSaves, renderAdmin, favoriteStatus,
+    setStaffRole(role) { staffRole = role; }
+  };
 }

@@ -79,13 +79,7 @@ form[aria-busy=true] button[type=submit]::after{content:"";display:inline-block;
 @keyframes round-spin{to{transform:rotate(1turn)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.round-result,.reel-result,.hand-result,form[aria-busy=true] button[type=submit]::after{animation:none}}
 footer{border-top:1px solid var(--line);border-bottom:0;color:var(--muted);font-size:.85rem}
-.admin{padding-block:3rem;min-height:70vh}.admin h1{font-size:clamp(2.5rem,6vw,4rem)}
-.tenant-admin{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:1.25rem;margin-bottom:3rem;max-width:760px}
-.operator-overview{max-width:none}
-.overview-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
 .overview-period{display:flex;align-items:center;gap:.5rem;font-size:.85rem}
-.overview-heading h2{margin-top:0}
-.overview-heading p{max-width:60ch;color:var(--muted)}
 .overview-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem;margin:1.2rem 0}
 .overview-grid>div{padding:1rem;border:1px solid var(--line);border-radius:10px;background:linear-gradient(140deg,#17221b,#101713)}
 .overview-grid dt{color:var(--muted);font-size:.82rem}
@@ -105,8 +99,7 @@ footer{border-top:1px solid var(--line);border-bottom:0;color:var(--muted);font-
 .catalog-readiness small{color:var(--muted)}
 .readiness-link{color:var(--green);font-size:.88rem;font-weight:650;text-decoration:underline;text-underline-offset:.2em}
 #casino-settings,#catalog-management{scroll-margin-top:1rem}
-@media(max-width:610px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-heading{flex-direction:column}}
-.tenant-admin input[type=color]{height:3rem;padding:.25rem}
+@media(max-width:610px){.overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tenant-preview{max-width:28rem;margin-top:1.25rem;padding:1rem;border:1px solid var(--line);border-radius:11px;background:linear-gradient(125deg,#101713,#1b2920)}
 .tenant-preview>p{margin-bottom:.65rem;font-size:.88rem}
 .tenant-preview .eyebrow{color:var(--muted);font-size:.7rem}
@@ -141,7 +134,6 @@ fieldset legend{padding:0 .35rem;color:var(--green);font-weight:750}
 @media(max-width:610px){.managed-catalog-item{align-items:flex-start;flex-direction:column}}
 .lobby-announcement{margin:1.4rem 0 0;padding:.85rem 1.1rem;border:1px solid color-mix(in srgb,var(--green) 55%,var(--line));border-radius:10px;background:linear-gradient(110deg,#18251d,#121a15);color:var(--text);font-weight:650;line-height:1.5}
 .admin-session{display:flex;justify-content:space-between;align-items:center;padding-block:1rem;color:var(--muted)}
-#staff-login{max-width:620px;padding-block:3rem}
 .staff-list-item{display:flex;align-items:center;flex-wrap:wrap;gap:.55rem;margin-block:.55rem}
 .staff-role-control{display:flex;align-items:center;gap:.4rem;color:var(--muted);font-size:.82rem}
 .staff-role-control select{padding:.35rem .5rem;font-size:.85rem}
@@ -186,12 +178,9 @@ label{display:grid;gap:.3rem}
 input,select,textarea{color:var(--text);background:var(--bg);border:1px solid var(--line);padding:.65rem;border-radius:7px;width:100%}
 textarea{font: .9rem/1.5 ui-monospace,monospace;resize:vertical}
 .json-example{max-width:28rem;margin:0;padding:1rem;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#0c120e;color:#d6e6d4;font: .82rem/1.5 ui-monospace,monospace;white-space:pre}
-.catalog-admin{border-top:1px solid var(--line);padding-top:2rem;margin-top:3rem}
 .sample-catalog-panel{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin:1rem 0;padding:1rem;border:1px solid #45533e;border-radius:10px;background:linear-gradient(110deg,#1a2920,#17211a)}
 .sample-catalog-panel p{max-width:58ch;margin:0;font-size:.88rem}
 .sample-catalog-panel [role=status]{flex-basis:100%;color:var(--green)}
-.catalog-admin h2{margin-bottom:.75rem}
-.support-inbox{max-width:920px}
 .support-controls{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(8rem,1fr));gap:1rem;margin-block:1rem}
 .support-controls label{font-size:.85rem}
 .complaint-badge{display:inline-block;width:max-content;padding:.15rem .55rem;border:1px solid #b87837;border-radius:999px;color:#f0c66e;font-size:.78rem}

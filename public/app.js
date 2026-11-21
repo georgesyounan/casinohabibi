@@ -1,8 +1,11 @@
 import { games } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
+import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
+const isAdminPage = location.pathname === '/admin';
 const copy = {
   ...comingSoonCopy,
+  ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
   skipToContent: ['Skip to main content', 'Passer au contenu principal'],
@@ -433,7 +436,7 @@ async function api(path, data, method = 'POST') {
 function applyTenant(config) {
   tenantBrandName = config.brandName;
   tenantFeaturedGameIds = Array.isArray(config.featuredGameIds) ? config.featuredGameIds : ['gold', 'roulette'];
-  renderFeaturedGameEditor(tenantFeaturedGameIds);
+  if (savedTenantDraftSignature === undefined) renderFeaturedGameEditor(tenantFeaturedGameIds);
   const favicon = $('#tenant-favicon');
   favicon.href = config.brandFavicon || '/favicon.svg';
   if (config.brandFavicon) favicon.type = config.brandFavicon.startsWith('data:image/png;') ? 'image/png' : 'image/webp';
@@ -626,7 +629,8 @@ function tenantConfigSignature(config) {
 }
 
 function updateDocumentTitle() {
-  document.title = language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
+  document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
+    : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
 
@@ -1528,12 +1532,24 @@ const comingSoonUi = createComingSoonUi({
   isFrench: () => Boolean(language),
   getFavorites: () => favorites,
   favoritePending: () => favoriteSavePending,
-  toggleFavorite,
-  onChange() {
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
-    if (currentStaffRole === 'operator_admin') refreshStaffAudit().catch(() => {});
-  }
+  toggleFavorite
 });
+
+const adminLoaders = {
+  overview: () => refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); }),
+  'coming-soon-admin': comingSoonUi.loadDrafts,
+  'coming-soon-saves': comingSoonUi.loadSaves,
+  'catalog-management': refreshManagedCatalog,
+  'support-inbox': () => { if (!supportInboxEntries) void refreshSupportInbox(); },
+  'casino-settings': () => { if (savedTenantDraftSignature === undefined) void requestTenantDraft(); },
+  'staff-management': () => refreshStaffList().catch((error) => { $('#staff-status').textContent = t(error.message); }),
+  'audit-log': () => refreshStaffAudit().catch((error) => { $('#staff-audit-summary').textContent = t(error.message); })
+};
+const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => {
+  const load = adminLoaders[panel] || adminLoaders[view];
+  if (load) void load();
+});
+
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
@@ -1541,8 +1557,9 @@ function render() {
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
-  $('#skip-link').href = location.pathname === '/admin' ? '#admin' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
+  $('#skip-link').href = isAdminPage ? '#admin' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
+  if (languageChanged) adminWorkspace.syncPicker();
   updateStaffRoleHelp();
   const announcement = $('#lobby-announcement');
   announcement.textContent = t('announcement');
@@ -1572,9 +1589,15 @@ function render() {
   if (supportInboxEntries) renderSupportInbox();
   if ($('#dialog').open) renderDialog();
   updateSessionReminder();
-  if (currentStaffId) refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
-  if (['operator_admin', 'operator_provider'].includes(currentStaffRole)) refreshManagedCatalog();
+  if (latestOverview) renderOperatorOverview(latestOverview);
+  if (languageChanged && adminWorkspace.isOpen('catalog-management')) void refreshManagedCatalog();
 }
+
+$('#skip-link').addEventListener('click', (event) => {
+  if (!isAdminPage || !currentStaffId) return;
+  event.preventDefault();
+  adminWorkspace.focusCurrent();
+});
 
 $('#language').addEventListener('click', async () => {
   const previousLanguage = language;
@@ -1715,9 +1738,10 @@ function updateCatalogPreview() {
 async function refreshManagedCatalog() {
   const status = $('#catalog-list-status');
   const container = $('#managed-catalog');
-  status.textContent = '';
+  status.textContent = t('loading');
   try {
-    const listings = await api('providers/catalog/list', undefined, 'POST');
+    const listings = await api('providers/catalog/list', {});
+    status.textContent = '';
     if (!listings.length) {
       container.replaceChildren(element('p', t('catalogListingsEmpty')));
       return;
@@ -1732,7 +1756,6 @@ async function refreshManagedCatalog() {
         try {
           await api('providers/catalog/status', { name: listing.name, externalId: listing.externalId, enabled: !listing.enabled });
           await refreshManagedCatalog();
-          await refreshOperatorOverview();
           status.textContent = t('catalogListingUpdated');
         } catch (error) {
           status.textContent = t(error.message);
@@ -1812,7 +1835,7 @@ $('#load-sample-catalog').addEventListener('click', async () => {
       return;
     }
     catalogReview = { signature, result: preview };
-    const providers = await api('providers/list');
+    const providers = await api('providers/list', {});
     $('#providers').replaceChildren(...providers.map((provider) => element('li', provider.name + ' · ••••••••')));
     providerStatus = 'sampleProviderReady';
     $('#provider-status').textContent = t(providerStatus);
@@ -1870,10 +1893,6 @@ $('#catalog-sync').addEventListener('submit', async (event) => {
   button.disabled = true;
   try {
     const response = await api('providers/catalog', { name: name.trim(), games: imported, expectedRevision });
-    providerGames = await api('games', undefined, 'GET');
-    renderCatalog();
-    await refreshManagedCatalog();
-    await refreshOperatorOverview();
     $('#catalog-status').textContent = t('synced') + ' · ' + response.imported;
     catalogReview = undefined;
     updateCatalogPreview();
@@ -1908,8 +1927,7 @@ async function loadTenantDraft() {
     form.elements[`faq${index}QuestionFr`].value = item.questionFr;
     form.elements[`faq${index}AnswerFr`].value = item.answerFr;
   });
-  tenantFeaturedGameIds = Array.isArray(draft.config.featuredGameIds) ? draft.config.featuredGameIds : ['gold', 'roulette'];
-  renderFeaturedGameEditor(tenantFeaturedGameIds);
+  renderFeaturedGameEditor(Array.isArray(draft.config.featuredGameIds) ? draft.config.featuredGameIds : ['gold', 'roulette']);
   form.elements.termsUrlEn.value = draft.config.termsUrlEn || '';
   form.elements.termsUrlFr.value = draft.config.termsUrlFr || '';
   form.elements.privacyUrlEn.value = draft.config.privacyUrlEn || '';
@@ -1917,6 +1935,8 @@ async function loadTenantDraft() {
   form.elements.footerTextEn.value = draft.config.footerTextEn || copy.disclaimer[0];
   form.elements.footerTextFr.value = draft.config.footerTextFr || copy.disclaimer[1];
   savedTenantDraftSignature = tenantConfigSignature();
+  $('#tenant-config-fields').disabled = false;
+  $('#save-config').disabled = false;
   updateTenantPreview();
   $('#tenant-config-status').textContent = `v${draft.version}`;
 }
@@ -1973,10 +1993,21 @@ $('#remove-brand-favicon').addEventListener('click', () => {
   $('#brand-favicon-file').value = '';
   updateTenantPreview();
 });
-$('#load-config').addEventListener('click', async () => {
+async function requestTenantDraft() {
+  const button = $('#load-config');
+  if (button.disabled) return;
+  button.disabled = true;
+  $('#tenant-config-status').textContent = t('loading');
   try { await loadTenantDraft(); }
   catch (error) { $('#tenant-config-status').textContent = t(error.message); }
-});
+  finally { button.disabled = false; }
+}
+$('#load-config').addEventListener('click', requestTenantDraft);
+$('#tenant-config').addEventListener('invalid', (event) => {
+  const panel = event.target.closest('[data-admin-panel]');
+  const firstInvalid = event.currentTarget.querySelector('input:invalid, textarea:invalid, select:invalid');
+  if (panel?.hidden && event.target === firstInvalid) adminWorkspace.open(panel.id, false);
+}, true);
 $('#tenant-config').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -2004,17 +2035,18 @@ $('#tenant-config').addEventListener('submit', async (event) => {
     savedTenantDraftSignature = tenantConfigSignature(config);
     updateTenantPreview();
     $('#tenant-config-status').textContent = `${t('draftSaved')} v${result.version}`;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
 });
-$('#publish-config').addEventListener('click', async () => {
+$('#publish-config').addEventListener('click', async (event) => {
+  event.currentTarget.disabled = true;
   try {
     const result = await api('admin/config/publish', {});
+    savedTenantDraftSignature = null;
     const published = await api('tenant', undefined, 'GET');
     applyTenant(published.config);
     $('#tenant-config-status').textContent = `${t('configPublished')} v${result.version}`;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
+  finally { updateTenantPreview(); }
 });
 
 async function refreshStaffList() {
@@ -2172,6 +2204,7 @@ function supportPlayerIdentity(ticket) {
 function renderSupportInbox() {
   if (!supportInboxEntries) return;
   const container = $('#support-tickets');
+  const openTicket = container.querySelector('details[data-ticket-id][open]')?.dataset.ticketId;
   const status = $('#support-inbox-status');
   const summary = $('#support-summary');
   const query = $('#support-search').value.trim().toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
@@ -2219,10 +2252,18 @@ function renderSupportInbox() {
     return;
   }
   container.replaceChildren(...tickets.map((ticket) => {
-    const article = element('article', '', 'support-ticket');
+    const details = element('details', '', 'support-ticket');
+    details.dataset.ticketId = String(ticket.id);
+    details.name = 'admin-support-ticket';
+    details.open = details.dataset.ticketId === openTicket;
     const playerIdentity = supportPlayerIdentity(ticket);
-    article.append(element('h3', `#${ticket.id} · ${playerIdentity}`));
-    article.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
+    const summary = element('summary');
+    const brief = element('span', '', 'support-ticket-summary');
+    brief.append(element('strong', `#${ticket.id} · ${playerIdentity}`));
+    brief.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
+    summary.append(brief);
+    const article = element('div', '', 'support-ticket-body');
+    details.append(summary, article);
     if (ticket.isComplaint) article.append(element('strong', t('supportComplaintBadge'), 'complaint-badge'));
     if (!ticket.isComplaint && ticket.category === 'responsible_play') {
       const locale = language ? 'fr-CA' : 'en-CA';
@@ -2376,13 +2417,13 @@ function renderSupportInbox() {
       }, 'ghost');
       article.append(closeWithoutReply);
     }
-    return article;
+    return details;
   }));
 }
 
 async function refreshSupportInbox(restart = false) {
   const status = $('#support-inbox-status');
-  status.textContent = '';
+  status.textContent = t('loading');
   try {
     const targetPageCount = restart ? 1 : Math.max(supportInboxPageCount, 1);
     supportInboxTeam = await api('admin/support/team', undefined, 'GET');
@@ -2405,6 +2446,7 @@ async function refreshSupportInbox(restart = false) {
     supportInboxPageCount = pagesLoaded;
     supportInboxHasMore = cursor !== null;
     renderSupportInbox();
+    status.textContent = '';
     return true;
   } catch (error) {
     status.textContent = t(error.message);
@@ -2447,8 +2489,12 @@ async function refreshOperatorOverview() {
   $('#overview-export').disabled = true;
   const requestedDays = Number($('#overview-period').value);
   const overview = await api(`admin/overview?days=${requestedDays}`, undefined, 'GET');
+  if (requestedDays !== Number($('#overview-period').value)) return;
   latestOverview = overview;
   $('#overview-export').disabled = false;
+  renderOperatorOverview(overview);
+}
+function renderOperatorOverview(overview) {
   $('#overview-showcase-note').hidden = !overview.showcaseDataLoaded;
   $('#overview-showcase-prompt').hidden = Boolean(overview.showcaseDataLoaded || overview.playerAccounts > 0);
   const locale = language ? 'fr-CA' : 'en-CA';
@@ -2472,7 +2518,7 @@ async function refreshOperatorOverview() {
   const catalogReady = overview.enabledCatalogListings > 0;
   $('#overview-catalog-readiness').textContent = t(catalogReady ? 'overviewCatalogReady' : 'overviewCatalogEmpty');
   const catalogLink = $('#catalog-readiness-link');
-  catalogLink.href = catalogReady ? '#catalog-management' : '#provider-tools';
+  catalogLink.href = catalogReady ? '#catalog-management' : '#catalog-import';
   catalogLink.textContent = t(catalogReady ? 'goToCatalogManagement' : 'goToCatalogSetup');
   const brandingStatus = overview.configNeedsPublish ? 'overviewBrandingPending' : 'overviewBrandingReady';
   $('#overview-branding-readiness').textContent = t(brandingStatus).replace('{version}', number.format(overview.publishedConfigVersion));
@@ -2577,7 +2623,7 @@ $('#overview-period').addEventListener('change', () => {
 });
 $('#overview-export').addEventListener('click', exportOperatorOverview);
 
-function showStaffSession(session) {
+function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
   currentStaffId = session.id;
   currentStaffRole = session.role;
@@ -2589,18 +2635,12 @@ function showStaffSession(session) {
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
   $('#staff-identity').textContent = `${session.email} · ${staffRoleLabel(session.role)}`;
-  for (const section of document.querySelectorAll('[data-roles]')) section.hidden = !section.dataset.roles.split(',').includes(session.role);
-  void comingSoonUi.loadStaff(session.role);
-  refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
-  if (['operator_admin', 'operator_provider'].includes(session.role)) refreshManagedCatalog();
+  comingSoonUi.setStaffRole(session.role);
   $('#mfa-setup').hidden = session.mfaEnabled;
   $('#mfa-verify').hidden = false;
   $('#mfa-verify').querySelector('button[type=submit]').hidden = session.mfaEnabled;
   $('#mfa-disable').hidden = !session.mfaEnabled;
-  if (session.role === 'operator_admin') refreshStaffList().catch((error) => { $('#staff-status').textContent = t(error.message); });
-  if (session.role === 'operator_admin') refreshStaffAudit().catch(() => {});
-  if (['operator_admin', 'operator_support'].includes(session.role)) refreshSupportInbox();
-  if (['operator_admin', 'operator_content'].includes(session.role)) loadTenantDraft().catch(() => {});
+  adminWorkspace.setRole(session.role, focus);
 }
 $('#staff-login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -2613,7 +2653,7 @@ $('#staff-login-form').addEventListener('submit', async (event) => {
   $('#staff-login-status').textContent = '';
   try {
     const session = await api('admin/login', { email, password, code });
-    showStaffSession(session);
+    showStaffSession(session, true);
     form.reset();
     $('#staff-login-status').textContent = '';
   } catch (error) { $('#staff-login-status').textContent = t(error.message); }
@@ -2646,18 +2686,16 @@ $('#staff-password-form').addEventListener('submit', async (event) => {
     button.disabled = false;
   }
 });
-$('#staff-logout').addEventListener('click', async () => {
-  await api('admin/logout', {});
-  currentStaffEmail = undefined;
-  currentStaffId = undefined;
-  currentStaffRole = undefined;
-  currentStaffMfaEnabled = false;
-  currentMfaSetupUri = undefined;
-  $('#mfa-secret').hidden = true;
-  $('#mfa-copy-setup').hidden = true;
-  $('#mfa-status').textContent = '';
-  $('#admin-tools').hidden = true;
-  $('#staff-login').hidden = false;
+$('#staff-logout').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await api('admin/logout', {});
+    location.reload();
+  } catch (error) {
+    $('#admin-session-status').textContent = t(error.message);
+    button.disabled = false;
+  }
 });
 $('#staff-search').addEventListener('input', renderStaffList);
 $('#staff-filter-role').addEventListener('change', renderStaffList);
@@ -2806,7 +2844,6 @@ $('#mfa-verify').addEventListener('submit', async (event) => {
     $('#mfa-verify').querySelector('button[type=submit]').hidden = true;
     $('#mfa-disable').hidden = false;
     currentStaffMfaEnabled = true;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 $('#mfa-disable').addEventListener('click', async () => {
@@ -2822,11 +2859,11 @@ $('#mfa-disable').addEventListener('click', async () => {
     $('#mfa-secret').hidden = true;
     currentMfaSetupUri = undefined;
     currentStaffMfaEnabled = false;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 
-const isAdminPage = location.pathname === '/admin';
+document.body.classList.toggle('admin-route', isAdminPage);
+$('#admin-view-lobby').hidden = !isAdminPage;
 $('#lobby').hidden = isAdminPage || comingSoonUi.isDetail;
 $('#admin').hidden = !isAdminPage;
 $('#coming-soon-detail').hidden = !comingSoonUi.isDetail;
@@ -2846,30 +2883,29 @@ try {
 } catch {
   // Use the shared default brand if tenant settings are unavailable.
 }
-try {
-  providerGames = await api('games', undefined, 'GET');
+if (!isAdminPage) {
+  try { providerGames = await api('games', undefined, 'GET'); }
+  catch { /* Keep the local catalogue available. */ }
   renderCatalog();
-} catch {
-  renderCatalog();
-}
-try {
-  player = await api('account', undefined, 'GET');
-  if (player) {
-    const favoritesSynced = await adoptAccountFavorites(player);
-    if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
+  try {
+    player = await api('account', undefined, 'GET');
+    if (player) {
+      const favoritesSynced = await adoptAccountFavorites(player);
+      if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
+    }
+    playerSessionStartedAt = player?.sessionStartedAt;
+    if (player?.preferredLocale) {
+      language = player.preferredLocale === 'fr-CA' ? 1 : 0;
+      localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+    }
+    updateAccount();
+    render();
+  } catch {
+    // The catalogue remains available when the account service is offline.
   }
-  playerSessionStartedAt = player?.sessionStartedAt;
-  if (player?.preferredLocale) {
-    language = player.preferredLocale === 'fr-CA' ? 1 : 0;
-    localStorage.setItem('northplay-language', language ? 'fr' : 'en');
-  }
-  updateAccount();
-  render();
-} catch {
-  // The catalogue remains available when the account service is offline.
+  window.setInterval(updateSessionReminder, 60_000);
+  updateSessionReminder();
+  if (resetToken) openPanel('passwordReset');
+  else if (verifyToken) openPanel('emailVerification');
+  else if (emailChangeToken) openPanel('emailChange');
 }
-window.setInterval(updateSessionReminder, 60_000);
-updateSessionReminder();
-if (resetToken) openPanel('passwordReset');
-else if (verifyToken) openPanel('emailVerification');
-else if (emailChangeToken) openPanel('emailChange');
