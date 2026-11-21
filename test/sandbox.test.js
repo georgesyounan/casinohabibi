@@ -12,7 +12,7 @@ import test from 'node:test';
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
-async function startSandbox(t, { initializeDatabase, appBasePath = '' } = {}) {
+async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '' } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
@@ -28,6 +28,7 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '' } = {}) {
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
       PROVIDER_KEY_ENCRYPTION: randomBytes(32).toString('hex'), SECURE_COOKIES: '0',
+      SANDBOX_TENANT_HOSTS: sandboxTenantHosts,
       APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: ''
     }
   });
@@ -60,12 +61,13 @@ function client(base, cookies = new Map()) {
       },
       body: payload === undefined ? undefined : JSON.stringify(payload)
     });
-    for (const cookie of response.headers.getSetCookie()) {
+    const setCookies = response.headers.getSetCookie();
+    for (const cookie of setCookies) {
       const [key, value] = cookie.split(';')[0].split('=');
       if (value) cookies.set(key, value);
       else cookies.delete(key);
     }
-    return { status: response.status, data: await response.json(), requestId: response.headers.get('x-request-id') };
+    return { status: response.status, data: await response.json(), requestId: response.headers.get('x-request-id'), setCookies };
   };
 }
 
@@ -246,7 +248,13 @@ test('local startup migrates a non-tenant ledger and preserves existing player p
 
 test('published routes work under a directory and behind a prefix-stripping proxy', async (t) => {
   const mount = '/casinohabibi';
-  const { base } = await startSandbox(t, { appBasePath: `${mount}/` });
+  const host = 'demo.example.test';
+  const { base, database } = await startSandbox(t, { appBasePath: `${mount}/`, sandboxTenantHosts: ' Demo.Example.test , www.demo.example.test ' });
+  const db = new DatabaseSync(database, { readOnly: true });
+  try {
+    const aliases = db.prepare('SELECT host, tenant_id as tenant, verified FROM tenant_domains WHERE host IN (?, ?) ORDER BY host').all(host, `www.${host}`);
+    assert.deepEqual(aliases.map(({ host, tenant, verified }) => [host, tenant, verified]), [[host, 'sandbox', 1], [`www.${host}`, 'sandbox', 1]]);
+  } finally { db.close(); }
   const published = base + mount;
   const redirect = await fetch(`${published}?lang=fr`, { redirect: 'manual' });
   assert.equal(redirect.status, 308);
@@ -267,14 +275,28 @@ test('published routes work under a directory and behind a prefix-stripping prox
   assert.match(await css.text(), /url\('hero\.webp'\)/);
   assert.equal((await fetch(published + '/hero.webp')).status, 200);
   assert.equal((await fetch(published + '/admin-workspace.js')).status, 200);
+  const cookieHasMount = (cookie) => cookie.includes(`; Path=${mount};`);
+  const guestLobby = await fetch(published + '/api/coming-soon');
+  assert.equal(guestLobby.status, 200);
+  assert.ok(guestLobby.headers.getSetCookie().some(cookieHasMount));
   const staff = client(published);
-  assert.equal((await staff('admin/login', staffCredentials)).status, 200);
+  const staffSession = await staff('admin/login', staffCredentials);
+  assert.equal(staffSession.status, 200);
+  assert.ok(staffSession.setCookies.some(cookieHasMount));
   assert.equal((await staff('admin/overview')).status, 200);
+  const staffLogout = await staff('admin/logout', {});
+  assert.equal(staffLogout.status, 200);
+  assert.ok(staffLogout.setCookies.some(cookieHasMount));
   const player = client(published);
   const registration = await player('signup', playerCredentials);
   assert.equal(registration.status, 200);
   const verification = new URL(registration.data.verifyUrl);
   assert.equal(verification.pathname, mount + '/');
   assert.equal((await player('email-verification/complete', { token: verification.searchParams.get('verify') })).status, 200);
-  assert.equal((await player('login', playerCredentials)).status, 200);
+  const playerSession = await player('login', playerCredentials);
+  assert.equal(playerSession.status, 200);
+  assert.ok(playerSession.setCookies.some(cookieHasMount));
+  const playerLogout = await player('logout', {});
+  assert.equal(playerLogout.status, 200);
+  assert.ok(playerLogout.setCookies.some(cookieHasMount));
 });

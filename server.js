@@ -21,6 +21,7 @@ const resetEmailFrom = process.env.RESET_EMAIL_FROM || '';
 const publicSite = process.env.PUBLIC_BASE_URL ? new URL(process.env.PUBLIC_BASE_URL) : null;
 const appBasePath = (process.env.APP_BASE_PATH ?? publicSite?.pathname ?? '').replace(/\/$/, '');
 if (!/^(?:\/[a-zA-Z0-9_-]+)*$/.test(appBasePath)) throw new Error('APP_BASE_PATH must contain only URL directory segments');
+const cookiePath = appBasePath || '/';
 const publicBaseUrl = publicSite ? `${publicSite.origin}${appBasePath}` : '';
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535');
 if (process.env.SECURE_COOKIES !== undefined && !['0', '1'].includes(process.env.SECURE_COOKIES)) throw new Error('SECURE_COOKIES must be 0 or 1');
@@ -157,6 +158,18 @@ if (!db.prepare("SELECT 1 FROM tenant_config_versions WHERE tenant_id = 'sandbox
 for (const host of ['localhost', '127.0.0.1']) {
   db.prepare("INSERT OR IGNORE INTO tenant_domains(host, tenant_id, verified) VALUES (?, 'sandbox', 1)").run(host);
 }
+const sandboxHosts = (process.env.SANDBOX_TENANT_HOSTS || '').split(',').map((host) => host.trim().toLowerCase()).filter(Boolean);
+if (sandboxHosts.length) transaction(() => {
+  const hostPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$/;
+  const findHost = db.prepare('SELECT tenant_id AS tenant FROM tenant_domains WHERE host = ?');
+  const addHost = db.prepare("INSERT OR IGNORE INTO tenant_domains(host, tenant_id, verified, verified_at) VALUES (?, 'sandbox', 1, ?)");
+  for (const host of sandboxHosts) {
+    if (!hostPattern.test(host)) throw new Error('SANDBOX_TENANT_HOSTS must contain valid hostnames');
+    const existing = findHost.get(host);
+    if (existing && existing.tenant !== 'sandbox') throw new Error(`Configured sandbox host ${host} is already assigned to another tenant`);
+    addHost.run(host, Date.now());
+  }
+});
 for (const table of ['players', 'sessions', 'ledger', 'providers', 'provider_events', 'game_catalog']) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some(({ name }) => name === 'tenant_id')) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'sandbox'`);
@@ -534,7 +547,7 @@ async function api(req, res, path, tenantId, requestId) {
   if (req.method !== 'GET' && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   if (route === 'GET /api/coming-soon') {
     const seed = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1] || randomBytes(16).toString('hex');
-    res.setHeader('Set-Cookie', `northplay_visit=${seed}; Path=/; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
+    res.setHeader('Set-Cookie', `northplay_visit=${seed}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
     return comingSoon.lobby(tenantId, seed);
   }
   const preview = route.match(/^GET \/api\/coming-soon\/([a-z0-9-]{1,64})$/);
@@ -574,7 +587,7 @@ async function api(req, res, path, tenantId, requestId) {
     const token = randomBytes(32).toString('hex');
     db.prepare('INSERT INTO staff_sessions(token, tenant_id, staff_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), tenantId, staff.id, Date.now() + 8 * 60 * 60 * 1000, Date.now());
     db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_login', ?, ?, ?)").run(tenantId, staff.id, 'session', Date.now(), requestId);
-    res.setHeader('Set-Cookie', `northplay_staff=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secureCookie}`);
+    res.setHeader('Set-Cookie', `northplay_staff=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=28800${secureCookie}`);
     return { id: staff.id, email: email.trim().toLowerCase(), role: membership.role, mfaEnabled: Boolean(staff.mfa_enabled) };
   }
   if (route === 'GET /api/admin/session') {
@@ -645,7 +658,7 @@ async function api(req, res, path, tenantId, requestId) {
       if (staff) db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_logout', ?, ?, ?)").run(tenantId, staff.staff_id, 'session', Date.now(), requestId);
       db.prepare('DELETE FROM staff_sessions WHERE token = ? AND tenant_id = ?').run(hash(staffCookie), tenantId);
     }
-    res.setHeader('Set-Cookie', `northplay_staff=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
+    res.setHeader('Set-Cookie', `northplay_staff=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
     return null;
   }
   if (['POST /api/admin/mfa/setup', 'POST /api/admin/mfa/enable', 'POST /api/admin/mfa/disable'].includes(route)) {
@@ -1315,12 +1328,12 @@ async function api(req, res, path, tenantId, requestId) {
     if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
     const sessionStartedAt = Date.now();
     db.prepare('INSERT INTO sessions(token, player, expires, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), row.id, sessionStartedAt + 86400000, tenantId, sessionStartedAt);
-    res.setHeader('Set-Cookie', `northplay=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${secureCookie}`);
+    res.setHeader('Set-Cookie', `northplay=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=86400${secureCookie}`);
     return { ...account(row.id, tenantId), sessionStartedAt };
   }
   if (route === 'POST /api/logout') {
     if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
-    res.setHeader('Set-Cookie', `northplay=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
+    res.setHeader('Set-Cookie', `northplay=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
     return null;
   }
   if (route === 'POST /api/safety/pause' || route === 'POST /api/safety/exclude') {
@@ -1335,7 +1348,7 @@ async function api(req, res, path, tenantId, requestId) {
       );
       if (route.endsWith('/exclude')) db.prepare('DELETE FROM sessions WHERE player = ? AND tenant_id = ?').run(player, tenantId);
     });
-    if (route.endsWith('/exclude')) res.setHeader('Set-Cookie', `northplay=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
+    if (route.endsWith('/exclude')) res.setHeader('Set-Cookie', `northplay=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
     return { pausedUntil: pauseUntil, excluded: route.endsWith('/exclude') };
   }
   if (route === 'POST /api/safety/cooling-off') {
