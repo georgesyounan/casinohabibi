@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
+import { configureTransactionalEmail } from './lib/transactional-email.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
@@ -19,9 +20,7 @@ const encryptionKeyValue = process.env.PROVIDER_KEY_ENCRYPTION || '';
 const bootstrapEmailValue = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
 const bootstrapPasswordValue = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 const platformAdminTokenValue = process.env.PLATFORM_ADMIN_TOKEN;
-const resetEmailApiKey = process.env.RESET_EMAIL_API_KEY || '';
-const resetEmailFrom = process.env.RESET_EMAIL_FROM || '';
-const publicSite = process.env.PUBLIC_BASE_URL ? new URL(process.env.PUBLIC_BASE_URL) : null;
+const { site: publicSite, enabled: mailEnabled, deliver: deliverTransactionalEmail } = configureTransactionalEmail(process.env);
 const appBasePath = (process.env.APP_BASE_PATH ?? publicSite?.pathname ?? '').replace(/\/$/, '');
 if (!/^(?:\/[a-zA-Z0-9_-]+)*$/.test(appBasePath)) throw new Error('APP_BASE_PATH must contain only URL directory segments');
 const cookiePath = appBasePath || '/';
@@ -34,14 +33,13 @@ if (bootstrapEmailValue && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(bootstrapEmailValu
 if (bootstrapPasswordValue && (bootstrapPasswordValue.length < 12 || bootstrapPasswordValue.length > 128)) throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be between 12 and 128 characters');
 if (bootstrapEmailValue && !encryptionKeyValue) throw new Error('PROVIDER_KEY_ENCRYPTION is required when bootstrapping an operator admin');
 if (platformAdminTokenValue && platformAdminTokenValue.length < 32) throw new Error('PLATFORM_ADMIN_TOKEN must be at least 32 characters');
-if ((resetEmailApiKey || resetEmailFrom || publicBaseUrl) && (!resetEmailApiKey || !/^[^<>\s]+@[^<>\s]+$/.test(resetEmailFrom) || !/^https:\/\//.test(publicBaseUrl))) throw new Error('Configure RESET_EMAIL_API_KEY, valid RESET_EMAIL_FROM, and HTTPS PUBLIC_BASE_URL together');
 if (appEnvironment !== 'development') {
   if (!process.env.DATA_DIR) throw new Error(`DATA_DIR must be explicitly set for ${appEnvironment}`);
   if (!process.env.HOST) throw new Error(`HOST must be explicitly set for ${appEnvironment}`);
   if (process.env.SECURE_COOKIES !== '1') throw new Error(`SECURE_COOKIES=1 is required for ${appEnvironment}`);
   if (!encryptionKeyValue) throw new Error(`PROVIDER_KEY_ENCRYPTION is required for ${appEnvironment}`);
   if (!bootstrapEmailValue && !platformAdminTokenValue) throw new Error(`Configure a bootstrap operator admin or PLATFORM_ADMIN_TOKEN for ${appEnvironment}`);
-  if (!resetEmailApiKey) throw new Error(`RESET_EMAIL_API_KEY, RESET_EMAIL_FROM, and PUBLIC_BASE_URL are required for ${appEnvironment}`);
+  if (!mailEnabled) throw new Error(`A transactional email transport is required for ${appEnvironment}`);
 }
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const environmentMarker = join(dataDir, '.northplay-environment');
@@ -494,26 +492,15 @@ function limitAuthAttempts(req, route) {
   }
 }
 
-async function deliverTransactionalEmail(to, subject, text, deliveryId) {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${resetEmailApiKey}`, 'Content-Type': 'application/json',
-      ...(deliveryId && { 'Idempotency-Key': deliveryId }) },
-    signal: AbortSignal.timeout(12_000),
-    body: JSON.stringify({ from: resetEmailFrom, to: [to], subject, text })
-  });
-  if (!response.ok) throw new Error('Transactional email delivery failed');
-}
-
 function localRecoveryPreview(req) {
   const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'];
-  return appEnvironment === 'development' && !secureCookie && !resetEmailApiKey && loopback.includes(host) &&
+  return appEnvironment === 'development' && !secureCookie && !mailEnabled && loopback.includes(host) &&
     (loopback.includes(req.socket.remoteAddress) || req.socket.remoteAddress === '::ffff:127.0.0.1') &&
     loopback.includes(new URL('http://' + req.headers.host).hostname);
 }
 
 function requireEmailDelivery(req) {
-  if (!resetEmailApiKey && !localRecoveryPreview(req)) fail(503, 'recoveryDeliveryUnavailable');
+  if (!mailEnabled && !localRecoveryPreview(req)) fail(503, 'recoveryDeliveryUnavailable');
 }
 
 function playerLinkBase(req, tenantId) {
@@ -525,7 +512,7 @@ function playerLinkBase(req, tenantId) {
 
 async function sendPasswordReset(req, tenantId, email, locale, rawToken, deliveryId) {
   const url = `${playerLinkBase(req, tenantId)}/?reset=${rawToken}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
-  if (resetEmailApiKey) {
+  if (mailEnabled) {
     const french = locale === 'fr-CA';
     await deliverTransactionalEmail(email, french ? 'Réinitialisation de votre mot de passe' : 'Reset your password',
       french ? `Utilisez ce lien dans les 30 prochaines minutes pour réinitialiser votre mot de passe. ${url}`
@@ -545,7 +532,7 @@ async function issuePlayerEmailVerification(req, playerId, tenantId, email, loca
     db.prepare('INSERT INTO player_email_verifications(token_hash, tenant_id, player_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), tenantId, playerId, now + 24 * 60 * 60 * 1000, now);
   });
   const verifyUrl = `${playerLinkBase(req, tenantId)}/?verify=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
-  if (resetEmailApiKey) {
+  if (mailEnabled) {
     const french = locale === 'fr-CA';
     try {
       await deliverTransactionalEmail(email,
@@ -749,13 +736,22 @@ async function api(req, res, path, tenantId, requestId) {
     const target = db.prepare(`SELECT p.email FROM player_password_resets r JOIN players p ON p.id = r.player_id AND p.tenant_id = r.tenant_id
       WHERE r.token_hash = ? AND r.player_id = ? AND r.tenant_id = ? AND r.expires > ? AND p.access_status = 'active'`).get(tokenHash, id, tenantId, Date.now());
     if (!target) return { ...result, delivery: 'expired' };
+    const lease = Date.now();
+    const claim = db.prepare("UPDATE player_recovery_deliveries SET claimed_at = ? WHERE audit_id = ? AND delivery = 'pending' AND (claimed_at IS NULL OR claimed_at < ?)").run(lease, result.auditId, lease - 30_000);
+    if (!claim.changes) {
+      const { delivery } = db.prepare('SELECT delivery FROM player_recovery_deliveries WHERE audit_id = ?').get(result.auditId);
+      return { ...result, delivery: delivery === 'pending' ? 'sending' : delivery };
+    }
     try {
       const localUrl = await sendPasswordReset(req, tenantId, target.email, dispatch.locale, rawToken, 'player-reset/' + tokenHash.slice(0, 32));
       const delivery = localUrl ? 'local' : 'sent';
       const saved = db.prepare("UPDATE player_recovery_deliveries SET delivery = ? WHERE audit_id = ? AND delivery = 'pending'").run(delivery, result.auditId);
       if (localUrl && saved.changes) console.info(`Development player recovery link: ${localUrl}`);
       return { ...result, delivery };
-    } catch { fail(503, 'recoveryDeliveryUnavailable'); }
+    } catch {
+      db.prepare("UPDATE player_recovery_deliveries SET claimed_at = NULL WHERE audit_id = ? AND claimed_at = ? AND delivery = 'pending'").run(result.auditId, lease);
+      fail(503, 'recoveryDeliveryUnavailable');
+    }
   }
   if (route === 'POST /api/admin/login') {
     if (!adminEnabled) fail(503, 'adminDisabled');
@@ -1199,7 +1195,7 @@ async function api(req, res, path, tenantId, requestId) {
       db.prepare('INSERT INTO player_email_changes(token_hash, tenant_id, player_id, new_email, expires, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(hash(token), tenantId, player, newEmail, now + 24 * 60 * 60 * 1000, now);
     });
     const changeUrl = `${playerLinkBase(req, tenantId)}/?email-change=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
-    if (resetEmailApiKey) {
+    if (mailEnabled) {
       try {
         const french = locale === 'fr-CA';
         await deliverTransactionalEmail(newEmail,
@@ -1212,7 +1208,7 @@ async function api(req, res, path, tenantId, requestId) {
     } else {
       console.info(`Development email change link for player ${player}: ${changeUrl}`);
     }
-    if (resetEmailApiKey) {
+    if (mailEnabled) {
       try {
         const french = locale === 'fr-CA';
         await deliverTransactionalEmail(playerRecord.email,
