@@ -17,6 +17,26 @@ export const adminWorkspaceCopy = {
   adminProviderKeys: ['Provider keys', 'Clés API'],
   adminJsonExample: ['JSON example', 'Exemple JSON'],
   adminWebsiteBrand: ['Brand and contact', 'Image de marque et contact'],
+  adminWebsiteDisplay: ['Display and region', 'Affichage et région'],
+  brandLanguages: ['Site languages', 'Langues du site'],
+  brandDefaultLanguage: ['Default language', 'Langue par défaut'],
+  brandLobbySections: ['Public sections', 'Sections publiques'],
+  brandDisplayMarket: ['Display market', 'Marché d’affichage'],
+  brandDisplayMarketHelp: ['Country or region code, such as CA or CA-QC. Leave blank for all markets.', 'Code de pays ou de région, comme CA ou CA-QC. Vide pour tous les marchés.'],
+  brandReportingZone: ['Reporting time zone', 'Fuseau horaire des rapports'],
+  staffPublishWebsite: ['Publish website content', 'Publier le contenu du site'],
+  staffPublishCatalogue: ['Publish or archive catalogue titles', 'Publier ou archiver les titres du catalogue'],
+  staffDraftOnly: ['You can save and preview drafts. A publisher makes them live.', 'Vous pouvez enregistrer et prévisualiser les brouillons. Un responsable autorisé les publie.'],
+  staffReason: ['Reason for access change', 'Motif de la modification des accès'],
+  staffReasonRequired: ['Enter a reason for the access change.', 'Saisissez un motif pour la modification des accès.'],
+  staffRequestConflict: ['This request reference is already in use. Reload the section and try again.', 'Cette référence de demande est déjà utilisée. Rechargez la section et réessayez.'],
+  configConflict: ['This version changed while you were editing. Reload the draft to review the latest version.', 'Cette version a changé pendant votre modification. Rechargez le brouillon pour consulter la version récente.'],
+  auditDetails: ['Change details', 'Détails de la modification'],
+  auditRecord: ['Record ID', 'Identifiant du dossier'],
+  auditRevision: ['Revision', 'Révision'],
+  auditFields: ['Changed fields', 'Champs modifiés'],
+  auditTransition: ['Status', 'État'],
+  auditReason: ['Reason', 'Motif'],
   adminWebsiteLobby: ['Lobby', 'Hall'],
   adminWebsitePolicies: ['Policies and footer', 'Politiques et pied de page'],
   adminDemoActivity: ['Demo activity and reports', 'Activité de la démo et rapports'],
@@ -32,11 +52,13 @@ export function createAdminWorkspace(root, onOpen) {
   const tabGroups = [...root.querySelectorAll('.admin-tabs')];
   const picker = root.querySelector('#admin-section-picker');
   let role;
+  let permissions;
   let currentView;
   let currentPanel;
 
   function canOpen(section) {
-    return section && (!section.dataset.roles || section.dataset.roles.split(',').includes(role));
+    return section && (!section.dataset.roles || section.dataset.roles.split(',').includes(role)) &&
+      (!section.dataset.permission || permissions[section.dataset.permission]);
   }
 
   function syncPicker() {
@@ -97,8 +119,9 @@ export function createAdminWorkspace(root, onOpen) {
   picker.addEventListener('change', () => open(picker.value));
   window.addEventListener('hashchange', () => showFromLocation(true));
 
-  function setRole(nextRole, focus = false) {
+  function setRole(nextRole, grantedPermissions, focus = false) {
     role = nextRole;
+    permissions = grantedPermissions;
     currentView = currentPanel = undefined;
     for (const node of root.querySelectorAll('[data-roles]:not([data-admin-view], [data-admin-panel])')) node.hidden = !canOpen(node);
     for (const link of links) {

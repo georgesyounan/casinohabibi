@@ -49,7 +49,7 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
 }
 
 function client(base, cookies = new Map()) {
-  return async function request(path, payload, host) {
+  return async function request(path, payload, host, headers = {}) {
     const origin = new URL(base);
     if (host) origin.hostname = host;
     const pathname = origin.pathname.replace(/\/$/, '');
@@ -57,7 +57,8 @@ function client(base, cookies = new Map()) {
       method: payload === undefined ? 'GET' : 'POST',
       headers: {
         ...(payload !== undefined && { 'Content-Type': 'application/json' }),
-        ...(cookies.size && { Cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join('; ') })
+        ...(cookies.size && { Cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join('; ') }),
+        ...headers
       },
       body: payload === undefined ? undefined : JSON.stringify(payload)
     });
@@ -221,6 +222,157 @@ test('Coming Soon publication, role and tenant scope, and favorite reconciliatio
   const expandedLobby = (await guest('coming-soon')).data;
   assert.equal(expandedLobby.titles.length, 8);
   assert.equal(new Set(expandedLobby.discover).size, 6);
+});
+
+test('brand publication and audit use explicit, revocable grants and replay one committed event', async (t) => {
+  const { base, database } = await startSandbox(t, { appBasePath: '/casinohabibi' });
+  const admin = client(base + '/casinohabibi');
+  const publisher = client(base + '/casinohabibi');
+  const draftEditor = client(base + '/casinohabibi');
+  const anotherBrand = client(base + '/casinohabibi');
+  const publicClient = client(base + '/casinohabibi');
+  const player = client(base + '/casinohabibi');
+  const publisherCredentials = { email: 'publisher@example.test', password: 'example-publisher-password' };
+  const editorCredentials = { email: 'draft@example.test', password: 'example-draft-password' };
+  const contentRole = 'operator_content';
+  assert.equal((await admin('admin/login', staffCredentials)).status, 200);
+  const grant = { ...publisherCredentials, role: contentRole, publishWebsite: true, publishCatalogue: true, reason: 'Manage demo content' };
+  assert.equal((await admin('admin/staff', { ...grant, reason: '' })).data.error, 'staffReasonRequired');
+  assert.equal((await admin('admin/staff', grant)).status, 200);
+  assert.equal((await admin('admin/staff', { ...editorCredentials, role: contentRole })).status, 200);
+  const identity = await publisher('admin/login', publisherCredentials);
+  assert.equal(identity.data.brandId, 'sandbox');
+  assert.deepEqual(identity.data.permissions, { publishWebsite: true, publishCatalogue: true, viewAudit: true });
+  assert.equal((await draftEditor('admin/login', editorCredentials)).status, 200);
+  assert.equal((await draftEditor('admin/audit')).status, 403);
+
+  const db = new DatabaseSync(database, { timeout: 5000 });
+  t.after(() => db.close());
+  db.prepare("INSERT INTO tenants VALUES ('other', 'other', 'Another Brand', 'active', ?)").run(Date.now());
+  db.prepare("UPDATE tenant_domains SET tenant_id = 'other' WHERE host = 'localhost'").run();
+  db.prepare("INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at) VALUES ('other', ?, ?, 'active', ?)")
+    .run(identity.data.id, contentRole, Date.now());
+  const otherIdentity = await anotherBrand('admin/login', publisherCredentials, 'localhost');
+  assert.equal(otherIdentity.data.brandId, 'other');
+  assert.equal(otherIdentity.data.permissions.viewAudit, false);
+  assert.equal((await publisher('admin/audit', undefined, 'localhost')).status, 401);
+  assert.equal((await anotherBrand('admin/audit', undefined, 'localhost')).status, 403);
+
+  const title = await draftEditor('admin/coming-soon', {
+    action: 'save', version: 0, category: 'table', titleEn: 'Oak Trail', titleFr: 'Sentier du chêne',
+    artwork: '', studio: '', descriptionEn: '', descriptionFr: '', altEn: '', altFr: '', featuredRank: 0
+  });
+  assert.equal(title.status, 200);
+  const { slug, version } = title.data.title;
+  const publishTitle = { action: 'publish', slug, version };
+  assert.equal((await draftEditor('admin/coming-soon', publishTitle)).status, 403);
+  assert.equal((await anotherBrand('admin/coming-soon', publishTitle, 'localhost')).status, 403);
+  const publicationHeaders = { 'X-Request-ID': randomUUID() };
+  const [published, duplicate] = await Promise.all([
+    publisher('admin/coming-soon', publishTitle, undefined, publicationHeaders),
+    publisher('admin/coming-soon', { version, slug, action: 'publish' }, undefined, publicationHeaders)
+  ]);
+  assert.equal(published.status, 200);
+  assert.deepEqual(duplicate.data, published.data);
+  assert.equal((await publisher('admin/coming-soon', { ...publishTitle, action: 'archive' }, undefined, publicationHeaders)).data.error, 'staffRequestConflict');
+  const notes = (await publisher('admin/audit')).data.events;
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].id, published.data.auditId);
+  assert.equal(notes[0].actorId, identity.data.id);
+  assert.equal(notes[0].actor, publisherCredentials.email);
+  assert.equal(notes[0].brandId, 'sandbox');
+  assert.equal(notes[0].correlationId, publicationHeaders['X-Request-ID']);
+  assert.equal(notes[0].details.revision, published.data.title.version);
+  assert.equal(notes[0].details.previousStatus, 'draft');
+  assert.equal(notes[0].details.status, 'published');
+  assert.ok(notes[0].details.fields.includes('titleFr'));
+  assert.equal((await publicClient('coming-soon/' + slug)).status, 200);
+
+  const initial = (await draftEditor('admin/config')).data;
+  const config = {
+    ...initial.config, brandName: 'A01 Demo', announcementFr: 'Bienvenue', displayMarket: 'CA-QC',
+    enabledLocales: ['fr-CA'], primaryLocale: 'fr-CA', reportingTimeZone: 'America/Toronto',
+    enabledSections: { comingSoon: false, faq: false }
+  };
+  assert.equal((await draftEditor('admin/config', { config: { ...config, reportingTimeZone: '+02:00' }, version: initial.version })).status, 400);
+  const draft = await draftEditor('admin/config', { config, version: initial.version });
+  assert.equal(draft.status, 200);
+  assert.equal((await publicClient('tenant')).data.config.enabledSections.comingSoon, true);
+  assert.equal((await draftEditor('admin/config/publish', { version: draft.data.version })).status, 403);
+  assert.equal((await publisher('admin/config/publish', { version: initial.version })).data.error, 'configConflict');
+  assert.equal((await anotherBrand('admin/config/publish', { version: draft.data.version }, 'localhost')).status, 403);
+  assert.equal((await publicClient('tenant', undefined, 'localhost')).data.config.brandName, 'Another Brand');
+
+  // A failed audit write must roll back both the publication and its brand name.
+  db.exec(`CREATE TRIGGER reject_demo_publish BEFORE INSERT ON staff_events
+    WHEN NEW.action = 'tenant_config_published' BEGIN SELECT RAISE(ABORT, 'test audit rollback'); END`);
+  const settingsHeaders = { 'X-Request-ID': randomUUID() };
+  const publishSettings = { version: draft.data.version };
+  assert.equal((await publisher('admin/config/publish', publishSettings, undefined, settingsHeaders)).status, 500);
+  assert.equal((await publicClient('tenant')).data.config.brandName, initial.config.brandName);
+  assert.equal((await publisher('admin/config')).data.status, 'draft');
+  db.exec('DROP TRIGGER reject_demo_publish');
+  const liveSettings = await publisher('admin/config/publish', publishSettings, undefined, settingsHeaders);
+  assert.equal(liveSettings.status, 200);
+  assert.deepEqual((await publisher('admin/config/publish', publishSettings, undefined, settingsHeaders)).data, liveSettings.data);
+  assert.deepEqual((await publicClient('tenant')).data.config, config);
+  assert.deepEqual((await publicClient('coming-soon')).data.titles, []);
+  assert.equal((await publicClient('coming-soon/' + slug)).status, 404);
+  assert.equal((await fetch(base + '/casinohabibi/coming-soon/' + slug)).status, 404);
+
+  const role = { email: publisherCredentials.email, role: contentRole, publishWebsite: false, publishCatalogue: false, reason: 'Temporary coverage ended' };
+  const accessHeaders = { 'X-Request-ID': randomUUID() };
+  const revoked = await admin('admin/staff/role', role, undefined, accessHeaders);
+  assert.equal(revoked.status, 200);
+  assert.deepEqual((await admin('admin/staff/role', role, undefined, accessHeaders)).data, revoked.data);
+  assert.equal((await publisher('admin/session')).data.permissions.publishWebsite, false);
+  assert.equal((await publisher('admin/config/publish', publishSettings, undefined, settingsHeaders)).status, 403);
+  assert.equal((await publisher('admin/audit')).status, 403);
+
+  await register(player);
+  const ticket = (await player('support', { category: 'account', message: 'Can you review my demo account?' })).data;
+  const { updatedAt } = (await admin('admin/support')).data.tickets.find(({ id }) => id === ticket.id);
+  const supportHeaders = { 'X-Request-ID': randomUUID() };
+  const privateNote = 'This example belongs in the support case.';
+  const note = { ticketId: ticket.id, expectedUpdatedAt: updatedAt, note: privateNote };
+  const savedNote = await admin('admin/support/note', note, undefined, supportHeaders);
+  assert.equal(savedNote.status, 200);
+  assert.deepEqual((await admin('admin/support/note', note, undefined, supportHeaders)).data, savedNote.data);
+  const events = (await admin('admin/audit')).data.events;
+  for (const id of [published.data.auditId, liveSettings.data.auditId, revoked.data.auditId, savedNote.data.auditId]) {
+    assert.equal(events.filter((event) => event.id === id).length, 1);
+  }
+  assert.equal(events.find((event) => event.id === revoked.data.auditId).details.reason, role.reason);
+  assert.deepEqual(events.find((event) => event.id === savedNote.data.auditId).details.fields, ['privateNote']);
+  assert.ok(!JSON.stringify(events).includes(privateNote));
+  assert.ok(!JSON.stringify(events).includes(publisherCredentials.password));
+  assert.equal((await admin('admin/support')).data.tickets[0].notes.length, 1);
+});
+
+test('existing memberships retain their original staff publication rights and audit history', async (t) => {
+  const { base } = await startSandbox(t, { initializeDatabase(db) {
+    db.exec(`
+      CREATE TABLE tenants (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL);
+      CREATE TABLE staff_accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL, mfa_secret TEXT, mfa_enabled INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE tenant_staff_memberships (tenant_id TEXT NOT NULL REFERENCES tenants(id), staff_id INTEGER NOT NULL REFERENCES staff_accounts(id), role TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(tenant_id, staff_id));
+      CREATE TABLE staff_events (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), actor_id INTEGER NOT NULL REFERENCES staff_accounts(id), action TEXT NOT NULL, target TEXT NOT NULL, created_at INTEGER NOT NULL, correlation_id TEXT);
+      INSERT INTO tenants VALUES ('sandbox', 'sandbox', 'Legacy Demo', 'active', 1);
+      INSERT INTO staff_accounts(id, email, password_hash, created_at) VALUES (1, 'legacy-editor@example.test', 'unused-in-test', 1), (2, 'legacy-provider@example.test', 'unused-in-test', 1);
+      INSERT INTO tenant_staff_memberships VALUES ('sandbox', 1, 'operator_content', 'active', 1), ('sandbox', 2, 'operator_provider', 'active', 1);
+      INSERT INTO staff_events VALUES (1, 'sandbox', 1, 'tenant_config_published', '1', 1, NULL);
+    `);
+  } });
+  const admin = client(base);
+  assert.equal((await admin('admin/login', staffCredentials)).status, 200);
+  const { data: members } = await admin('admin/staff');
+  const editor = members.find((member) => member.role === 'operator_content');
+  const provider = members.find((member) => member.role === 'operator_provider');
+  assert.deepEqual([editor.publishWebsite, editor.publishCatalogue], [true, false]);
+  assert.deepEqual([provider.publishWebsite, provider.publishCatalogue], [false, true]);
+  const historical = (await admin('admin/audit')).data.events.find(({ id }) => id === 1);
+  assert.equal(historical.actor, 'legacy-editor@example.test');
+  assert.equal(historical.action, 'tenant_config_published');
+  assert.deepEqual(historical.details, {});
 });
 
 test('local startup migrates a non-tenant ledger and preserves existing player preferences', async (t) => {

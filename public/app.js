@@ -175,14 +175,14 @@ const copy = {
   staffSignIn: ['Sign in', 'Se connecter'], staffSigningIn: ['Signing in…', 'Connexion…'], staffSignOut: ['Sign out', 'Se déconnecter'],
   staffManagement: ['Staff access', 'Accès du personnel'], temporaryPassword: ['Initial password for a new account (12 characters minimum); leave blank for an existing account', 'Mot de passe initial pour un nouveau compte (au moins 12 caractères); laissez vide pour un compte existant'],
   staffRole: ['Role', 'Rôle'], staffCreate: ['Add staff member', 'Ajouter un membre du personnel'], staffDisable: ['Disable', 'Désactiver'], staffAccountsHeading: ['Staff accounts', 'Comptes du personnel'],
-  roleAdminHelp: ['Full access to staff, casino settings, provider tools, support and audit history.', 'Accès complet au personnel, aux paramètres du casino, aux outils des fournisseurs, au soutien et à l’historique d’audit.'], roleContentHelp: ['Manage bilingual lobby content, branding, policies and publishing.', 'Gérer le contenu bilingue du hall, l’image de marque, les politiques et la publication.'], roleProviderHelp: ['Manage provider records, stored credentials and catalog previews.', 'Gérer les dossiers des fournisseurs, les identifiants enregistrés et les aperçus du catalogue.'], roleSupportHelp: ['Manage player support requests, assignments, private notes and replies.', 'Gérer les demandes de soutien, les attributions, les notes internes et les réponses.'],
+  roleAdminHelp: ['Full access to staff, casino settings, provider tools, support and audit history.', 'Accès complet au personnel, aux paramètres du casino, aux outils des fournisseurs, au soutien et à l’historique d’audit.'], roleContentHelp: ['Edit website content and catalogue drafts. Assign publishing rights for this brand below.', 'Modifier le contenu du site et les brouillons du catalogue. Attribuez les droits de publication de cette marque ci-dessous.'], roleProviderHelp: ['Manage provider records, stored credentials and catalog previews.', 'Gérer les dossiers des fournisseurs, les identifiants enregistrés et les aperçus du catalogue.'], roleSupportHelp: ['Manage player support requests, assignments, private notes and replies.', 'Gérer les demandes de soutien, les attributions, les notes internes et les réponses.'],
   staffSearch: ['Search staff email', 'Rechercher un courriel du personnel'], staffFilterRole: ['Filter by role', 'Filtrer par rôle'], staffFilterStatus: ['Filter by status', 'Filtrer par état'], staffFilterMfa: ['Filter by two-step verification', 'Filtrer par vérification en deux étapes'], staffFilterMfaEnabled: ['Enabled', 'Activée'], staffFilterMfaDisabled: ['Not enabled', 'Non activée'], staffFilterAll: ['All', 'Tous'], staffNoMatches: ['No staff accounts match these filters.', 'Aucun compte du personnel ne correspond à ces filtres.'], staffCount: ['Showing {shown} of {total} staff accounts', 'Membres du personnel affichés : {shown} sur {total}'], staffSort: ['Sort by', 'Trier par'], staffSortNewest: ['Newest first', 'Les plus récents'], staffSortOldest: ['Oldest first', 'Les plus anciens'], staffSortEmail: ['Email A to Z', 'Courriel de A à Z'], staffAddedOn: ['Added (UTC) {date}', 'Ajouté le {date} (UTC)'], staffLastActivity: ['Last recorded activity (UTC): {date}', 'Dernière activité enregistrée (UTC) : {date}'], staffNoActivity: ['No recorded activity', 'Aucune activité enregistrée'],
   staffSortActivity: ['Most recently active', 'Activité la plus récente'],
   staffFilterActivity: ['Filter by recorded activity', 'Filtrer selon l’activité enregistrée'], staffActivityHas: ['Has recorded activity', 'Activité enregistrée'], staffActivityNone: ['No recorded activity', 'Aucune activité enregistrée'],
   staffMfaEnabled: ['Two-step verification enabled', 'Vérification en deux étapes activée'], staffMfaDisabled: ['Two-step verification not enabled', 'Vérification en deux étapes non activée'],
   roleAdmin: ['Operator admin', 'Administrateur du casino'], roleContent: ['Content', 'Contenu'], roleProvider: ['Providers', 'Fournisseurs'], roleSupport: ['Support', 'Soutien'],
   active: ['active', 'actif'], disabled: ['disabled', 'désactivé'],
-  staffAdded: ['Staff account added.', 'Compte du personnel ajouté.'], staffDisabled: ['Staff account disabled.', 'Compte du personnel désactivé.'], staffReenable: ['Re-enable', 'Réactiver'], staffReenabled: ['Staff account re-enabled.', 'Compte du personnel réactivé.'], staffChangeRole: ['Change role', 'Changer le rôle'], staffSaveRole: ['Save role', 'Enregistrer le rôle'], staffRoleUpdated: ['Staff role updated.', 'Rôle du membre du personnel modifié.'],
+  staffAdded: ['Staff account added.', 'Compte du personnel ajouté.'], staffDisabled: ['Staff account disabled.', 'Compte du personnel désactivé.'], staffReenable: ['Re-enable', 'Réactiver'], staffReenabled: ['Staff account re-enabled.', 'Compte du personnel réactivé.'], staffChangeRole: ['Role', 'Rôle'], staffSaveRole: ['Save access', 'Enregistrer les accès'], staffRoleUpdated: ['Staff access updated.', 'Accès du membre du personnel modifiés.'],
   staffConfirmDisable: ['Disable this staff account? The person will be signed out and cannot access this casino again until an admin re-enables the account.', 'Désactiver ce compte du personnel ? La personne sera déconnectée et ne pourra plus accéder à ce casino tant qu’un membre de l’administration n’aura pas réactivé le compte.'],
   staffConfirmRoleChange: ["Change {email}'s role from {oldRole} to {newRole}? Their permissions will change immediately.", 'Changer le rôle de {email}, de {oldRole} à {newRole} ? Les autorisations de ce compte changeront immédiatement.'],
   staffConfirmReenable: ['Re-enable {email} as {role}? This restores access to the casino admin console.', 'Réactiver {email} avec le rôle {role} ? L’accès à l’interface d’administration du casino sera rétabli.'],
@@ -192,7 +192,7 @@ const copy = {
   staffAuditNoMatches: ['No activity matches these filters.', 'Aucune activité ne correspond à ces filtres.'], staffAuditClearFilters: ['Clear audit filters', 'Effacer les filtres du journal'], staffAuditExport: ['Export all matching events (CSV)', 'Exporter tous les événements correspondants (CSV)'], staffAuditExporting: ['Preparing the full audit export…', 'Préparation de l’exportation complète du journal…'], staffAuditExportReady: ['Full filtered audit CSV downloaded.', 'Le fichier CSV complet filtré du journal d’audit a été téléchargé.'],
   staffAuditLoadMore: ['Load more events', 'Charger plus d’événements'],
   staffAuditFrom: ['From date (UTC)', 'Date de début (UTC)'], staffAuditTo: ['To date (UTC)', 'Date de fin (UTC)'], staffAuditRangeInvalid: ['The start date must be on or before the end date.', 'La date de début doit être antérieure ou égale à la date de fin.'],
-  staffAuditTimestamp: ['Date and time (local)', 'Date et heure (locale)'], staffAuditActor: ['Staff member', 'Membre du personnel'], staffAuditAction: ['Action', 'Action'], staffAuditTarget: ['Target', 'Cible'], staffAuditRequestId: ['Request ID', 'ID de requête'],
+  staffAuditTimestamp: ['Date and time (UTC)', 'Date et heure (UTC)'], staffAuditActor: ['Staff member', 'Membre du personnel'], staffAuditAction: ['Action', 'Action'], staffAuditTarget: ['Target', 'Cible'], staffAuditRequestId: ['Request ID', 'ID de requête'],
   mfaTitle: ['Two-step verification', 'Vérification en deux étapes'],
   mfaHelp: ['Add this account to an authenticator app with the secret or copied setup link below, then enter its six-digit code to enable two-step verification.', 'Ajoutez ce compte à une application d’authentification avec le secret ou le lien copié ci-dessous, puis saisissez le code à six chiffres pour activer la vérification en deux étapes.'],
   mfaSetup: ['Set up authenticator', 'Configurer l’authentificateur'], mfaCode: ['Authenticator code', 'Code de l’authentificateur'],
@@ -304,6 +304,10 @@ let staffAuditNextCursor = null;
 let staffAuditLoading = false;
 let tenantBrandName = 'Northplay';
 let savedTenantDraftSignature;
+let savedTenantVersion;
+let publicLocales = ['en-CA', 'fr-CA'];
+let primaryPublicLocale = 'en-CA';
+let publicComingSoon = true;
 const resetToken = new URLSearchParams(location.search).get('reset');
 const verifyToken = new URLSearchParams(location.search).get('verify');
 const emailChangeToken = new URLSearchParams(location.search).get('email-change');
@@ -431,14 +435,39 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const response = await fetch(appPath('/api/' + path), options);
-  const payload = await response.json();
+  const auditedMutation = data !== undefined && /^(admin\/(config|coming-soon|staff|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  if (auditedMutation && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
+  const send = async () => {
+    const response = await fetch(appPath('/api/' + path), options);
+    return { response, payload: await response.json() };
+  };
+  const { response, payload } = await send().catch((error) => {
+    if (!headers['X-Request-ID']) throw error;
+    return send();
+  });
   if (!response.ok) throw new Error(payload.error);
   return payload;
 }
 
+function publicLanguage(locale) {
+  return (publicLocales.includes(locale) ? locale : primaryPublicLocale) === 'fr-CA' ? 1 : 0;
+}
+
 function applyTenant(config) {
+  const previousLanguage = language;
   tenantBrandName = config.brandName;
+  $('#staff-brand').textContent = config.brandName;
+  publicLocales = config.enabledLocales;
+  primaryPublicLocale = config.primaryLocale;
+  publicComingSoon = config.enabledSections?.comingSoon ?? true;
+  const publicFaq = config.enabledSections?.faq ?? true;
+  $('#faq').hidden = !publicFaq;
+  for (const link of document.querySelectorAll('a[href$="#faq"]')) link.hidden = !publicFaq;
+  $('#language').hidden = !isAdminPage && publicLocales.length < 2;
+  if (!isAdminPage) {
+    const preferred = localStorage.getItem('northplay-language');
+    language = publicLanguage(preferred ? (preferred === 'fr' ? 'fr-CA' : 'en-CA') : primaryPublicLocale);
+  }
   tenantFeaturedGameIds = Array.isArray(config.featuredGameIds) ? config.featuredGameIds : ['gold', 'roulette'];
   if (savedTenantDraftSignature === undefined) renderFeaturedGameEditor(tenantFeaturedGameIds);
   const favicon = $('#tenant-favicon');
@@ -483,6 +512,7 @@ function applyTenant(config) {
     supportLink.removeAttribute('href');
     supportLink.hidden = true;
   }
+  if (language !== previousLanguage) render();
 }
 
 function selectedFeaturedGameIds() {
@@ -577,59 +607,44 @@ function updateTenantPreview() {
     $(`#tenant-preview-faq-${index}-answer-fr`).textContent = item[`faq${index}AnswerFr`].value.trim();
   }
   const publish = $('#publish-config');
-  if (publish) publish.disabled = !savedTenantDraftSignature || tenantConfigSignature() !== savedTenantDraftSignature;
+  publish.disabled = !currentStaffPermissions.publishWebsite || !savedTenantDraftSignature ||
+    JSON.stringify(readTenantConfig()) !== savedTenantDraftSignature;
 }
 
-function tenantConfigSignature(config) {
-  const form = $('#tenant-config');
-  config ||= {
-    brandName: form.elements.brandName.value,
-    brandLogo: form.elements.brandLogo.value,
-    brandFavicon: form.elements.brandFavicon.value,
+function readTenantConfig() {
+  const { elements: fields } = $('#tenant-config');
+  return {
+    brandName: fields.brandName.value.trim(),
+    brandLogo: fields.brandLogo.value,
+    brandFavicon: fields.brandFavicon.value,
     featuredGameIds: selectedFeaturedGameIds(),
-    accentColor: form.elements.accentColor.value,
-    supportEmail: form.elements.supportEmail.value,
-    heroTitleEn: form.elements.heroTitleEn.value,
-    heroTitleFr: form.elements.heroTitleFr.value,
-    heroIntroEn: form.elements.heroIntroEn.value,
-    heroIntroFr: form.elements.heroIntroFr.value,
-    announcementEn: form.elements.announcementEn.value,
-    announcementFr: form.elements.announcementFr.value,
+    accentColor: fields.accentColor.value,
+    supportEmail: fields.supportEmail.value.trim(),
+    primaryLocale: fields.primaryLocale.value,
+    enabledLocales: [['en-CA', fields.localeEn], ['fr-CA', fields.localeFr]]
+      .filter(([, input]) => input.checked).map(([locale]) => locale),
+    enabledSections: { comingSoon: fields.showComingSoon.checked, faq: fields.showFaq.checked },
+    displayMarket: fields.displayMarket.value.trim().toUpperCase(),
+    reportingTimeZone: fields.reportingTimeZone.value,
+    heroTitleEn: fields.heroTitleEn.value.trim(),
+    heroTitleFr: fields.heroTitleFr.value.trim(),
+    heroIntroEn: fields.heroIntroEn.value.trim(),
+    heroIntroFr: fields.heroIntroFr.value.trim(),
+    announcementEn: fields.announcementEn.value.trim(),
+    announcementFr: fields.announcementFr.value.trim(),
     faqItems: Array.from({ length: 3 }, (_, index) => ({
-      questionEn: form.elements[`faq${index}QuestionEn`].value,
-      answerEn: form.elements[`faq${index}AnswerEn`].value,
-      questionFr: form.elements[`faq${index}QuestionFr`].value,
-      answerFr: form.elements[`faq${index}AnswerFr`].value
+      questionEn: fields[`faq${index}QuestionEn`].value.trim(),
+      answerEn: fields[`faq${index}AnswerEn`].value.trim(),
+      questionFr: fields[`faq${index}QuestionFr`].value.trim(),
+      answerFr: fields[`faq${index}AnswerFr`].value.trim()
     })),
-    termsUrlEn: form.elements.termsUrlEn.value,
-    termsUrlFr: form.elements.termsUrlFr.value,
-    privacyUrlEn: form.elements.privacyUrlEn.value,
-    privacyUrlFr: form.elements.privacyUrlFr.value,
-    footerTextEn: form.elements.footerTextEn.value,
-    footerTextFr: form.elements.footerTextFr.value
+    termsUrlEn: fields.termsUrlEn.value.trim(),
+    termsUrlFr: fields.termsUrlFr.value.trim(),
+    privacyUrlEn: fields.privacyUrlEn.value.trim(),
+    privacyUrlFr: fields.privacyUrlFr.value.trim(),
+    footerTextEn: fields.footerTextEn.value.trim(),
+    footerTextFr: fields.footerTextFr.value.trim()
   };
-  return JSON.stringify({
-    brandName: config.brandName.trim(),
-    brandLogo: config.brandLogo || '',
-    brandFavicon: config.brandFavicon || '',
-    featuredGameIds: config.featuredGameIds || ['gold', 'roulette'],
-    accentColor: config.accentColor,
-    supportEmail: config.supportEmail.trim(),
-    heroTitleEn: config.heroTitleEn.trim(),
-    heroTitleFr: config.heroTitleFr.trim(),
-    heroIntroEn: config.heroIntroEn.trim(),
-    heroIntroFr: config.heroIntroFr.trim(),
-    announcementEn: (config.announcementEn || '').trim(),
-    announcementFr: (config.announcementFr || '').trim(),
-    faqItems: (config.faqItems || defaultFaqItems()).map((item) => ({
-      questionEn: item.questionEn.trim(), answerEn: item.answerEn.trim(),
-      questionFr: item.questionFr.trim(), answerFr: item.answerFr.trim()
-    })),
-    termsUrlEn: config.termsUrlEn || '', termsUrlFr: config.termsUrlFr || '',
-    privacyUrlEn: config.privacyUrlEn || '', privacyUrlFr: config.privacyUrlFr || '',
-    footerTextEn: (config.footerTextEn || copy.disclaimer[0]).trim(),
-    footerTextFr: (config.footerTextFr || copy.disclaimer[1]).trim()
-  });
 }
 
 function updateDocumentTitle() {
@@ -803,8 +818,8 @@ function renderDialog() {
       if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
       playerSessionStartedAt = auth.sessionStartedAt;
       sessionStorage.removeItem('northplay-pending-game');
-      language = auth.preferredLocale === 'fr-CA' ? 1 : 0;
-      localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+      language = publicLanguage(auth.preferredLocale);
+      if (publicLocales.includes(auth.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
       openPanel(selectedGame ? 'play' : 'account');
     }), action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
@@ -1066,7 +1081,8 @@ function renderDialog() {
   const profileLanguageLabel = element('label', t('preferredLanguage'));
   const profileLanguageSelect = element('select');
   profileLanguageSelect.name = 'locale';
-  for (const [locale, key] of [['en-CA', 'englishLanguage'], ['fr-CA', 'frenchLanguage']]) {
+  for (const locale of publicLocales) {
+    const key = locale === 'fr-CA' ? 'frenchLanguage' : 'englishLanguage';
     const option = element('option', t(key));
     option.value = locale;
     option.selected = player.preferredLocale === locale;
@@ -1081,7 +1097,7 @@ function renderDialog() {
     profileSave.disabled = true;
     try {
       player = await api('account/profile', { displayName: displayNameInput.value, locale: profileLanguageSelect.value });
-      language = player.preferredLocale === 'fr-CA' ? 1 : 0;
+      language = publicLanguage(player.preferredLocale);
       localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
       $('#status').textContent = t('profileSaved');
@@ -1518,6 +1534,7 @@ let providerStatus;
 let currentStaffEmail;
 let currentStaffId;
 let currentStaffRole;
+let currentStaffPermissions = {};
 let renderedLanguage = language;
 let currentStaffMfaEnabled = false;
 let currentMfaSetupUri;
@@ -1533,6 +1550,7 @@ let supportInboxHasMore = false;
 let latestOverview = null;
 const comingSoonUi = createComingSoonUi({
   api, t, element, action, appPath, currentRoute,
+  lobbyEnabled: () => publicComingSoon,
   isFrench: () => Boolean(language),
   getFavorites: () => favorites,
   favoritePending: () => favoriteSavePending,
@@ -1579,10 +1597,8 @@ function render() {
   if (languageChanged && currentStaffEmail && currentStaffRole) {
     $('#staff-identity').textContent = `${currentStaffEmail} · ${staffRoleLabel(currentStaffRole)}`;
   }
-  if (languageChanged && currentStaffRole === 'operator_admin') {
-    renderStaffList();
-    renderStaffAudit();
-  }
+  if (languageChanged && currentStaffRole === 'operator_admin') renderStaffList();
+  if (languageChanged && currentStaffPermissions.viewAudit) renderStaffAudit();
   $('#close').setAttribute('aria-label', t('close'));
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
@@ -1725,7 +1741,7 @@ function updateCatalogPreview() {
         : t('catalogNoChanges').replace('{count}', count(result.unchanged));
       if (hasChanges && result.removed) message += ` ${t('catalogRemovedWarning')}`;
       $('#catalog-preview').textContent = message;
-      button.disabled = !hasChanges;
+      button.disabled = !hasChanges || !currentStaffPermissions.publishCatalogue;
     } else {
       catalogReview = undefined;
       $('#catalog-preview').textContent = t('catalogNeedReview').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(imported.length));
@@ -1766,7 +1782,8 @@ async function refreshManagedCatalog() {
           button.disabled = false;
         }
       }, 'ghost');
-      row.append(details, button);
+      row.append(details);
+      if (currentStaffPermissions.publishCatalogue) row.append(button);
       return row;
     }));
   } catch (error) {
@@ -1911,6 +1928,16 @@ $('#catalog-sync').addEventListener('submit', async (event) => {
 async function loadTenantDraft() {
   const form = $('#tenant-config');
   const draft = await api('admin/config', undefined, 'GET');
+  form.elements.localeEn.checked = draft.config.enabledLocales.includes('en-CA');
+  form.elements.localeFr.checked = draft.config.enabledLocales.includes('fr-CA');
+  form.elements.primaryLocale.value = draft.config.primaryLocale;
+  updateBrandLocaleOptions();
+  form.elements.showComingSoon.checked = draft.config.enabledSections.comingSoon;
+  form.elements.showFaq.checked = draft.config.enabledSections.faq;
+  form.elements.displayMarket.value = draft.config.displayMarket;
+  const zone = draft.config.reportingTimeZone;
+  const zones = new Set(['UTC', ...(Intl.supportedValuesOf?.('timeZone') ?? []), zone]);
+  form.elements.reportingTimeZone.replaceChildren(...[...zones].map((name) => new Option(name, name, false, name === zone)));
   form.elements.brandName.value = draft.config.brandName;
   form.elements.brandLogo.value = draft.config.brandLogo || '';
   $('#brand-logo-file').value = '';
@@ -1938,13 +1965,27 @@ async function loadTenantDraft() {
   form.elements.privacyUrlFr.value = draft.config.privacyUrlFr || '';
   form.elements.footerTextEn.value = draft.config.footerTextEn || copy.disclaimer[0];
   form.elements.footerTextFr.value = draft.config.footerTextFr || copy.disclaimer[1];
-  savedTenantDraftSignature = tenantConfigSignature();
+  savedTenantVersion = draft.version;
+  savedTenantDraftSignature = draft.status === 'draft' ? JSON.stringify(readTenantConfig()) : null;
   $('#tenant-config-fields').disabled = false;
   $('#save-config').disabled = false;
   updateTenantPreview();
   $('#tenant-config-status').textContent = `v${draft.version}`;
 }
-$('#tenant-config').addEventListener('input', updateTenantPreview);
+function updateBrandLocaleOptions() {
+  const { localeEn, localeFr, primaryLocale } = $('#tenant-config').elements;
+  if (!localeEn.checked && !localeFr.checked) {
+    const previous = primaryLocale.value === 'fr-CA' ? localeFr : localeEn;
+    previous.checked = true;
+  }
+  primaryLocale.options[0].disabled = !localeEn.checked;
+  primaryLocale.options[1].disabled = !localeFr.checked;
+  if (primaryLocale.selectedOptions[0]?.disabled) primaryLocale.value = localeEn.checked ? 'en-CA' : 'fr-CA';
+}
+$('#tenant-config').addEventListener('input', (event) => {
+  if (['localeEn', 'localeFr'].includes(event.target.name)) updateBrandLocaleOptions();
+  updateTenantPreview();
+});
 $('#brand-logo-file').addEventListener('change', (event) => {
   const input = event.currentTarget;
   const file = input.files[0];
@@ -2014,37 +2055,26 @@ $('#tenant-config').addEventListener('invalid', (event) => {
 }, true);
 $('#tenant-config').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const form = event.currentTarget;
-  const { brandName, accentColor, supportEmail } = Object.fromEntries(new FormData(form));
+  const config = readTenantConfig();
+  const button = $('#save-config');
+  button.disabled = true;
   try {
-    const config = {
-      brandName: brandName.trim(), primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor, supportEmail: supportEmail.trim(),
-      brandLogo: form.elements.brandLogo.value,
-      brandFavicon: form.elements.brandFavicon.value,
-      featuredGameIds: selectedFeaturedGameIds(),
-      heroTitleEn: form.elements.heroTitleEn.value.trim(), heroTitleFr: form.elements.heroTitleFr.value.trim(),
-      heroIntroEn: form.elements.heroIntroEn.value.trim(), heroIntroFr: form.elements.heroIntroFr.value.trim(),
-      announcementEn: form.elements.announcementEn.value.trim(), announcementFr: form.elements.announcementFr.value.trim(),
-      faqItems: Array.from({ length: 3 }, (_, index) => ({
-        questionEn: form.elements[`faq${index}QuestionEn`].value.trim(),
-        answerEn: form.elements[`faq${index}AnswerEn`].value.trim(),
-        questionFr: form.elements[`faq${index}QuestionFr`].value.trim(),
-        answerFr: form.elements[`faq${index}AnswerFr`].value.trim()
-      })),
-      termsUrlEn: form.elements.termsUrlEn.value.trim(), termsUrlFr: form.elements.termsUrlFr.value.trim(),
-      privacyUrlEn: form.elements.privacyUrlEn.value.trim(), privacyUrlFr: form.elements.privacyUrlFr.value.trim(),
-      footerTextEn: form.elements.footerTextEn.value.trim(), footerTextFr: form.elements.footerTextFr.value.trim()
-    };
-    const result = await api('admin/config', { config });
-    savedTenantDraftSignature = tenantConfigSignature(config);
-    updateTenantPreview();
-    $('#tenant-config-status').textContent = `${t('draftSaved')} v${result.version}`;
+    const result = await api('admin/config', { config, version: savedTenantVersion });
+    savedTenantVersion = result.version;
+    savedTenantDraftSignature = result.status === 'draft' ? JSON.stringify(config) : null;
+    const message = result.status === 'draft' ? 'draftSaved' : 'configPublished';
+    $('#tenant-config-status').textContent = `${t(message)} v${result.version}`;
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
+  finally {
+    button.disabled = false;
+    updateTenantPreview();
+  }
 });
 $('#publish-config').addEventListener('click', async (event) => {
   event.currentTarget.disabled = true;
   try {
-    const result = await api('admin/config/publish', {});
+    const result = await api('admin/config/publish', { version: savedTenantVersion });
+    savedTenantVersion = result.version;
     savedTenantDraftSignature = null;
     const published = await api('tenant', undefined, 'GET');
     applyTenant(published.config);
@@ -2058,8 +2088,25 @@ async function refreshStaffList() {
   renderStaffList();
 }
 function updateStaffRoleHelp() {
-  const helpKey = ({ operator_admin: 'roleAdminHelp', operator_content: 'roleContentHelp', operator_provider: 'roleProviderHelp', operator_support: 'roleSupportHelp' })[$('#staff-create select[name="role"]').value];
+  const form = $('#staff-create');
+  const role = form.elements.role.value;
+  const helpKey = ({ operator_admin: 'roleAdminHelp', operator_content: 'roleContentHelp', operator_provider: 'roleProviderHelp', operator_support: 'roleSupportHelp' })[role];
   $('#staff-role-help').textContent = t(helpKey);
+  displayStaffGrants($('#staff-create-grants'), role);
+}
+function displayStaffGrants(container, role) {
+  const website = role === 'operator_content';
+  const catalogue = website || role === 'operator_provider';
+  container.hidden = !catalogue;
+  container.querySelector('[name="publishWebsite"]').closest('label').hidden = !website;
+}
+function staffGrants(container, role) {
+  const website = role === 'operator_content';
+  const catalogue = website || role === 'operator_provider';
+  return {
+    publishWebsite: website && container.querySelector('[name="publishWebsite"]').checked,
+    publishCatalogue: catalogue && container.querySelector('[name="publishCatalogue"]').checked
+  };
 }
 function staffRoleLabel(role) {
   const copyKey = ({ operator_admin: 'roleAdmin', operator_content: 'roleContent', operator_provider: 'roleProvider', operator_support: 'roleSupport' })[role];
@@ -2103,11 +2150,30 @@ function renderStaffList() {
       }
       roleControl.append(roleSelect);
       item.append(roleControl);
+      const grants = element('div', '', 'staff-publishing-grants');
+      for (const [name, labelKey] of [['publishWebsite', 'staffPublishWebsite'], ['publishCatalogue', 'staffPublishCatalogue']]) {
+        const label = element('label', '', 'admin-check');
+        const checkbox = element('input');
+        Object.assign(checkbox, { type: 'checkbox', name, checked: member.role !== 'operator_admin' && member[name] });
+        checkbox.setAttribute('aria-label', `${t(labelKey)} · ${member.email}`);
+        label.append(checkbox, element('span', t(labelKey)));
+        grants.append(label);
+      }
+      displayStaffGrants(grants, member.role);
+      item.append(grants);
       const saveRole = element('button', t('staffSaveRole'), 'ghost');
       saveRole.type = 'button';
       saveRole.dataset.updateRoleEmail = member.email;
       saveRole.disabled = true;
-      roleSelect.addEventListener('change', () => { saveRole.disabled = roleSelect.value === member.role; });
+      const updateSave = () => {
+        const role = roleSelect.value;
+        displayStaffGrants(grants, role);
+        const access = staffGrants(grants, role);
+        saveRole.disabled = role === member.role &&
+          (role === 'operator_admin' || (access.publishWebsite === member.publishWebsite && access.publishCatalogue === member.publishCatalogue));
+      };
+      roleSelect.addEventListener('change', updateSave);
+      grants.addEventListener('change', updateSave);
       item.append(saveRole);
       const disable = element('button', t('staffDisable'), 'ghost');
       disable.type = 'button';
@@ -2181,7 +2247,33 @@ function renderStaffAudit() {
       row.append(cell);
       return row;
     }
-    row.append(element('td', new Date(entry.createdAt).toLocaleString(locale)), element('td', entry.actor), element('td', auditActionLabel(entry.action)), element('td', entry.target), element('td', entry.correlationId || ''));
+    const record = element('td', entry.target);
+    const info = entry.details;
+    if (info?.recordId || info?.fields?.length) {
+      const details = element('details', '', 'staff-audit-details');
+      details.append(element('summary', t('auditDetails')));
+      const list = element('dl');
+      const labels = {
+        enabledSections: 'brandLobbySections', enabledLocales: 'brandLanguages', primaryLocale: 'brandDefaultLanguage',
+        displayMarket: 'brandDisplayMarket', reportingTimeZone: 'brandReportingZone',
+        publishWebsite: 'staffPublishWebsite', publishCatalogue: 'staffPublishCatalogue', status: 'auditTransition'
+      };
+      const status = (value) => copy[value] ? t(value) : value;
+      const rows = [
+        ['auditRecord', info.recordId], ['auditRevision', info.revision],
+        ['auditFields', info.fields?.map((field) => copy[labels[field] || field] ? t(labels[field] || field) : field).join(', ')],
+        ['auditTransition', [info.previousStatus, info.status].filter(Boolean).map(status).join(' → ')],
+        ['staffRole', [info.previousRole, info.role].filter(Boolean).map(staffRoleLabel).join(' → ')],
+        ['auditReason', info.reason]
+      ];
+      for (const [key, value] of rows) {
+        if (value) list.append(element('dt', t(key)), element('dd', String(value)));
+      }
+      details.append(list);
+      record.append(details);
+    }
+    row.append(element('td', new Date(entry.createdAt).toLocaleString(locale, { timeZone: 'UTC' })),
+      element('td', entry.actor), element('td', auditActionLabel(entry.action)), record, element('td', entry.correlationId || ''));
     return row;
   }));
 }
@@ -2197,7 +2289,7 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
   if (invalidRange) return [];
   const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
   return source.filter((entry) => {
-    const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.details?.recordId || ''} ${entry.details?.revision || ''} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
     return searchable.includes(query) && (category === 'all' || categoryFor(entry.action) === category) && (!from || eventDate >= from) && (!to || eventDate <= to);
   });
@@ -2631,6 +2723,7 @@ function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
   currentStaffId = session.id;
   currentStaffRole = session.role;
+  currentStaffPermissions = session.permissions;
   currentStaffMfaEnabled = Boolean(session.mfaEnabled);
   currentMfaSetupUri = undefined;
   $('#mfa-secret').hidden = true;
@@ -2639,12 +2732,16 @@ function showStaffSession(session, focus = false) {
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
   $('#staff-identity').textContent = `${session.email} · ${staffRoleLabel(session.role)}`;
-  comingSoonUi.setStaffRole(session.role);
+  $('#staff-brand').textContent = session.brandName;
+  $('#publish-config').hidden = !currentStaffPermissions.publishWebsite;
+  $('#publish-config-help').hidden = currentStaffPermissions.publishWebsite;
+  $('#coming-soon-publish-help').hidden = currentStaffPermissions.publishCatalogue;
+  comingSoonUi.setStaffAccess(session.role, currentStaffPermissions.publishCatalogue);
   $('#mfa-setup').hidden = session.mfaEnabled;
   $('#mfa-verify').hidden = false;
   $('#mfa-verify').querySelector('button[type=submit]').hidden = session.mfaEnabled;
   $('#mfa-disable').hidden = !session.mfaEnabled;
-  adminWorkspace.setRole(session.role, focus);
+  adminWorkspace.setRole(session.role, currentStaffPermissions, focus);
 }
 $('#staff-login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -2711,38 +2808,52 @@ $('#staff-create select[name="role"]').addEventListener('change', updateStaffRol
 $('#staff-create').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
-  const { email, password, role } = Object.fromEntries(new FormData(form));
+  const { email, password, role, reason } = Object.fromEntries(new FormData(form));
+  const access = staffGrants($('#staff-create-grants'), role);
+  const button = form.querySelector('button[type=submit]');
+  button.disabled = true;
   try {
-    await api('admin/staff', { email, password, role });
+    await api('admin/staff', { email, password, role, reason, ...access });
     form.reset();
+    updateStaffRoleHelp();
     $('#staff-status').textContent = t('staffAdded');
     await refreshStaffList();
   } catch (error) { $('#staff-status').textContent = t(error.message); }
+  finally { button.disabled = false; }
 });
+function requestStaffReason(message) {
+  const reason = window.prompt(`${message}\n\n${t('staffReason')}`)?.trim();
+  if (reason === '' || reason?.length > 240) $('#staff-status').textContent = t(reason ? 'invalid' : 'staffReasonRequired');
+  return reason && reason.length <= 240 ? reason : null;
+}
 $('#staff-list').addEventListener('click', async (event) => {
   const roleEmail = event.target.dataset.updateRoleEmail;
   if (roleEmail) {
-    const role = event.target.closest('li').querySelector('[data-staff-role]').value;
+    const row = event.target.closest('li');
+    const role = row.querySelector('[data-staff-role]').value;
     const currentMember = staffMemberCache.find((member) => member.email === roleEmail);
-    if (!currentMember || currentMember.role === role) return;
-    const roleLabels = { operator_admin: t('roleAdmin'), operator_content: t('roleContent'), operator_provider: t('roleProvider'), operator_support: t('roleSupport') };
-    const confirmation = t('staffConfirmRoleChange').replace('{email}', roleEmail).replace('{oldRole}', roleLabels[currentMember.role] || currentMember.role).replace('{newRole}', roleLabels[role] || role);
-    if (!window.confirm(confirmation)) return;
+    if (!currentMember) return;
+    const access = staffGrants(row, role);
+    const message = role === currentMember.role ? roleEmail : t('staffConfirmRoleChange').replace('{email}', roleEmail)
+      .replace('{oldRole}', staffRoleLabel(currentMember.role)).replace('{newRole}', staffRoleLabel(role));
+    const reason = requestStaffReason(message);
+    if (!reason) return;
+    event.target.disabled = true;
     try {
-      await api('admin/staff/role', { email: roleEmail, role });
+      await api('admin/staff/role', { email: roleEmail, role, reason, ...access });
       $('#staff-status').textContent = t('staffRoleUpdated');
       await refreshStaffList();
     } catch (error) { $('#staff-status').textContent = t(error.message); }
+    finally { event.target.disabled = false; }
     return;
   }
   const enableEmail = event.target.dataset.enableEmail;
   if (enableEmail) {
     const role = event.target.dataset.enableRole;
-    const roleLabels = { operator_admin: t('roleAdmin'), operator_content: t('roleContent'), operator_provider: t('roleProvider'), operator_support: t('roleSupport') };
-    const confirmation = t('staffConfirmReenable').replace('{email}', enableEmail).replace('{role}', roleLabels[role] || role);
-    if (!window.confirm(confirmation)) return;
+    const reason = requestStaffReason(t('staffConfirmReenable').replace('{email}', enableEmail).replace('{role}', staffRoleLabel(role)));
+    if (!reason) return;
     try {
-      await api('admin/staff', { email: enableEmail, role });
+      await api('admin/staff', { email: enableEmail, role, reason });
       $('#staff-status').textContent = t('staffReenabled');
       await refreshStaffList();
     } catch (error) { $('#staff-status').textContent = t(error.message); }
@@ -2750,9 +2861,10 @@ $('#staff-list').addEventListener('click', async (event) => {
   }
   const email = event.target.dataset.disableEmail;
   if (!email) return;
-  if (!window.confirm(t('staffConfirmDisable'))) return;
+  const reason = requestStaffReason(t('staffConfirmDisable'));
+  if (!reason) return;
   try {
-    await api('admin/staff/disable', { email });
+    await api('admin/staff/disable', { email, reason });
     $('#staff-status').textContent = t('staffDisabled');
     await refreshStaffList();
   } catch (error) { $('#staff-status').textContent = t(error.message); }
@@ -2899,8 +3011,8 @@ if (!isAdminPage) {
     }
     playerSessionStartedAt = player?.sessionStartedAt;
     if (player?.preferredLocale) {
-      language = player.preferredLocale === 'fr-CA' ? 1 : 0;
-      localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+      language = publicLanguage(player.preferredLocale);
+      if (publicLocales.includes(player.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
     }
     updateAccount();
     render();
