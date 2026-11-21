@@ -52,10 +52,10 @@ const fields = ['titleEn', 'titleFr', 'studio', 'descriptionEn', 'descriptionFr'
 const canEdit = ['operator_admin', 'operator_content', 'operator_provider'];
 const canPublish = ['operator_admin', 'operator_provider'];
 const canReviewSaves = ['operator_admin', 'operator_support'];
-const detailSlug = location.pathname.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
 const searchable = (text) => text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-export function createComingSoonUi({ api, t, element, action, isFrench, getFavorites, favoritePending, toggleFavorite }) {
+export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, isFrench, getFavorites, favoritePending, toggleFavorite }) {
+  const detailSlug = currentRoute.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
   const $ = (id) => document.getElementById(id);
   const form = $('coming-soon-form');
   const list = $('coming-soon-admin-list');
@@ -80,7 +80,7 @@ export function createComingSoonUi({ api, t, element, action, isFrench, getFavor
   const stateText = (state) => t({ draft: 'comingSoonDraft', published: 'comingSoonPublished', archived: 'comingSoonArchived' }[state]);
   const linkTo = (title, label, className) => {
     const link = element('a', label, className);
-    link.href = `/coming-soon/${title.slug}`;
+    link.href = appPath(`/coming-soon/${title.slug}`);
     return link;
   };
 

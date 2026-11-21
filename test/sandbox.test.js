@@ -12,7 +12,7 @@ import test from 'node:test';
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
-async function startSandbox(t, initializeDatabase) {
+async function startSandbox(t, { initializeDatabase, appBasePath = '' } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
@@ -28,7 +28,7 @@ async function startSandbox(t, initializeDatabase) {
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
       PROVIDER_KEY_ENCRYPTION: randomBytes(32).toString('hex'), SECURE_COOKIES: '0',
-      PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: ''
+      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: ''
     }
   });
   const errors = [];
@@ -51,7 +51,8 @@ function client(base, cookies = new Map()) {
   return async function request(path, payload, host) {
     const origin = new URL(base);
     if (host) origin.hostname = host;
-    const response = await fetch(new URL('/api/' + path, origin), {
+    const pathname = origin.pathname.replace(/\/$/, '');
+    const response = await fetch(new URL(pathname + '/api/' + path, origin), {
       method: payload === undefined ? 'GET' : 'POST',
       headers: {
         ...(payload !== undefined && { 'Content-Type': 'application/json' }),
@@ -221,7 +222,7 @@ test('Coming Soon publication, role and tenant scope, and favorite reconciliatio
 });
 
 test('local startup migrates a non-tenant ledger and preserves existing player preferences', async (t) => {
-  const { base, database } = await startSandbox(t, (db) => {
+  const { base, database } = await startSandbox(t, { initializeDatabase(db) {
     db.exec(`
       CREATE TABLE players (
         id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
@@ -232,7 +233,7 @@ test('local startup migrates a non-tenant ledger and preserves existing player p
         wager INTEGER NOT NULL, amount INTEGER NOT NULL, request_id TEXT);
       INSERT INTO ledger VALUES (1, 31, NULL, 0, 10000, NULL);
     `);
-  });
+  } });
   assert.equal((await fetch(base + '/readyz')).status, 200);
   const db = new DatabaseSync(database, { readOnly: true });
   try {
@@ -241,4 +242,39 @@ test('local startup migrates a non-tenant ledger and preserves existing player p
     assert.equal(db.prepare('SELECT amount FROM ledger WHERE player = 31 AND tenant_id = ?').get('sandbox').amount, 10000);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   } finally { db.close(); }
+});
+
+test('published routes work under a directory and behind a prefix-stripping proxy', async (t) => {
+  const mount = '/casinohabibi';
+  const { base } = await startSandbox(t, { appBasePath: `${mount}/` });
+  const published = base + mount;
+  const redirect = await fetch(`${published}?lang=fr`, { redirect: 'manual' });
+  assert.equal(redirect.status, 308);
+  assert.equal(redirect.headers.get('location'), `${mount}/?lang=fr`);
+
+  for (const prefix of [published, base]) {
+    const admin = await fetch(prefix + '/admin');
+    assert.equal(admin.status, 200);
+    const body = await admin.text();
+    assert.match(body, /data-app-base-path="\/casinohabibi"/);
+    assert.match(body, /href="\/casinohabibi\/admin\.css"/);
+    assert.match(body, /src="\/casinohabibi\/app\.js"/);
+    assert.match(body, /id="admin-section-picker"/);
+    assert.equal((await fetch(prefix + '/readyz')).status, 200);
+  }
+
+  const css = await fetch(published + '/style.css');
+  assert.match(await css.text(), /url\('hero\.webp'\)/);
+  assert.equal((await fetch(published + '/hero.webp')).status, 200);
+  assert.equal((await fetch(published + '/admin-workspace.js')).status, 200);
+  const staff = client(published);
+  assert.equal((await staff('admin/login', staffCredentials)).status, 200);
+  assert.equal((await staff('admin/overview')).status, 200);
+  const player = client(published);
+  const registration = await player('signup', playerCredentials);
+  assert.equal(registration.status, 200);
+  const verification = new URL(registration.data.verifyUrl);
+  assert.equal(verification.pathname, mount + '/');
+  assert.equal((await player('email-verification/complete', { token: verification.searchParams.get('verify') })).status, 200);
+  assert.equal((await player('login', playerCredentials)).status, 200);
 });

@@ -18,7 +18,10 @@ const bootstrapPasswordValue = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 const platformAdminTokenValue = process.env.PLATFORM_ADMIN_TOKEN;
 const resetEmailApiKey = process.env.RESET_EMAIL_API_KEY || '';
 const resetEmailFrom = process.env.RESET_EMAIL_FROM || '';
-const publicBaseUrl = process.env.PUBLIC_BASE_URL || '';
+const publicSite = process.env.PUBLIC_BASE_URL ? new URL(process.env.PUBLIC_BASE_URL) : null;
+const appBasePath = (process.env.APP_BASE_PATH ?? publicSite?.pathname ?? '').replace(/\/$/, '');
+if (!/^(?:\/[a-zA-Z0-9_-]+)*$/.test(appBasePath)) throw new Error('APP_BASE_PATH must contain only URL directory segments');
+const publicBaseUrl = publicSite ? `${publicSite.origin}${appBasePath}` : '';
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535');
 if (process.env.SECURE_COOKIES !== undefined && !['0', '1'].includes(process.env.SECURE_COOKIES)) throw new Error('SECURE_COOKIES must be 0 or 1');
 if (encryptionKeyValue && !/^[a-f0-9]{64}$/i.test(encryptionKeyValue)) throw new Error('PROVIDER_KEY_ENCRYPTION must contain exactly 64 hexadecimal characters');
@@ -407,6 +410,10 @@ async function deliverTransactionalEmail(to, subject, text) {
   if (!response.ok) throw new Error('Transactional email delivery failed');
 }
 
+function playerLinkBase(req) {
+  return publicBaseUrl || `http://${req.headers.host || `localhost:${port}`}${appBasePath}`;
+}
+
 async function issuePlayerEmailVerification(req, playerId, tenantId, email, locale) {
   const token = randomBytes(32).toString('hex');
   const now = Date.now();
@@ -415,7 +422,7 @@ async function issuePlayerEmailVerification(req, playerId, tenantId, email, loca
     db.prepare('DELETE FROM player_email_verifications WHERE expires <= ?').run(now);
     db.prepare('INSERT INTO player_email_verifications(token_hash, tenant_id, player_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), tenantId, playerId, now + 24 * 60 * 60 * 1000, now);
   });
-  const verifyUrl = `${appEnvironment === 'development' && !publicBaseUrl ? `http://${req.headers.host || `localhost:${port}`}` : publicBaseUrl}/?verify=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
+  const verifyUrl = `${playerLinkBase(req)}/?verify=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
   if (resetEmailApiKey) {
     const french = locale === 'fr-CA';
     try {
@@ -943,7 +950,7 @@ async function api(req, res, path, tenantId, requestId) {
       db.prepare('DELETE FROM player_email_changes WHERE expires <= ?').run(now);
       db.prepare('INSERT INTO player_email_changes(token_hash, tenant_id, player_id, new_email, expires, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(hash(token), tenantId, player, newEmail, now + 24 * 60 * 60 * 1000, now);
     });
-    const changeUrl = `${appEnvironment === 'development' && !publicBaseUrl ? `http://${req.headers.host || `localhost:${port}`}` : publicBaseUrl}/?email-change=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
+    const changeUrl = `${playerLinkBase(req)}/?email-change=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
     if (resetEmailApiKey) {
       try {
         const french = locale === 'fr-CA';
@@ -1097,7 +1104,7 @@ async function api(req, res, path, tenantId, requestId) {
         db.prepare('DELETE FROM player_password_resets WHERE expires <= ?').run(now);
         db.prepare('INSERT INTO player_password_resets(token_hash, tenant_id, player_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(rawToken), tenantId, row.id, now + 30 * 60 * 1000, now);
       });
-      resetUrl = `${appEnvironment === 'development' && !publicBaseUrl ? `http://${req.headers.host || `localhost:${port}`}` : publicBaseUrl}/?reset=${rawToken}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
+      resetUrl = `${playerLinkBase(req)}/?reset=${rawToken}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
       if (resetEmailApiKey) {
         const french = locale === 'fr-CA';
         try {
@@ -1544,7 +1551,13 @@ createServer(async (req, res) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   res.setHeader('Cache-Control', 'no-store');
   try {
-    path = new URL(req.url, 'http://localhost').pathname;
+    const requestUrl = new URL(req.url, 'http://localhost');
+    path = requestUrl.pathname;
+    if (appBasePath && path.startsWith(appBasePath + '/')) path = path.slice(appBasePath.length);
+    else if (appBasePath && path === appBasePath && req.method === 'GET') {
+      res.writeHead(308, { Location: `${appBasePath}/${requestUrl.search}` });
+      return res.end();
+    }
     if (req.method === 'GET' && path === '/healthz') {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.end(JSON.stringify({ status: 'ok', requestId }));
@@ -1563,7 +1576,12 @@ createServer(async (req, res) => {
     if (req.method !== 'GET' || (!preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
     if (preview && !comingSoon.published(tenantId, preview[1])) res.statusCode = 404;
     const [file, type] = preview ? assets['/'] : assets[path];
-    const content = readFileSync(new URL(`./public/${file}`, import.meta.url));
+    let content = readFileSync(new URL(`./public/${file}`, import.meta.url));
+    if (type === 'text/html' && appBasePath) {
+      content = content.toString('utf8')
+        .replace('data-app-base-path=""', `data-app-base-path="${appBasePath}"`)
+        .replace(/\b(href|src)="\/(?!\/)/g, (_match, attribute) => `${attribute}="${appBasePath}/`);
+    }
     res.setHeader('Content-Type', type.startsWith('text/') ? `${type}; charset=utf-8` : type);
     res.end(content);
   } catch (error) {

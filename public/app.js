@@ -2,7 +2,11 @@ import { games } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
-const isAdminPage = location.pathname === '/admin';
+const appBasePath = document.documentElement.dataset.appBasePath;
+const appPath = (path) => appBasePath + path;
+const currentRoute = location.pathname.startsWith(appPath('/'))
+  ? location.pathname.slice(appBasePath.length) : location.pathname;
+const isAdminPage = currentRoute === '/admin';
 const copy = {
   ...comingSoonCopy,
   ...adminWorkspaceCopy,
@@ -382,7 +386,7 @@ function demoBalanceResetDetails(rawOutcome) {
 function updateSessionReminder() {
   const banner = $('#session-reminder');
   if (!banner) return;
-  if (!player || !playerSessionStartedAt || location.pathname === '/admin') {
+  if (!player || !playerSessionStartedAt || isAdminPage) {
     banner.hidden = true;
     displayedReminderPeriod = undefined;
     displayedReminderLanguage = undefined;
@@ -427,7 +431,7 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const response = await fetch('/api/' + path, options);
+  const response = await fetch(appPath('/api/' + path), options);
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error);
   return payload;
@@ -438,7 +442,7 @@ function applyTenant(config) {
   tenantFeaturedGameIds = Array.isArray(config.featuredGameIds) ? config.featuredGameIds : ['gold', 'roulette'];
   if (savedTenantDraftSignature === undefined) renderFeaturedGameEditor(tenantFeaturedGameIds);
   const favicon = $('#tenant-favicon');
-  favicon.href = config.brandFavicon || '/favicon.svg';
+  favicon.href = config.brandFavicon || appPath('/favicon.svg');
   if (config.brandFavicon) favicon.type = config.brandFavicon.startsWith('data:image/png;') ? 'image/png' : 'image/webp';
   else favicon.type = 'image/svg+xml';
   tenantPolicyLinks = {
@@ -543,7 +547,7 @@ function updateTenantPreview() {
   $('#tenant-preview-name').textContent = brandName || t('previewBrandPlaceholder');
   $('#tenant-preview-email').textContent = supportEmail || t('previewEmailPlaceholder');
   $('#tenant-preview-swatch').style.backgroundColor = accentColor || '#b8ec9d';
-  $('#tenant-preview-favicon').src = form.elements.brandFavicon.value || '/favicon.svg';
+  $('#tenant-preview-favicon').src = form.elements.brandFavicon.value || appPath('/favicon.svg');
   const previewSwatch = $('#tenant-preview-swatch');
   previewSwatch.replaceChildren();
   if (form.elements.brandLogo.value) {
@@ -1528,7 +1532,7 @@ let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
 let latestOverview = null;
 const comingSoonUi = createComingSoonUi({
-  api, t, element, action,
+  api, t, element, action, appPath, currentRoute,
   isFrench: () => Boolean(language),
   getFavorites: () => favorites,
   favoritePending: () => favoriteSavePending,

@@ -50,6 +50,8 @@ Staging and production require an explicit data directory, host, valid encryptio
 
 Startup also rejects invalid ports, malformed encryption keys, incomplete bootstrap credentials, short platform tokens, and missing required staging/production settings before it opens the database.
 
+For a site hosted under a URL directory, set `APP_BASE_PATH` to that directory, such as `/casinohabibi`. It defaults to the path in `PUBLIC_BASE_URL` when configured. The reverse proxy can forward the directory unchanged or strip it before forwarding to Node. Keep the existing data directory and encryption key when updating a deployment.
+
 ## Operator administration
 
 Open `/admin` for the Dashboard. Use the sidebar on desktop or the section picker on a phone to access the game catalogue, player activity, support, website content, staff, audit log and your security settings. Your staff role determines which sections are available. In **Website content**, changes entered across the tabs are saved together as one draft.
