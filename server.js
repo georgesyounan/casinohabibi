@@ -265,7 +265,7 @@ const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex'
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 installPlayerAccess(db, transaction);
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
-const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath });
+const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath, transaction });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -669,10 +669,10 @@ async function api(req, res, path, tenantId, requestId) {
   if (req.method !== 'GET' && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   if (route === 'GET /api/coming-soon') {
-    if (!comingSoonEnabled(tenantId)) return { titles: [], featured: [], discover: [] };
-    const seed = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1] || randomBytes(16).toString('hex');
-    res.setHeader('Set-Cookie', `northplay_visit=${seed}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
-    return comingSoon.lobby(tenantId, seed, catalogueAudience(tenantId, catalogueLocale || 'default'));
+    const cookie = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1];
+    const lobby = comingSoon.lobby(tenantId, cookie, catalogueAudience(tenantId, catalogueLocale || 'default'), player, comingSoonEnabled(tenantId));
+    res.setHeader('Set-Cookie', `northplay_visit=${lobby.visitId}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
+    return lobby;
   }
   const preview = route.match(/^GET \/api\/coming-soon\/([a-z0-9-]{1,64})$/);
   if (preview) {

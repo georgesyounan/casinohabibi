@@ -579,3 +579,54 @@ test('protected catalogue previews and published market and language restriction
   assert.equal((await guest('coming-soon/orchard?locale=fr-CA')).data.titleFr, live.titleFr);
   assert.equal((await staff('admin/coming-soon', { action: 'publish', slug: 'orchard', version: 2 })).status, 409);
 });
+
+test('Discover preserves surviving positions, fills vacancies and rotates expired visits', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const staff = client(base);
+  const guest = client(base);
+  const player = client(base);
+  await staff('admin/login', staffCredentials);
+  const empty = (await guest('coming-soon')).data;
+  assert.equal(empty.collectionSize, 'empty');
+  const publish = async (draft) => {
+    const saved = (await staff('admin/coming-soon', draft)).data.title;
+    return (await staff('admin/coming-soon', { action: 'publish', version: saved.version, slug: saved.slug })).data.title;
+  };
+  for (let index = 1; index <= 8; index++) {
+    await publish(cardDraft('Preview ' + index, { featuredRank: index }));
+    if (index === 5) {
+      const small = (await guest('coming-soon')).data;
+      assert.equal(small.collectionSize, 'small');
+      assert.equal(small.discover.length, 5);
+    }
+  }
+  const full = (await guest('coming-soon')).data;
+  assert.equal(full.eligibleCount, 8);
+  assert.equal(full.collectionSize, 'full');
+  assert.equal(full.visitId, empty.visitId);
+  assert.equal(new Set(full.discover).size, 6);
+  await publish(cardDraft('Preview 1', { slug: 'preview-1', version: 2, featuredRank: 9 }));
+  const reordered = (await guest('coming-soon')).data;
+  assert.equal(reordered.featured.at(-1), 'preview-1');
+  assert.deepEqual(reordered.discover, full.discover);
+  const index = 2;
+  const slug = full.discover[index];
+  const draft = (await staff('admin/coming-soon/preview/' + slug)).data;
+  await staff('admin/coming-soon', { action: 'archive', slug, version: draft.version });
+  const after = (await guest('coming-soon')).data;
+  assert.equal(after.discover.length, 6);
+  assert.ok(!full.discover.includes(after.discover[index]));
+  assert.deepEqual(after.discover.filter((_, i) => i !== index), full.discover.filter((_, i) => i !== index));
+  await register(player);
+  const sample = (await player('coming-soon')).data;
+  assert.notEqual(sample.visitId, full.visitId);
+  const first = sample.titles[0];
+  await player('account/favorite', { key: first.favoriteKey, saved: true });
+  assert.equal((await player('coming-soon')).data.titles.find(({ id }) => id === first.id).saved, true);
+  assert.ok((await guest('coming-soon')).data.titles.every((title) => title.visible && !title.saved));
+  const db = new DatabaseSync(database);
+  try { db.prepare('UPDATE coming_soon_visits SET expires = 0 WHERE visit_id = ?').run(full.visitId); } finally { db.close(); }
+  const fresh = (await guest('coming-soon')).data;
+  assert.notEqual(fresh.visitId, full.visitId);
+  assert.equal(new Set(fresh.discover).size, 6);
+});
