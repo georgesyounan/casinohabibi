@@ -261,3 +261,13 @@
   .admin-form-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-page .overview-period { flex-wrap: wrap; }
 }
+
+.player-matches, #player-events { padding-inline-start: 1.25rem; }
+.player-matches:empty, #player-search-status:empty, #player-action-status:empty { display: none; }
+.player-record { display: grid; gap: .75rem; margin-block: 1rem 1.5rem; overflow-wrap: anywhere; }
+.player-record h3, .player-record p { margin: 0; }
+.player-record small { display: block; }
+.player-record summary { cursor: pointer; }
+.player-record li + li { margin-block-start: .45rem; }
+.player-record form { display: grid; gap: .65rem; }
+.player-record [hidden], .player-record[hidden] { display: none; }

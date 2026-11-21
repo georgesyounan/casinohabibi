@@ -62,9 +62,9 @@ The admin catalog section has a sample-data action that saves a local placeholde
 
 ### Coming Soon previews
 
-Open **Coming Soon** in **Game catalogue** to save a bilingual draft. Choose **Publish preview** to make its permanent URL available from the lobby. Operator admins and staff who have catalogue publishing rights for that brand can publish or archive previews. A positive rank places a published preview in **Featured**. Each visit shows up to six distinct previews drawn from the published catalogue in a stable **Discover** order.
+Open **Coming Soon** in **Game catalogue** to save a bilingual draft. Choose the display market and languages, then open **Preview draft** to review the artwork and copy. **Publish preview** makes that revision available in the eligible public lobby. Operator admins and staff who have catalogue publishing rights for that brand can publish or archive previews. A positive rank places a published preview in **Featured**. Each visit shows up to six eligible previews in **Discover**. Reordering Featured preserves the Discover row. Archiving replaces its open slot when another card qualifies. Visits expire after 30 minutes of inactivity.
 
-Signed-in players can keep their previews in Favorites across devices. Archiving removes the preview and its active favorites while preserving the first-save reference in **Preview saves** and the player's account export. The dashboard shows the published count and distinct first-save count. The staff audit history identifies each publish or archive by actor, preview, revision and request ID.
+Signed-in players can keep their previews in Favorites across devices. Each addition or removal has an activity reference. Retrying the same change preserves that reference. Archiving clears the active favorite. Staff can still search **Players** by email, player ID, `save-N` or `activity-N` and open the account history. The dashboard shows the published count and distinct first-save count. The staff audit history identifies each publish or archive by actor, preview, revision and request ID.
 
 In Windows Command Prompt, set the variables in the same window before starting the server:
 
@@ -102,11 +102,13 @@ This remains an early control-plane API behind one shared platform token. Tenant
 
 ## Player password recovery
 
-New player accounts require email verification before sign-in. Verification links expire after 24 hours and can be resent from the sign-in panel. Legacy accounts are treated as verified when the verification field is added during migration. Development displays local verification links; staging and production send bilingual email through Resend using the same `RESET_EMAIL_API_KEY`, `RESET_EMAIL_FROM`, and HTTPS `PUBLIC_BASE_URL` settings documented below.
+New player accounts require email verification before sign-in. Verification links expire after 24 hours and can be resent from the sign-in panel. Legacy accounts are treated as verified when the verification field is added during migration. A loopback development instance can display verification links locally. Hosted instances send bilingual email through Resend using the same `RESET_EMAIL_API_KEY`, `RESET_EMAIL_FROM`, and HTTPS `PUBLIC_BASE_URL` settings documented below.
 
 Players can request an email change from account settings after entering their current password. The new address must be confirmed within 24 hours. The current address remains active until confirmation; on completion, all player sessions are revoked and the player must sign in again. The previous address receives a notice when email delivery is configured.
 
-Players can request a password reset from the sign-in panel. Reset links expire after 30 minutes, can be used once, and invalidate the account's existing sessions after a successful reset. Development logs a local reset link; staging and production require `RESET_EMAIL_API_KEY`, `RESET_EMAIL_FROM`, and an HTTPS `PUBLIC_BASE_URL` to send bilingual email through Resend. Set these in the corresponding environment file or secret manager before starting a non-development environment.
+Players can request a password reset from the sign-in panel. Reset links expire after 30 minutes, can be used once, and invalidate the account's existing sessions after a successful reset. Local loopback development can show the reset link in the browser. Hosted installations require `RESET_EMAIL_API_KEY`, `RESET_EMAIL_FROM`, and an HTTPS `PUBLIC_BASE_URL` to send bilingual email through Resend. Set these in the corresponding environment file or secret manager before starting a non-development environment.
+
+In **Players**, support staff can search for an account and send recovery to its stored email address. Operator admins and support staff explicitly granted **Suspend and restore player access** can change access with a reason. Suspending revokes sessions and pending links. Restoring access requires a fresh sign-in and preserves responsible-play exclusions.
 
 Signed-in players can revoke other active sessions from account security settings; the current device remains signed in. They can also opt into or out of promotional email in account settings. Each consent change records the choice, time, language, notice version, and source; essential account and security emails are separate. This preference does not send marketing email until a communications service is connected. The account export includes this consent history.
 

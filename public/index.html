@@ -150,6 +150,8 @@
               <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" maxlength="120" required></label>
               <label><span data-copy="comingSoonCategory"></span><select name="category"><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
               <label><span data-copy="comingSoonStudio"></span><input name="studio" maxlength="64"></label>
+              <label><span data-copy="comingSoonMarket"></span><input name="cardMarket" maxlength="6" pattern="[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?" placeholder="CA-QC"></label>
+              <label><span data-copy="comingSoonLanguages"></span><select name="locales"><option value="both" data-copy="comingSoonBoth"></option><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
               <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" rows="3" maxlength="800"></textarea></label>
               <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" rows="3" maxlength="800"></textarea></label>
               <label><span data-copy="comingSoonArtwork"></span><input name="artworkFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
@@ -158,6 +160,11 @@
               <label><span data-copy="comingSoonAltFr"></span><input name="altFr" maxlength="200"></label>
               <div class="actions"><button type="submit" data-copy="saveDraft"></button><button type="button" id="coming-soon-remove-art" class="ghost" data-copy="comingSoonRemoveArt" hidden></button><button type="button" id="coming-soon-close-editor" class="ghost" data-copy="adminCloseEditor"></button></div>
             </form>
+            <section id="catalogue-draft-preview" class="admin-editor" aria-labelledby="draft-preview-heading" hidden>
+              <div class="admin-page-heading"><h4 id="draft-preview-heading" data-copy="comingSoonDraftPreview" tabindex="-1"></h4><a id="close-draft-preview" class="button ghost" href="/admin#coming-soon-admin" data-copy="comingSoonBackToCatalogue"></a></div>
+              <label><span data-copy="comingSoonPreviewLocale"></span><select id="draft-preview-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
+              <p id="draft-preview-revision"></p><div id="draft-preview-content"></div>
+            </section>
             <label class="admin-preview-search" hidden><span data-copy="comingSoonFind"></span><input id="coming-soon-admin-search" type="search" autocomplete="off"></label>
             <p id="coming-soon-admin-empty" hidden></p>
             <ul id="coming-soon-admin-list" class="coming-soon-admin-list"></ul>
@@ -207,14 +214,30 @@
             </div>
           </div>
           <form id="coming-soon-save-search" class="coming-soon-save-search">
-              <label><span data-copy="comingSoonSavesSearch"></span><input name="query" type="search" maxlength="254"></label>
+              <label><span data-copy="playerSearchLabel"></span><input name="query" type="search" maxlength="254"></label>
               <button type="submit" class="ghost" data-copy="comingSoonSearch"></button>
             </form>
+            <p id="player-search-status" role="status"></p>
+            <ul id="player-matches" class="player-matches"></ul>
+            <section id="player-record" class="admin-editor player-record" aria-labelledby="player-record-title" hidden>
+              <h3 id="player-record-title" tabindex="-1"></h3>
+              <p id="player-record-summary"></p>
+              <div class="actions" id="player-record-actions"></div>
+              <form id="player-status-form" hidden>
+                <label><span data-copy="staffReason"></span><textarea name="reason" rows="2" maxlength="240" required></textarea></label>
+                <div class="actions"><button type="submit" id="player-confirm-status"></button><button type="button" id="player-cancel-status" class="ghost" data-copy="playerCancel"></button></div>
+              </form>
+              <p role="status" id="player-action-status"></p>
+              <details id="player-event-details"><summary data-copy="playerAccessHistory"></summary><ol id="player-events"></ol></details>
+              <details id="player-activity-details"><summary data-copy="playerFavoriteHistory"></summary><ol id="player-favorite-events"></ol><button type="button" class="ghost" id="player-more-activity" data-copy="playerOlder" hidden></button></details>
+            </section>
+            <h3 data-copy="playerSaveHistory"></h3>
             <p id="coming-soon-saves-status" role="status"></p>
             <div class="audit-table-wrap" role="region" aria-labelledby="coming-soon-saves-heading" tabindex="0"><table class="coming-soon-saves-table" aria-labelledby="coming-soon-saves-heading">
               <thead><tr><th scope="col" data-copy="comingSoonSaveRef"></th><th scope="col" data-copy="email"></th><th scope="col" data-copy="comingSoon"></th><th scope="col" data-copy="supportFilter"></th><th scope="col" data-copy="comingSoonDate"></th></tr></thead>
               <tbody id="coming-soon-saves-body"></tbody>
             </table></div>
+            <div class="actions" id="saves-pages" hidden><button type="button" class="ghost" id="saves-previous" data-copy="playerPrevious"></button><span id="saves-page-count" role="status"></span><button type="button" class="ghost" id="saves-next" data-copy="playerNext"></button></div>
         </section>
         <section id="support-inbox" class="admin-page" data-admin-view data-roles="operator_admin,operator_support" aria-labelledby="support-inbox-title" hidden>
           <div class="admin-page-heading">
@@ -347,6 +370,7 @@
               <label><span data-copy="staffRole"></span><select name="role"><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label>
               <p id="staff-role-help" class="staff-role-help"></p>
               <div class="staff-publishing-grants" id="staff-create-grants" hidden>
+                <label class="admin-check"><input type="checkbox" name="managePlayerAccess"><span data-copy="playerAccessGrant"></span></label>
                 <label class="admin-check"><input type="checkbox" name="publishWebsite"><span data-copy="staffPublishWebsite"></span></label>
                 <label class="admin-check"><input type="checkbox" name="publishCatalogue"><span data-copy="staffPublishCatalogue"></span></label>
               </div>

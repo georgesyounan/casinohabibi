@@ -1,5 +1,6 @@
 import { games } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
+import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
 const appBasePath = document.documentElement.dataset.appBasePath;
@@ -9,6 +10,7 @@ const currentRoute = location.pathname.startsWith(appPath('/'))
 const isAdminPage = currentRoute === '/admin';
 const copy = {
   ...comingSoonCopy,
+  ...playerAccessCopy,
   ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
@@ -278,6 +280,7 @@ const copy = {
 
 const $ = (selector) => document.querySelector(selector);
 const auditActionLabels = {
+  player_suspended: playerAccessCopy.player_suspended, player_restored: playerAccessCopy.player_restored, player_recovery_requested: playerAccessCopy.player_recovery_requested,
   coming_soon_draft_saved: comingSoonCopy.comingSoonAuditSaved,
   coming_soon_published: comingSoonCopy.comingSoonAuditPublished,
   coming_soon_archived: comingSoonCopy.comingSoonAuditArchived,
@@ -334,6 +337,7 @@ try {
 let favorites = new Set(guestFavorites);
 let favoriteSavePending = false;
 let favoriteStatusKey;
+let favoriteActivityId;
 let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let result;
@@ -435,8 +439,9 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const auditedMutation = data !== undefined && /^(admin\/(config|coming-soon|staff|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
-  if (auditedMutation && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
+  const auditedMutation = data !== undefined && /^(admin\/(config|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
+  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
   const send = async () => {
     const response = await fetch(appPath('/api/' + path), options);
     return { response, payload: await response.json() };
@@ -1410,12 +1415,14 @@ async function toggleFavorite(key) {
   favoriteSavePending = true;
   renderCatalog();
   try {
-    const saved = await api('account/favorite', { key, saved: favorites.has(key) });
+    const preview = /^coming-soon:([1-9]\d*)$/.exec(key);
+    const saved = preview ? await api('me/saved/' + preview[1] + '?locale=' + (language ? 'fr-CA' : 'en-CA'), undefined, favorites.has(key) ? 'PUT' : 'DELETE')
+      : await api('account/favorite', { key, saved: favorites.has(key) });
     favorites = new Set(saved.favorites);
     player.favorites = [...favorites];
     guestFavorites = new Set();
     cacheGuestFavorites();
-    announceFavorite('favoritesSynced');
+    announceFavorite('favoritesSynced', saved.activityId);
   } catch {
     favorites = previous;
     announceFavorite('favoriteSaveFailed');
@@ -1425,10 +1432,12 @@ async function toggleFavorite(key) {
   }
 }
 
-function announceFavorite(message) {
+function announceFavorite(message, activityId) {
   favoriteStatusKey = message;
-  $('#favorites-status').textContent = t(message);
-  comingSoonUi.favoriteStatus(t(message));
+  favoriteActivityId = activityId;
+  const text = t(message) + (activityId ? ' · activity-' + activityId : '');
+  $('#favorites-status').textContent = text;
+  comingSoonUi.favoriteStatus(text);
 }
 
 function renderCatalog() {
@@ -1548,8 +1557,10 @@ let supportInboxTotal = 0;
 let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
 let latestOverview = null;
+const playerAccessUi = createPlayerAccessUi({ api, t, element, action,
+  canManage: () => currentStaffPermissions.managePlayerAccess, locale: () => language ? 'fr-CA' : 'en-CA' });
 const comingSoonUi = createComingSoonUi({
-  api, t, element, action, appPath, currentRoute,
+  api, t, element, action, appPath, currentRoute, openPlayer: playerAccessUi.open,
   lobbyEnabled: () => publicComingSoon,
   isFrench: () => Boolean(language),
   getFavorites: () => favorites,
@@ -1575,6 +1586,7 @@ const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => 
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
+  if (languageChanged && !isAdminPage) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
   updateDocumentTitle();
   updateTenantPreview();
@@ -1603,8 +1615,9 @@ function render() {
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
   renderCatalog();
-  if (favoriteStatusKey) announceFavorite(favoriteStatusKey);
+  if (favoriteStatusKey) announceFavorite(favoriteStatusKey, favoriteActivityId);
   comingSoonUi.renderAdmin();
+  if (languageChanged) playerAccessUi.render();
   updateCatalogPreview();
   if (supportInboxEntries) renderSupportInbox();
   if ($('#dialog').open) renderDialog();
@@ -2097,7 +2110,10 @@ function updateStaffRoleHelp() {
 function displayStaffGrants(container, role) {
   const website = role === 'operator_content';
   const catalogue = website || role === 'operator_provider';
-  container.hidden = !catalogue;
+  const access = role === 'operator_support';
+  container.hidden = !catalogue && !access;
+  container.querySelector('[name="managePlayerAccess"]').closest('label').hidden = !access;
+  container.querySelector('[name="publishCatalogue"]').closest('label').hidden = !catalogue;
   container.querySelector('[name="publishWebsite"]').closest('label').hidden = !website;
 }
 function staffGrants(container, role) {
@@ -2105,7 +2121,8 @@ function staffGrants(container, role) {
   const catalogue = website || role === 'operator_provider';
   return {
     publishWebsite: website && container.querySelector('[name="publishWebsite"]').checked,
-    publishCatalogue: catalogue && container.querySelector('[name="publishCatalogue"]').checked
+    publishCatalogue: catalogue && container.querySelector('[name="publishCatalogue"]').checked,
+    managePlayerAccess: role === 'operator_support' && container.querySelector('[name="managePlayerAccess"]').checked
   };
 }
 function staffRoleLabel(role) {
@@ -2151,7 +2168,7 @@ function renderStaffList() {
       roleControl.append(roleSelect);
       item.append(roleControl);
       const grants = element('div', '', 'staff-publishing-grants');
-      for (const [name, labelKey] of [['publishWebsite', 'staffPublishWebsite'], ['publishCatalogue', 'staffPublishCatalogue']]) {
+      for (const [name, labelKey] of [['publishWebsite', 'staffPublishWebsite'], ['publishCatalogue', 'staffPublishCatalogue'], ['managePlayerAccess', 'playerAccessGrant']]) {
         const label = element('label', '', 'admin-check');
         const checkbox = element('input');
         Object.assign(checkbox, { type: 'checkbox', name, checked: member.role !== 'operator_admin' && member[name] });
@@ -2170,7 +2187,7 @@ function renderStaffList() {
         displayStaffGrants(grants, role);
         const access = staffGrants(grants, role);
         saveRole.disabled = role === member.role &&
-          (role === 'operator_admin' || (access.publishWebsite === member.publishWebsite && access.publishCatalogue === member.publishCatalogue));
+          (role === 'operator_admin' || (access.publishWebsite === member.publishWebsite && access.publishCatalogue === member.publishCatalogue && access.managePlayerAccess === member.managePlayerAccess));
       };
       roleSelect.addEventListener('change', updateSave);
       grants.addEventListener('change', updateSave);
@@ -2736,6 +2753,7 @@ function showStaffSession(session, focus = false) {
   $('#publish-config').hidden = !currentStaffPermissions.publishWebsite;
   $('#publish-config-help').hidden = currentStaffPermissions.publishWebsite;
   $('#coming-soon-publish-help').hidden = currentStaffPermissions.publishCatalogue;
+  playerAccessUi.clear();
   comingSoonUi.setStaffAccess(session.role, currentStaffPermissions.publishCatalogue);
   $('#mfa-setup').hidden = session.mfaEnabled;
   $('#mfa-verify').hidden = false;

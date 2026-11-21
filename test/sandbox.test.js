@@ -2,17 +2,18 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import { createSavedTitles } from '../lib/saved-titles.js';
 
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
-async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '' } = {}) {
+async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
@@ -23,13 +24,22 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
   await once(probe, 'listening');
   const { port } = probe.address();
   await new Promise((resolve) => probe.close(resolve));
-  const server = spawn(process.execPath, ['server.js'], {
+  const mailbox = join(directory, 'mail.jsonl');
+  const preload = join(directory, 'mailer.mjs');
+  if (captureMail) await writeFile(preload, `import { appendFileSync } from 'node:fs';
+    globalThis.fetch = async (url, options) => {
+      if (url !== 'https://api.resend.com/emails') throw new Error('Unexpected destination');
+      appendFileSync(process.env.TEST_MAILBOX, JSON.stringify({ ...JSON.parse(options.body), key: options.headers['Idempotency-Key'] }) + '\\n');
+      return new Response('{}', { status: 200 });
+    };`);
+  const server = spawn(process.execPath, [...(captureMail ? ['--import', preload] : []), 'server.js'], {
     env: {
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
       PROVIDER_KEY_ENCRYPTION: randomBytes(32).toString('hex'), SECURE_COOKIES: '0',
       SANDBOX_TENANT_HOSTS: sandboxTenantHosts,
-      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: ''
+      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
+      ...(captureMail && { TEST_MAILBOX: mailbox, PUBLIC_BASE_URL: 'https://localhost' + appBasePath, RESET_EMAIL_API_KEY: 'fixture', RESET_EMAIL_FROM: 'test@example.test' })
     }
   });
   const errors = [];
@@ -45,16 +55,16 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
     exited.then(([code]) => assert.fail(`Server exited with code ${code}\n${errors.join('')}`))
   ]);
   server.stdout.resume();
-  return { base: `http://127.0.0.1:${port}`, database };
+  return { base: `http://127.0.0.1:${port}`, database, readMail: async () => (await readFile(mailbox, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)) };
 }
 
 function client(base, cookies = new Map()) {
-  return async function request(path, payload, host, headers = {}) {
+  return async function request(path, payload, host, headers = {}, method = payload === undefined ? 'GET' : 'POST') {
     const origin = new URL(base);
     if (host) origin.hostname = host;
     const pathname = origin.pathname.replace(/\/$/, '');
     const response = await fetch(new URL(pathname + '/api/' + path, origin), {
-      method: payload === undefined ? 'GET' : 'POST',
+      method,
       headers: {
         ...(payload !== undefined && { 'Content-Type': 'application/json' }),
         ...(cookies.size && { Cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join('; ') }),
@@ -242,7 +252,7 @@ test('brand publication and audit use explicit, revocable grants and replay one 
   assert.equal((await admin('admin/staff', { ...editorCredentials, role: contentRole })).status, 200);
   const identity = await publisher('admin/login', publisherCredentials);
   assert.equal(identity.data.brandId, 'sandbox');
-  assert.deepEqual(identity.data.permissions, { publishWebsite: true, publishCatalogue: true, viewAudit: true });
+  assert.deepEqual(identity.data.permissions, { publishWebsite: true, publishCatalogue: true, viewAudit: true, managePlayerAccess: false });
   assert.equal((await draftEditor('admin/login', editorCredentials)).status, 200);
   assert.equal((await draftEditor('admin/audit')).status, 403);
 
@@ -451,4 +461,250 @@ test('published routes work under a directory and behind a prefix-stripping prox
   const playerLogout = await player('logout', {});
   assert.equal(playerLogout.status, 200);
   assert.ok(playerLogout.setCookies.some(cookieHasMount));
+});
+
+test('player access across devices, recovery delivery, brand isolation and revocable support grants', async (t) => {
+  const { base, database, readMail } = await startSandbox(t, { appBasePath: '/casinohabibi', captureMail: true });
+  const [desktop, phone, admin, support, otherBrand] = Array.from({ length: 5 }, () => client(base + '/casinohabibi'));
+  await admin('admin/login', staffCredentials);
+  const creds = { email: 'support@example.test', password: 'example-support-password' };
+  const role = { email: creds.email, role: 'operator_support' };
+  await admin('admin/staff', { ...role, password: creds.password });
+  const supporter = (await support('admin/login', creds)).data;
+  const signup = await desktop('signup', { ...playerCredentials, locale: 'fr-CA' });
+  assert.equal(signup.status, 200);
+  assert.equal(signup.data.verifyUrl, undefined);
+  const tokenIn = (mail, key) => new URL(mail.text.match(/https:\/\/\S+$/)[0]).searchParams.get(key);
+  const verification = (await readMail())[0];
+  assert.match(verification.text, /https:\/\/localhost\/casinohabibi\//);
+  await phone('email-verification/complete', { token: tokenIn(verification, 'verify') });
+  const id = (await desktop('login', playerCredentials)).data.id;
+  await phone('login', playerCredentials);
+  const route = 'admin/players/' + id;
+  assert.equal((await support('admin/players?q=player%40example')).data[0].id, id);
+  assert.equal((await support(route)).data.activeSessions, 2);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.prepare("INSERT INTO tenants VALUES ('second', 'second', 'Second Brand', 'active', ?)").run(Date.now());
+  db.prepare("UPDATE tenant_domains SET tenant_id = 'second' WHERE host = 'localhost'").run();
+  db.prepare("INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at) VALUES ('second', ?, ?, 'active', ?)").run(supporter.id, role.role, Date.now());
+  await otherBrand('admin/login', creds, 'localhost');
+  assert.deepEqual((await otherBrand('admin/players?q=player', undefined, 'localhost')).data, []);
+  assert.equal((await otherBrand(route, undefined, 'localhost')).status, 404);
+
+  const deliveryKey = { 'X-Request-ID': randomUUID() };
+  const send = await support(route + '/recovery', {}, undefined, deliveryKey);
+  assert.equal(send.data.delivery, 'sent');
+  assert.deepEqual(Object.keys(send.data).sort(), ['auditId', 'delivery', 'id']);
+  assert.deepEqual((await support(route + '/recovery', {}, undefined, deliveryKey)).data, send.data);
+  const messages = await readMail();
+  assert.equal(messages.length, 2);
+  assert.deepEqual(messages[1].to, [playerCredentials.email]);
+  assert.match(messages[1].subject, /mot de passe/);
+  assert.ok(messages[1].key);
+  const initialReset = tokenIn(messages[1], 'reset');
+  const change = { status: 'suspended', version: 0, reason: 'Account owner requested a review' };
+  assert.equal((await support(route + '/access', change)).status, 403);
+  await admin('admin/staff/role', { ...role, managePlayerAccess: true, reason: 'Player access desk' });
+  assert.equal((await support(route + '/access', { ...change, reason: ' ' })).status, 400);
+  const headers = { 'X-Request-ID': randomUUID() };
+  const suspension = await support(route + '/access', change, undefined, headers);
+  assert.equal(suspension.status, 200);
+  assert.deepEqual((await support(route + '/access', change, undefined, headers)).data, suspension.data);
+  assert.equal((await desktop('account')).data, null);
+  assert.equal((await phone('account')).data, null);
+  assert.equal((await phone('login', playerCredentials)).data.error, 'playerSuspended');
+  assert.equal((await support(route + '/recovery', {})).data.error, 'playerSuspended');
+  assert.equal((await phone('password-reset/complete', { token: initialReset, password: 'replacement-password' })).data.error, 'passwordResetInvalid');
+  assert.equal((await support(route + '/access', { ...change, status: 'active' })).status, 409);
+  await admin('admin/staff/role', { ...role, managePlayerAccess: false, reason: 'End of shift' });
+  assert.equal((await support(route + '/access', { ...change, version: 1, status: 'active' })).status, 403);
+  await admin(route + '/access', { status: 'active', version: 1, reason: 'Review completed' });
+  assert.equal((await desktop('account')).data, null);
+  await desktop('login', playerCredentials);
+  await phone('login', playerCredentials);
+  const newPassword = { ...playerCredentials, password: 'replacement-password' };
+  await support(route + '/recovery', {});
+  const newReset = tokenIn((await readMail()).at(-1), 'reset');
+  assert.equal((await desktop('password-reset/complete', { token: newReset, password: newPassword.password })).status, 200);
+  assert.equal((await phone('account')).data, null);
+  assert.equal((await phone('password-reset/complete', { token: newReset, password: newPassword.password })).status, 400);
+  assert.equal((await phone('login', newPassword)).status, 200);
+  const detail = (await admin(route)).data;
+  assert.equal(detail.activeSessions, 1);
+  assert.equal(detail.events.filter(({ action }) => action === 'player_suspended').length, 1);
+  assert.equal(detail.events.find(({ action }) => action === 'player_restored').reason, 'Review completed');
+  await phone('safety/exclude', {});
+  await admin(route + '/access', { status: 'suspended', version: 2, reason: 'Review' });
+  await admin(route + '/access', { status: 'active', version: 3, reason: 'Review complete' });
+  assert.equal((await desktop('login', newPassword)).data.error, 'excluded');
+});
+
+const cardDraft = (title, extra = {}) => ({
+  action: 'save', version: 0, category: 'table', titleEn: title, titleFr: title + ' FR', studio: '',
+  descriptionEn: '', descriptionFr: '', artwork: '', altEn: '', altFr: '', featuredRank: 0, ...extra
+});
+
+test('protected catalogue previews and published market and language restrictions', async (t) => {
+  const { base, database } = await startSandbox(t, { appBasePath: '/casinohabibi' });
+  const staff = client(base + '/casinohabibi');
+  const guest = client(base + '/casinohabibi');
+  await staff('admin/login', staffCredentials);
+  const art = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lXB8WAAAAABJRU5ErkJggg==';
+  const editor = cardDraft('Orchard', { artwork: art, altEn: 'Apple tree', altFr: 'Pommier', displayMarket: 'CA', locales: ['fr-CA'] });
+  for (const invalid of [{ altFr: '' }, { locales: [] }, { locales: ['es'] }, { displayMarket: '123' }]) {
+    assert.equal((await staff('admin/coming-soon', { ...editor, ...invalid })).status, 400);
+  }
+  const saved = (await staff('admin/coming-soon', editor)).data;
+  assert.ok(saved.auditId);
+  assert.equal(saved.title.revision, 1);
+  assert.equal(saved.title.previewUrl, '/casinohabibi/admin?preview=orchard#coming-soon-admin');
+  const preview = 'admin/coming-soon/preview/orchard';
+  assert.equal((await guest(preview)).status, 401);
+  assert.equal((await staff(preview)).data.altFr, 'Pommier');
+  assert.equal((await guest('coming-soon/orchard?locale=fr-CA')).status, 404);
+  const published = (await staff('admin/coming-soon', { action: 'publish', version: 1, slug: 'orchard' })).data;
+  assert.equal(published.title.revision, 2);
+  assert.equal((await guest('coming-soon?locale=fr-CA')).data.titles.length, 0);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.prepare("UPDATE tenant_config_versions SET config = json_set(config, '$.displayMarket', 'CA-QC') WHERE tenant_id = 'sandbox' AND status = 'published'").run();
+  assert.equal((await guest('coming-soon?locale=fr-CA')).data.titles.length, 1);
+  assert.equal((await guest('coming-soon?locale=en-CA')).data.titles.length, 0);
+  assert.equal((await guest('coming-soon/orchard?locale=en-CA')).status, 404);
+  const live = (await guest('coming-soon/orchard?locale=fr-CA')).data;
+  assert.equal(live.altFr, 'Pommier');
+  const edited = await staff('admin/coming-soon', { ...editor, titleFr: 'Nouveau titre', version: 2, slug: 'orchard' });
+  assert.equal(edited.status, 200);
+  assert.equal((await staff(preview)).data.titleFr, 'Nouveau titre');
+  assert.equal((await guest('coming-soon/orchard?locale=fr-CA')).data.titleFr, live.titleFr);
+  assert.equal((await staff('admin/coming-soon', { action: 'publish', slug: 'orchard', version: 2 })).status, 409);
+});
+
+test('Discover preserves surviving positions, fills vacancies and rotates expired visits', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const staff = client(base);
+  const guest = client(base);
+  const player = client(base);
+  await staff('admin/login', staffCredentials);
+  const empty = (await guest('coming-soon')).data;
+  assert.equal(empty.collectionSize, 'empty');
+  const publish = async (draft) => {
+    const saved = (await staff('admin/coming-soon', draft)).data.title;
+    return (await staff('admin/coming-soon', { action: 'publish', version: saved.version, slug: saved.slug })).data.title;
+  };
+  for (let index = 1; index <= 8; index++) {
+    await publish(cardDraft('Preview ' + index, { featuredRank: index }));
+    if (index === 5) {
+      const small = (await guest('coming-soon')).data;
+      assert.equal(small.collectionSize, 'small');
+      assert.equal(small.discover.length, 5);
+    }
+  }
+  const full = (await guest('coming-soon')).data;
+  assert.equal(full.eligibleCount, 8);
+  assert.equal(full.collectionSize, 'full');
+  assert.equal(full.visitId, empty.visitId);
+  assert.equal(new Set(full.discover).size, 6);
+  await publish(cardDraft('Preview 1', { slug: 'preview-1', version: 2, featuredRank: 9 }));
+  const reordered = (await guest('coming-soon')).data;
+  assert.equal(reordered.featured.at(-1), 'preview-1');
+  assert.deepEqual(reordered.discover, full.discover);
+  const index = 2;
+  const slug = full.discover[index];
+  const draft = (await staff('admin/coming-soon/preview/' + slug)).data;
+  await staff('admin/coming-soon', { action: 'archive', slug, version: draft.version });
+  const after = (await guest('coming-soon')).data;
+  assert.equal(after.discover.length, 6);
+  assert.ok(!full.discover.includes(after.discover[index]));
+  assert.deepEqual(after.discover.filter((_, i) => i !== index), full.discover.filter((_, i) => i !== index));
+  await register(player);
+  const sample = (await player('coming-soon')).data;
+  assert.notEqual(sample.visitId, full.visitId);
+  const first = sample.titles[0];
+  await player('account/favorite', { key: first.favoriteKey, saved: true });
+  assert.equal((await player('coming-soon')).data.titles.find(({ id }) => id === first.id).saved, true);
+  assert.ok((await guest('coming-soon')).data.titles.every((title) => title.visible && !title.saved));
+  const db = new DatabaseSync(database);
+  try { db.prepare('UPDATE coming_soon_visits SET expires = 0 WHERE visit_id = ?').run(full.visitId); } finally { db.close(); }
+  const fresh = (await guest('coming-soon')).data;
+  assert.notEqual(fresh.visitId, full.visitId);
+  assert.equal(new Set(fresh.discover).size, 6);
+});
+
+test('saved shelves and support activity retain actual changes, historical references and retry identity', async (t) => {
+  const { base } = await startSandbox(t);
+  const [staff, phone, laptop, visitor] = Array.from({ length: 4 }, () => client(base));
+  await staff('admin/login', staffCredentials);
+  const card = (await staff('admin/coming-soon', cardDraft('Paper Moon'))).data.title;
+  await staff('admin/coming-soon', { action: 'publish', version: card.version, slug: card.slug });
+  const shelf = 'me/saved/' + card.id;
+  const key = 'coming-soon:' + card.id;
+  const put = (client, headers = {}) => client(shelf, undefined, undefined, headers, 'PUT');
+  const remove = () => laptop(shelf, undefined, undefined, {}, 'DELETE');
+  assert.equal((await put(visitor)).status, 401);
+  await register(phone);
+  const playerId = (await laptop('login', playerCredentials)).data.id;
+  const header = { 'X-Request-ID': randomUUID() };
+  const [first, repeat] = await Promise.all([put(phone, header), put(laptop)]);
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.data, repeat.data);
+  assert.ok(first.data.activityId);
+  const [title] = (await laptop('me/saved')).data.titles;
+  assert.equal(title.activityId, first.data.activityId);
+  assert.equal(title.saved, true);
+  assert.equal((await phone('me/saved')).data.titles.length, 1);
+  const one = (await staff('admin/players/' + playerId)).data.savedActivity.entries;
+  assert.deepEqual(one.map(({ id }) => id), [first.data.activityId]);
+  const deleted = await remove();
+  assert.equal(deleted.data.saved, false);
+  assert.notEqual(deleted.data.activityId, first.data.activityId);
+  assert.deepEqual((await remove()).data, deleted.data);
+  const lateRetry = await put(phone, header);
+  assert.equal(lateRetry.data.activityId, first.data.activityId);
+  assert.equal(lateRetry.data.saved, false);
+  assert.equal((await phone('me/saved')).data.titles.length, 0);
+  const savedAgain = await phone('account/favorite', { key, saved: true });
+  assert.notEqual(savedAgain.data.activityId, first.data.activityId);
+  await phone('account/favorites', { favorites: [] });
+  await laptop('account/favorites', { favorites: [key, key], merge: true });
+  const history = (await staff('admin/players/' + playerId)).data.savedActivity.entries;
+  assert.deepEqual(history.map(({ action }) => action), ['save', 'remove', 'save', 'remove', 'save']);
+  assert.ok(history.every((entry) => entry.saveId === title.saveId));
+  assert.deepEqual((await staff('admin/players?q=activity-' + deleted.data.activityId)).data.map(({ id }) => id), [playerId]);
+  const byReference = (await staff('admin/players/' + playerId + '?activity=' + deleted.data.activityId)).data.savedActivity.entries;
+  assert.deepEqual(byReference.map(({ id }) => id), [deleted.data.activityId]);
+  assert.equal((await staff('admin/coming-soon/saves?q=activity-' + first.data.activityId)).data[0].id, title.saveId);
+  assert.equal((await staff('admin/coming-soon/saves?q=player-' + playerId)).data.length, 1);
+  await staff('admin/coming-soon', { action: 'archive', version: 2, slug: card.slug });
+  assert.equal((await laptop('me/saved')).data.titles.length, 0);
+  assert.equal((await put(laptop)).status, 404);
+  const remaining = (await phone('account/export')).data.previewSaveActivity;
+  assert.deepEqual(remaining.map(({ id }) => id), history.map(({ id }) => id));
+  assert.ok(remaining.every(({ state }) => state === 'archived'));
+  for (let i = 1; i <= 10; i++) {
+    const { title } = (await staff('admin/coming-soon', cardDraft('Page ' + i))).data;
+    await staff('admin/coming-soon', { action: 'publish', version: title.version, slug: title.slug });
+    await phone('me/saved/' + title.id, undefined, undefined, {}, 'PUT');
+  }
+  const page1 = (await staff('admin/coming-soon/saves?limit=10')).data;
+  const page2 = (await staff('admin/coming-soon/saves?limit=10&before=' + page1.at(-1).id)).data;
+  assert.equal(page1.length, 10);
+  assert.deepEqual(page2.map(({ id }) => id), [title.saveId]);
+  assert.equal((await staff('admin/coming-soon/saves?before=-1')).status, 400);
+});
+
+test('existing first saves migrate once with original dates and references', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE players(id INTEGER PRIMARY KEY);
+      CREATE TABLE coming_soon_titles(tenant_id TEXT, id INTEGER, PRIMARY KEY(tenant_id, id));
+      CREATE TABLE player_favorites(player_id INTEGER, tenant_id TEXT, favorite_key TEXT, created_at INTEGER, PRIMARY KEY(player_id, tenant_id, favorite_key));
+      CREATE TABLE coming_soon_saves(id INTEGER PRIMARY KEY, tenant_id TEXT, player_id INTEGER, title_id INTEGER, created_at INTEGER, UNIQUE(tenant_id, player_id, title_id));
+      INSERT INTO coming_soon_saves VALUES(43, 'sandbox', 9, 7, 1000);`);
+    const transaction = (work) => { db.exec('BEGIN IMMEDIATE'); try { work(); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; } };
+    for (let i = 0; i < 2; i++) createSavedTitles(db, { transaction, fail: assert.fail });
+    assert.deepEqual(db.prepare('SELECT save_id, action, created_at FROM coming_soon_activity').all().map((row) => ({ ...row })),
+      [{ save_id: 43, action: 'save', created_at: 1000 }]);
+  } finally { db.close(); }
 });
