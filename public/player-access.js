@@ -16,6 +16,7 @@ export const playerAccessCopy = {
   playerUnverified: ['Unverified email', 'Courriel à vérifier'],
   playerSessions: ['Active sessions', 'Sessions actives'],
   playerSendRecovery: ['Send a recovery link', 'Envoyer un lien de récupération'],
+  playerRecoverySending: ['The recovery email is being sent.', 'L’envoi du courriel de récupération est en cours.'],
   playerRecoverySent: ['Recovery email sent.', 'Courriel de récupération envoyé.'],
   playerRecoveryLocal: ['Recovery link generated in the local demo.', 'Lien de récupération créé dans la démo locale.'],
   playerRecoveryExpired: ['This request expired. Send a new link.', 'Cette demande a expiré. Envoyez un nouveau lien.'],
@@ -131,7 +132,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
       const payload = kind === 'recovery' ? {} : { status, version: player.version, reason: statusForm.elements.reason.value.trim() };
       const result = await api('admin/players/' + id + '/' + kind, payload);
       if (current !== operation) return;
-      message = kind === 'recovery' ? ({ local: 'playerRecoveryLocal', sent: 'playerRecoverySent', expired: 'playerRecoveryExpired' })[result.delivery]
+      message = kind === 'recovery' ? ({ local: 'playerRecoveryLocal', sending: 'playerRecoverySending', sent: 'playerRecoverySent', expired: 'playerRecoveryExpired' })[result.delivery]
         : (status === 'active' ? 'player_restored' : 'player_suspended');
       completed = true;
       statusForm.hidden = true;

@@ -29,6 +29,7 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
   if (captureMail) await writeFile(preload, `import { appendFileSync } from 'node:fs';
     globalThis.fetch = async (url, options) => {
       if (url !== 'https://api.resend.com/emails') throw new Error('Unexpected destination');
+      await new Promise((resolve) => setTimeout(resolve, 40));
       appendFileSync(process.env.TEST_MAILBOX, JSON.stringify({ ...JSON.parse(options.body), key: options.headers['Idempotency-Key'] }) + '\\n');
       return new Response('{}', { status: 200 });
     };`);
@@ -493,7 +494,10 @@ test('player access across devices, recovery delivery, brand isolation and revoc
   assert.equal((await otherBrand(route, undefined, 'localhost')).status, 404);
 
   const deliveryKey = { 'X-Request-ID': randomUUID() };
-  const send = await support(route + '/recovery', {}, undefined, deliveryKey);
+  const attempts = await Promise.all(Array.from({ length: 2 }, () => support(route + '/recovery', {}, undefined, deliveryKey)));
+  assert.ok(attempts.every((attempt) => attempt.status === 200 && ['sending', 'sent'].includes(attempt.data.delivery)));
+  assert.equal(attempts[0].data.auditId, attempts[1].data.auditId);
+  const send = attempts.find((attempt) => attempt.data.delivery === 'sent');
   assert.equal(send.data.delivery, 'sent');
   assert.deepEqual(Object.keys(send.data).sort(), ['auditId', 'delivery', 'id']);
   assert.deepEqual((await support(route + '/recovery', {}, undefined, deliveryKey)).data, send.data);
