@@ -1,6 +1,7 @@
 import { games } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
+import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
@@ -13,6 +14,7 @@ const copy = {
   ...comingSoonCopy,
   ...playerAccessCopy,
   ...dashboardCopy,
+  ...websiteContentCopy,
   ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
@@ -282,6 +284,9 @@ const copy = {
 
 const $ = (selector) => document.querySelector(selector);
 const auditActionLabels = {
+  website_content_saved: websiteContentCopy.website_content_saved,
+  website_content_published: websiteContentCopy.website_content_published,
+  website_content_archived: websiteContentCopy.website_content_archived,
   player_suspended: playerAccessCopy.player_suspended, player_restored: playerAccessCopy.player_restored, player_recovery_requested: playerAccessCopy.player_recovery_requested,
   coming_soon_draft_saved: comingSoonCopy.comingSoonAuditSaved,
   coming_soon_published: comingSoonCopy.comingSoonAuditPublished,
@@ -442,7 +447,7 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const auditedMutation = data !== undefined && /^(admin\/(config|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  const auditedMutation = data !== undefined && /^(admin\/(config|website-content|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
   const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
   if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
   const send = async () => {
@@ -657,6 +662,7 @@ function readTenantConfig() {
 
 function updateDocumentTitle() {
   document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
+    : publicWebsite.isHelp && publicWebsite.title() ? publicWebsite.title() + ' · ' + tenantBrandName
     : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
@@ -1571,7 +1577,13 @@ const comingSoonUi = createComingSoonUi({
   toggleFavorite
 });
 
+const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
+const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
+const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale,
+  canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
+
 const adminLoaders = {
+  'website-editorial': websiteEditor.load,
   overview: () => refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); }),
   'coming-soon-admin': comingSoonUi.loadDrafts,
   'coming-soon-saves': comingSoonUi.loadSaves,
@@ -1582,6 +1594,8 @@ const adminLoaders = {
   'audit-log': () => refreshStaffAudit().catch((error) => { $('#staff-audit-summary').textContent = t(error.message); })
 };
 const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => {
+  const editorial = panel === 'website-editorial';
+  for (const selector of ['#tenant-config','#tenant-config-preview','#tenant-settings-help']) $(selector).hidden = editorial;
   const load = adminLoaders[panel] || adminLoaders[view];
   if (load) void load();
 });
@@ -1597,14 +1611,17 @@ const reportUi = createReportUi({ api, t, element, action, appPath, role: () => 
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
-  if (languageChanged && !isAdminPage) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
+  if (languageChanged && !isAdminPage) {
+    void publicWebsite.load();
+    if (!publicWebsite.isHelp) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
+  }
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
-  $('#skip-link').href = isAdminPage ? '#admin' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
+  $('#skip-link').href = isAdminPage ? '#admin' : publicWebsite.isHelp ? '#site-public-help' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
-  if (languageChanged) adminWorkspace.syncPicker();
+  if (languageChanged) { adminWorkspace.syncPicker(); websiteEditor.translate(); }
   updateStaffRoleHelp();
   const announcement = $('#lobby-announcement');
   announcement.textContent = t('announcement');
@@ -1658,6 +1675,14 @@ $('#language').addEventListener('click', async () => {
       localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
       if ($('#dialog').open) $('#status').textContent = t('unavailable');
+    }
+  }
+  if (!isAdminPage) {
+    const url = new URL(location.href);
+    if (publicWebsite.isHelp || url.searchParams.has('lang')) {
+      url.searchParams.set('lang', language ? 'fr' : 'en');
+      if (url.searchParams.has('locale')) url.searchParams.set('locale', siteContentLocale());
+      history.replaceState(null, '', url);
     }
   }
 });
@@ -2315,7 +2340,7 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
   $('#staff-audit-range-error').hidden = !invalidRange;
   $('#staff-audit-range-error').textContent = invalidRange ? t('staffAuditRangeInvalid') : '';
   if (invalidRange) return [];
-  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
+  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : /^(tenant_config_|website_content_)/.test(action) ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
   return source.filter((entry) => {
     const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.details?.recordId || ''} ${entry.details?.revision || ''} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
@@ -3008,7 +3033,8 @@ $('#mfa-disable').addEventListener('click', async () => {
 
 document.body.classList.toggle('admin-route', isAdminPage);
 $('#admin-view-lobby').hidden = !isAdminPage;
-$('#lobby').hidden = isAdminPage || comingSoonUi.isDetail;
+$('#lobby').hidden = isAdminPage || comingSoonUi.isDetail || publicWebsite.isHelp;
+$('#site-public-help').hidden = !publicWebsite.isHelp;
 $('#admin').hidden = !isAdminPage;
 $('#coming-soon-detail').hidden = !comingSoonUi.isDetail;
 render();
@@ -3016,7 +3042,7 @@ if (isAdminPage) {
   try { showStaffSession(await api('admin/session', undefined, 'GET')); }
   catch { $('#staff-login').hidden = false; $('#admin-tools').hidden = true; }
 }
-if (!isAdminPage) {
+if (!isAdminPage && !publicWebsite.isHelp) {
   try { await comingSoonUi.loadLobby(); }
   catch { /* The preview renders its localized unavailable state. */ }
   renderCatalog();
@@ -3028,9 +3054,12 @@ try {
   // Use the shared default brand if tenant settings are unavailable.
 }
 if (!isAdminPage) {
-  try { providerGames = await api('games', undefined, 'GET'); }
-  catch { /* Keep the local catalogue available. */ }
-  renderCatalog();
+  void publicWebsite.load();
+  if (!publicWebsite.isHelp) {
+    try { providerGames = await api('games', undefined, 'GET'); }
+    catch { /* Keep the local catalogue available. */ }
+    renderCatalog();
+  }
   try {
     player = await api('account', undefined, 'GET');
     if (player) {
@@ -3038,7 +3067,7 @@ if (!isAdminPage) {
       if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
     }
     playerSessionStartedAt = player?.sessionStartedAt;
-    if (player?.preferredLocale) {
+    if (player?.preferredLocale && !['en','fr'].includes(requestedLanguage)) {
       language = publicLanguage(player.preferredLocale);
       if (publicLocales.includes(player.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
     }

@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -874,4 +875,198 @@ test('a seeded test brand goes from five to six previews and a second authorized
   db.exec("UPDATE tenant_staff_memberships SET status = 'disabled' WHERE tenant_id = 'second'");
   assert.equal((await overview()).brands.length, 1);
   assert.equal((await other('admin/overview', undefined, 'localhost')).status, 401);
+});
+
+test('website content keeps drafts private, publishes single bilingual revisions, and resolves live destinations by brand and language', async (t) => {
+  const mount = '/casinohabibi';
+  const { base, database } = await startSandbox(t, { appBasePath: mount });
+  const [staff, editor, guest] = Array.from({ length: 3 }, () => client(base + mount));
+  await staff('admin/login', staffCredentials);
+  const editorLogin = { email: 'site-editor@example.test', password: 'example-editor-password' };
+  await staff('admin/staff', { ...editorLogin, role: 'operator_content' });
+  await editor('admin/login', editorLogin);
+  const endpoint = 'admin/website-content';
+  const content = (en, fr, extra = {}) => ({
+    titleEn: en,
+    titleFr: fr,
+    bodyEn: 'Read this page.',
+    bodyFr: 'Lisez cette page.',
+    altEn: '',
+    altFr: '',
+    linkEn: '',
+    linkFr: '',
+    artwork: '',
+    target: '',
+    ...extra
+  });
+  const edit = (kind, slug, version, data) => ({ kind, slug, version, action: 'save', content: data });
+  const change = (who, kind, slug, version, action, head = {}) =>
+    who(endpoint, { kind, slug, version, action }, undefined, head);
+  const art =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/x8AAwMCAO+aCUEAAAAASUVORK5CYII=';
+  assert.equal((await guest(endpoint)).status, 401);
+  assert.deepEqual((await guest('website-content?locale=fr-CA')).data, { locale: 'fr-CA', banner: null, help: [] });
+  const page = content('Saving previews', 'Vos favoris');
+  assert.equal((await editor(endpoint, edit('help', 'saved-titles', 0, page))).status, 200);
+  assert.equal((await guest('help/saved-titles?locale=fr-CA')).status, 404);
+  assert.equal((await fetch(base + mount + '/help/saved-titles?lang=fr')).status, 404);
+  assert.equal((await guest(endpoint + '/help/saved-titles')).status, 401);
+  assert.equal((await editor(endpoint + '/help/saved-titles')).data.content.titleFr, 'Vos favoris');
+  assert.equal((await change(editor, 'help', 'saved-titles', 1, 'publish')).status, 403);
+  const header = { 'X-Request-ID': randomUUID() };
+  const publish = await change(staff, 'help', 'saved-titles', 1, 'publish', header);
+  assert.equal(publish.status, 200);
+  assert.deepEqual((await change(staff, 'help', 'saved-titles', 1, 'publish', header)).data, publish.data);
+  assert.equal((await guest('help/saved-titles?locale=en-CA')).data.title, 'Saving previews');
+  assert.equal((await fetch(base + mount + '/help/saved-titles?lang=fr')).status, 200);
+  const banner = content('Discover', 'Découvrez', {
+    artwork: art,
+    altEn: 'A leaf',
+    altFr: 'Une feuille',
+    target: 'help/saved-titles',
+    linkFr: 'Gérer mes favoris'
+  });
+  assert.equal((await editor(endpoint, edit('banner', 'lobby', 0, banner))).status, 200);
+  assert.equal((await guest('website-content')).data.banner, null);
+  assert.equal((await change(staff, 'banner', 'lobby', 1, 'publish')).status, 200);
+  const fr = (await guest('website-content?locale=fr-CA')).data;
+  assert.deepEqual(fr.help, [{ title: 'Vos favoris', url: mount + '/help/saved-titles?lang=fr' }]);
+  assert.equal(fr.banner.artwork, art);
+  assert.equal(fr.banner.alt, 'Une feuille');
+  assert.deepEqual(fr.banner.link, { href: fr.help[0].url, label: 'Gérer mes favoris' });
+  const draft = await editor(
+    endpoint,
+    edit('banner', 'lobby', 2, { ...banner, titleFr: 'Nouvelle bannière', altFr: '' })
+  );
+  assert.equal(draft.data.status, 'changed');
+  assert.equal((await change(staff, 'banner', 'lobby', 2, 'publish')).status, 409);
+  assert.equal((await change(staff, 'banner', 'lobby', 3, 'publish')).data.error, 'siteContentTranslationNeeded');
+  assert.equal((await guest('website-content?locale=fr-CA')).data.banner.title, 'Découvrez');
+  assert.equal(
+    (await editor(endpoint, edit('banner', 'lobby', 3, { ...banner, target: 'https://example.org' }))).status,
+    400
+  );
+  assert.equal(
+    (await editor(endpoint, edit('banner', 'lobby', 3, { ...banner, artwork: 'data:text/html;base64,YQ==' }))).status,
+    400
+  );
+  await change(staff, 'help', 'saved-titles', 2, 'archive');
+  const missingTarget = (await guest('website-content?locale=fr-CA')).data;
+  assert.deepEqual(missingTarget.help, []);
+  assert.deepEqual(missingTarget.banner.link, { href: mount + '/?lang=fr#games', label: 'Voir le catalogue' });
+  assert.equal((await guest('help/saved-titles')).status, 404);
+  assert.equal((await fetch(base + mount + '/help/saved-titles')).status, 404);
+  const card = (await staff('admin/coming-soon', cardDraft('Orchard', { locales: ['fr-CA'] }))).data.title;
+  await staff('admin/coming-soon', { action: 'publish', slug: card.slug, version: card.version });
+  const destinations = (await editor(endpoint)).data.targets;
+  assert.deepEqual(destinations.find((item) => item.key === 'title/' + card.slug).locales, ['fr-CA']);
+  assert.ok(!destinations.some((item) => item.key === 'help/saved-titles'));
+  await staff(endpoint, edit('banner', 'lobby', 3, { ...banner, titleFr: 'Au verger', target: 'title/' + card.slug }));
+  await change(staff, 'banner', 'lobby', 4, 'publish');
+  assert.equal(
+    (await guest('website-content?locale=fr-CA')).data.banner.link.href,
+    mount + '/coming-soon/orchard?lang=fr&locale=fr-CA'
+  );
+  assert.equal((await guest('website-content?locale=en-CA')).data.banner.link.href, mount + '/?lang=en#games');
+  await staff('admin/coming-soon', { action: 'archive', slug: card.slug, version: 2 });
+  assert.equal((await guest('website-content?locale=fr-CA')).data.banner.link.href, mount + '/?lang=fr#games');
+  const audit = (await staff('admin/audit')).data.events.filter(
+    (e) => e.target === 'website-content/help/saved-titles' && e.action === 'website_content_published'
+  );
+  assert.deepEqual(
+    audit.map((e) => [e.id, e.actor, e.details.revision]),
+    [[publish.data.auditId, staffCredentials.email, 1]]
+  );
+  assert.equal((await editor(endpoint + '/help/saved-titles')).data.history.length, 0);
+  const history = (await staff(endpoint + '/help/saved-titles')).data.history;
+  assert.deepEqual(
+    history.map((r) => r.action),
+    ['website_content_archived', 'website_content_published']
+  );
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.exec(
+    "INSERT INTO tenants VALUES('other','other','Other Brand','active',1); UPDATE tenant_domains SET tenant_id='other' WHERE host='localhost'"
+  );
+  assert.equal((await guest('website-content', undefined, 'localhost')).data.banner, null);
+  assert.equal((await guest('help/saved-titles', undefined, 'localhost')).status, 404);
+  assert.equal((await staff(endpoint + '/banner/lobby', undefined, 'localhost')).status, 401);
+  await staff(endpoint, edit('help', 'fr-guide', 0, content('', 'Guide français', { bodyEn: '' })));
+  assert.equal((await change(staff, 'help', 'fr-guide', 1, 'publish')).status, 400);
+  db.exec(
+    "UPDATE tenant_config_versions SET config=json_set(config,'$.enabledLocales',json('[\"fr-CA\"]'),'$.primaryLocale','fr-CA') WHERE tenant_id='sandbox' AND status='published'"
+  );
+  assert.equal((await change(staff, 'help', 'fr-guide', 1, 'publish')).status, 200);
+  assert.equal((await guest('help/fr-guide?locale=en-CA')).data.locale, 'fr-CA');
+  db.exec(
+    "UPDATE tenant_config_versions SET config=json_set(config,'$.enabledSections.faq',json('false')) WHERE tenant_id='sandbox' AND status='published'"
+  );
+  assert.equal((await guest('help/fr-guide')).status, 404);
+  assert.equal((await guest('website-content')).data.help.length, 0);
+});
+
+test('website publication survives request chunk boundaries, concurrent edits and an audited transaction retry', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const staff = client(base);
+  const login = await staff('admin/login', staffCredentials);
+  const cookie = login.setCookies[0].split(';')[0];
+  const input = {
+    slug: 'accents',
+    kind: 'help',
+    version: 0,
+    action: 'save',
+    content: {
+      titleEn: 'Help',
+      titleFr: 'Préférences',
+      bodyEn: 'Read this guide.',
+      bodyFr: 'Vos réglages.',
+      altEn: '',
+      altFr: '',
+      linkEn: '',
+      linkFr: '',
+      target: '',
+      artwork: ''
+    }
+  };
+  const payload = Buffer.from(JSON.stringify(input));
+  const split = payload.indexOf(Buffer.from('é')) + 1;
+  assert.ok(split > 1);
+  const response = await new Promise((resolve, reject) => {
+    const req = httpRequest(
+      base + '/api/admin/website-content',
+      {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' }
+      },
+      (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      }
+    );
+    req.on('error', reject);
+    req.write(payload.subarray(0, split), () => setTimeout(() => req.end(payload.subarray(split)), 10));
+  });
+  assert.equal(response, 200);
+  assert.equal((await staff('admin/website-content/help/accents')).data.content.titleFr, 'Préférences');
+  const edits = await Promise.all(
+    ['Texte un.', 'Texte deux.'].map((bodyFr) =>
+      staff('admin/website-content', { ...input, version: 1, content: { ...input.content, bodyFr } })
+    )
+  );
+  assert.deepEqual(edits.map((r) => r.status).sort(), [200, 409]);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  const action = { kind: 'help', slug: 'accents', version: 2, action: 'publish' };
+  const header = { 'X-Request-ID': randomUUID() };
+  db.exec(
+    "CREATE TRIGGER deny_publication BEFORE INSERT ON staff_events WHEN NEW.action='website_content_published' BEGIN SELECT RAISE(ABORT,'test rollback'); END"
+  );
+  assert.equal((await staff('admin/website-content', action, undefined, header)).status, 500);
+  assert.equal((await client(base)('help/accents')).status, 404);
+  assert.equal((await staff('admin/website-content/help/accents')).data.version, 2);
+  db.exec('DROP TRIGGER deny_publication');
+  const published = await staff('admin/website-content', action, undefined, header);
+  assert.equal(published.status, 200);
+  assert.deepEqual((await staff('admin/website-content', action, undefined, header)).data, published.data);
+  assert.equal((await staff('admin/website-content/help/accents')).data.history.length, 1);
 });

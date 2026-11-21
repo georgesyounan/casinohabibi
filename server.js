@@ -8,6 +8,7 @@ import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 import { configureTransactionalEmail } from './lib/transactional-email.js';
 import { createDashboard } from './lib/dashboard.js';
+import { createWebsiteContent } from './lib/website-content.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
@@ -268,6 +269,8 @@ installPlayerAccess(db, transaction);
 const dashboard = createDashboard(db, { transaction, fail });
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
 const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath, transaction });
+const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath,
+  titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -551,14 +554,16 @@ async function issuePlayerEmailVerification(req, playerId, tenantId, email, loca
 }
 
 async function body(req, maxBytes = 8192) {
-  let result = '';
+  const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
-    result += chunk;
-    if (Buffer.byteLength(result) > maxBytes) fail(413, 'invalid');
+    size += chunk.length;
+    if (size > maxBytes) fail(413, 'invalid');
+    chunks.push(chunk);
   }
   req.assertPlayerSession?.();
   try {
-    const value = JSON.parse(result);
+    const value = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
     if (!value || typeof value !== 'object' || Array.isArray(value)) fail(400, 'invalid');
     return value;
   } catch {
@@ -661,6 +666,30 @@ async function api(req, res, path, tenantId, requestId) {
   if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   if (player && req.method === 'GET' && (path === '/api/account' || path === '/api/coming-soon' || path.startsWith('/api/coming-soon/'))) dashboard.recordVisit(tenantId, player);
+  if (route === 'GET /api/website-content') {
+    return websiteContent.lobby(tenantId, publishedTenantConfig(tenantId).config, catalogueLocale);
+  }
+  const helpPage = route.match(/^GET \/api\/help\/([a-z0-9-]{1,64})$/);
+  if (helpPage) {
+    const page = websiteContent.publicRecord(tenantId, publishedTenantConfig(tenantId).config, 'help', helpPage[1], catalogueLocale);
+    if (!page) fail(404, 'siteContentMissing');
+    return page;
+  }
+  if (route === 'GET /api/admin/website-content') {
+    staffContext(req, tenantId, websiteRoles);
+    return websiteContent.adminList(tenantId, publishedTenantConfig(tenantId).config);
+  }
+  const contentDraft = route.match(/^GET \/api\/admin\/website-content\/(banner|help)\/([a-z0-9-]{1,64})$/);
+  if (contentDraft) {
+    const staff = staffContext(req, tenantId, websiteRoles);
+    return websiteContent.get(tenantId, contentDraft[1], contentDraft[2], staff);
+  }
+  if (route === 'POST /api/admin/website-content') {
+    staffContext(req, tenantId, websiteRoles);
+    const input = await body(req, 160 * 1024);
+    return auditedChange(websiteRoles, input, (staff) => websiteContent.mutate(tenantId, publishedTenantConfig(tenantId).config, staff, requestId, input),
+      input.action === 'save' ? undefined : 'publishWebsite');
+  }
   if (route === 'GET /api/coming-soon') {
     const cookie = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1];
     const lobby = comingSoon.lobby(tenantId, cookie, catalogueAudience(tenantId, catalogueLocale || 'default'), player, comingSoonEnabled(tenantId));
@@ -1748,6 +1777,7 @@ const assets = {
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
+  '/website-content.js': ['website-content.js', 'text/javascript'],
   '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
   '/hero.webp': ['hero.webp', 'image/webp'],
@@ -1797,9 +1827,14 @@ createServer(async (req, res) => {
       return res.end(JSON.stringify(await api(req, res, path, tenantId, requestId)));
     }
     const preview = req.method === 'GET' && path.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/);
-    if (req.method !== 'GET' || (!preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
+    const help = req.method === 'GET' && path.match(/^\/help\/([a-z0-9-]{1,64})$/);
+    if (help) {
+      const locale = { fr: 'fr-CA', en: 'en-CA' }[requestUrl.searchParams.get('lang')];
+      if (!websiteContent.publicRecord(tenantId, publishedTenantConfig(tenantId).config, 'help', help[1], locale)) res.statusCode = 404;
+    }
+    if (req.method !== 'GET' || (!help && !preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
     if (preview && (!comingSoonEnabled(tenantId) || !comingSoon.published(tenantId, preview[1], catalogueAudience(tenantId, requestUrl.searchParams.get('locale'))))) res.statusCode = 404;
-    const [file, type] = preview ? assets['/'] : assets[path];
+    const [file, type] = preview || help ? assets['/'] : assets[path];
     let content = readFileSync(new URL(`./public/${file}`, import.meta.url));
     if (type === 'text/html' && appBasePath) {
       content = content.toString('utf8')

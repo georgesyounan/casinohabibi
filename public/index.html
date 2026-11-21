@@ -21,7 +21,8 @@
 <div id="session-reminder" class="session-reminder shell" role="status" aria-live="polite" hidden></div>
 <main id="lobby" class="shell" tabindex="-1">
 <div id="lobby-announcement" class="lobby-announcement" role="status" aria-live="polite" hidden></div>
-<section class="hero">
+<div id="site-public-banner" hidden></div>
+<section class="hero" id="default-lobby-hero">
 <div class="hero-content"><p class="eyebrow" data-copy="sandbox"></p>
 <h1 data-copy="headline"></h1><p data-copy="intro"></p>
 <a class="button" href="#games" data-copy="browse"></a></div>
@@ -45,12 +46,16 @@
 <div class="steps-grid"><article class="info-card"><span class="step-number">01</span><h3 data-copy="stepOneTitle"></h3><p data-copy="stepOneText"></p></article><article class="info-card"><span class="step-number">02</span><h3 data-copy="stepTwoTitle"></h3><p data-copy="stepTwoText"></p></article><article class="info-card"><span class="step-number">03</span><h3 data-copy="stepThreeTitle"></h3><p data-copy="stepThreeText"></p></article></div></section>
 <section id="play-safely" class="safety-section"><div class="safety-copy"><p class="eyebrow" data-copy="safetyEyebrow"></p><h2 data-copy="safetyHeading"></h2><p data-copy="safetyIntro"></p><button id="safety-controls" type="button" data-copy="safetyCta"></button></div>
 <div class="safety-tools"><article><span aria-hidden="true">◷</span><div><h3 data-copy="breakTitle"></h3><p data-copy="breakText"></p></div></article><article><span aria-hidden="true">⌁</span><div><h3 data-copy="limitTitle"></h3><p data-copy="limitText"></p></div></article><article><span aria-hidden="true">◎</span><div><h3 data-copy="excludeTitle"></h3><p data-copy="excludeText"></p></div></article></div></section>
-<section id="faq" class="faq-section"><div class="section-heading"><p class="eyebrow" data-copy="helpEyebrow"></p><h2 data-copy="faqTitle"></h2></div><div id="faq-list" class="faq-list"></div></section>
+<section id="faq" class="faq-section"><div class="section-heading"><p class="eyebrow" data-copy="helpEyebrow"></p><h2 data-copy="faqTitle"></h2></div><div id="faq-list" class="faq-list"></div><ul id="site-help-links" class="site-help-links" hidden></ul></section>
 </main>
 <main id="coming-soon-detail" class="shell coming-soon-detail" tabindex="-1" hidden>
   <a href="/#coming-soon" data-copy="comingSoonBack"></a>
   <div id="coming-soon-detail-content"><p role="status" data-copy="loading"></p></div>
   <p id="coming-soon-favorite-status" role="status"></p>
+</main>
+<main id="site-public-help" class="shell site-public-help" tabindex="-1" hidden>
+  <a href="/#faq" data-copy="siteBackHelp"></a>
+  <div id="site-help-content"><p role="status" data-copy="loading"></p></div>
 </main>
 <main id="admin" class="shell admin" tabindex="-1" hidden>
   <section id="staff-login"><h1 data-copy="staffLogin"></h1><p data-copy="staffLoginHelp"></p>
@@ -271,7 +276,7 @@
           <div class="admin-page-heading">
             <div>
               <h2 id="casino-settings-title" data-admin-heading data-copy="adminNavWebsite" tabindex="-1"></h2>
-              <p data-copy="tenantSettingsHelp"></p>
+              <p id="tenant-settings-help" data-copy="tenantSettingsHelp"></p>
             </div>
           </div>
           <nav class="admin-tabs" aria-labelledby="website-navigation">
@@ -279,6 +284,7 @@
             <a href="#website-brand" data-admin-link data-copy="adminWebsiteBrand"></a>
             <a href="#website-display" data-admin-link data-copy="adminWebsiteDisplay"></a>
             <a href="#website-lobby" data-admin-link data-copy="adminWebsiteLobby"></a>
+            <a href="#website-editorial" data-admin-link data-copy="siteContentTab"></a>
             <a href="#website-faq" data-admin-link data-copy="faqTitle"></a>
             <a href="#website-policies" data-admin-link data-copy="adminWebsitePolicies"></a>
           </nav>
@@ -370,10 +376,54 @@
             <p id="publish-config-help" data-copy="staffDraftOnly" hidden></p>
             <p role="status" id="tenant-config-status"></p>
           </form>
-          <details class="admin-disclosure">
+          <details id="tenant-config-preview" class="admin-disclosure">
             <summary data-copy="tenantPreviewTitle"></summary>
             <aside class="tenant-preview"><p data-copy="tenantPreviewHelp"></p><div class="tenant-preview-brand"><span id="tenant-preview-swatch" aria-hidden="true"></span><img id="tenant-preview-favicon" class="tenant-preview-favicon" alt=""><strong id="tenant-preview-name"></strong></div><p id="tenant-preview-featured" class="featured-preview" hidden></p><p class="tenant-preview-contact"><span data-copy="supportEmail"></span> · <span id="tenant-preview-email"></span></p><div class="tenant-preview-copy"><article><small data-copy="heroPreviewEn"></small><h3 id="tenant-preview-title-en"></h3><p id="tenant-preview-intro-en"></p></article><article lang="fr-CA"><small data-copy="heroPreviewFr"></small><h3 id="tenant-preview-title-fr"></h3><p id="tenant-preview-intro-fr"></p></article></div><div id="tenant-preview-announcement" class="preview-announcement" hidden><p><small data-copy="announcementEnLabel"></small><span id="tenant-preview-announcement-en"></span></p><p lang="fr-CA"><small data-copy="announcementFrLabel"></small><span id="tenant-preview-announcement-fr"></span></p></div><div class="preview-faq"><h3 data-copy="faqEditorTitle"></h3><article><strong id="tenant-preview-faq-0-question-en"></strong><p id="tenant-preview-faq-0-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-0-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-0-answer-fr"></p></article><article><strong id="tenant-preview-faq-1-question-en"></strong><p id="tenant-preview-faq-1-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-1-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-1-answer-fr"></p></article><article><strong id="tenant-preview-faq-2-question-en"></strong><p id="tenant-preview-faq-2-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-2-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-2-answer-fr"></p></article></div><div class="preview-announcement"><p><small data-copy="footerTextEnLabel"></small><span id="tenant-preview-footer-en"></span></p><p lang="fr-CA"><small data-copy="footerTextFrLabel"></small><span id="tenant-preview-footer-fr"></span></p></div></aside>
           </details>
+          <section id="website-editorial" class="admin-panel" data-admin-panel aria-labelledby="site-content-title" hidden>
+            <h3 id="site-content-title" data-admin-heading tabindex="-1" data-copy="siteContentTab"></h3>
+            <div id="site-library">
+              <div class="site-content-toolbar">
+                <label><span data-copy="siteSearch"></span><input type="search" id="site-search" autocomplete="off"></label>
+                <button type="button" id="site-new-page" data-copy="siteNewPage" disabled></button>
+              </div>
+              <ul id="site-content-items" class="site-content-items"></ul>
+              <div id="site-pagination" class="actions" hidden><button id="site-prev" type="button" class="ghost" data-copy="playerPrevious"></button><span id="site-page"></span><button id="site-next" type="button" class="ghost" data-copy="playerNext"></button></div>
+            </div>
+            <form id="site-editor" hidden>
+              <div class="admin-page-heading"><h4 id="site-editor-heading" tabindex="-1"></h4><button id="site-close" type="button" class="ghost" data-copy="siteBackList"></button></div>
+              <p id="site-revision" class="report-context"></p>
+              <fieldset id="site-fields" class="site-fields">
+                <legend class="admin-visually-hidden" data-copy="siteEditor"></legend>
+                <div class="admin-form-grid">
+                  <label><span data-copy="siteEditLanguage"></span><select id="site-edit-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
+                  <label id="site-slug-field"><span data-copy="siteSlug"></span><input name="slug" autocomplete="off" maxlength="64" pattern="[a-z0-9]+(-[a-z0-9]+)*" dir="ltr"><small id="site-url"></small></label>
+                </div>
+                <label><span data-copy="siteTitle"></span><input name="heading" maxlength="120"></label>
+                <label><span data-copy="siteBody"></span><textarea name="body" rows="4"></textarea></label>
+                <details id="site-options" class="admin-disclosure">
+                  <summary data-copy="siteImageAndLink"></summary>
+                  <div class="site-fields site-detail-body">
+                    <label><span data-copy="comingSoonArtwork"></span><input name="image" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                    <button id="site-remove-image" class="ghost" type="button" data-copy="siteRemoveImage" hidden></button>
+                    <label id="site-alt-field" hidden><span data-copy="siteImageDescription"></span><input name="alt" maxlength="200"></label>
+                    <label><span data-copy="siteDestination"></span><select name="target"></select></label>
+                    <label id="site-link-field" hidden><span data-copy="siteLinkLabel"></span><input name="link" maxlength="80"></label>
+                  </div>
+                </details>
+                <details id="site-preview" class="admin-disclosure"><summary data-copy="sitePreview"></summary><div id="site-preview-body" class="site-detail-body"></div></details>
+              </fieldset>
+              <div class="actions admin-form-actions">
+                <button id="site-save" type="submit" data-copy="saveDraft"></button>
+                <button id="site-publish" type="button" class="ghost" data-copy="sitePublish"></button>
+                <button id="site-archive" type="button" class="ghost" data-copy="siteArchive" hidden></button>
+                <button id="site-reload" type="button" class="ghost" data-copy="siteReload" hidden></button>
+              </div>
+              <small id="site-draft-only" data-copy="staffDraftOnly" hidden></small>
+              <details id="site-history" class="admin-disclosure" hidden><summary data-copy="siteHistory"></summary><ol id="site-history-list"></ol></details>
+            </form>
+            <p id="site-status" role="status"></p>
+          </section>
         </section>
         <section id="staff-management" class="admin-page" data-admin-view data-roles="operator_admin" aria-labelledby="staff-management-title" hidden>
           <div class="admin-page-heading">
