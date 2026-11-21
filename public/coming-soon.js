@@ -50,11 +50,10 @@ export const comingSoonCopy = {
 
 const fields = ['titleEn', 'titleFr', 'studio', 'descriptionEn', 'descriptionFr', 'altEn', 'altFr', 'category', 'featuredRank'];
 const canEdit = ['operator_admin', 'operator_content', 'operator_provider'];
-const canPublish = ['operator_admin', 'operator_provider'];
 const canReviewSaves = ['operator_admin', 'operator_support'];
 const searchable = (text) => text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, isFrench, getFavorites, favoritePending, toggleFavorite }) {
+export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, lobbyEnabled, isFrench, getFavorites, favoritePending, toggleFavorite }) {
   const detailSlug = currentRoute.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
   const $ = (id) => document.getElementById(id);
   const form = $('coming-soon-form');
@@ -67,6 +66,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   let preview;
   let detailLoaded = false;
   let staffRole;
+  let canPublish = false;
   let drafts = [];
   let draftsLoaded = false;
   let selected;
@@ -122,6 +122,10 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   }
 
   function renderLobby(filter, search) {
+    if (!lobbyEnabled()) {
+      $('coming-soon').hidden = true;
+      return { count: 0, hasFavorites: false };
+    }
     const bySlug = new Map(lobby.titles.map((title) => [title.slug, title]));
     const stars = lobby.titles.filter((title) => isFavorite(title.favoriteKey));
     const normal = filter === 'all' && !search.trim();
@@ -211,7 +215,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
         const controls = element('div', '', 'actions');
         controls.append(action(t('comingSoonEdit'), () => openEditor(title), 'ghost'));
         if (title.state === 'published') controls.append(linkTo(title, t('comingSoonOpen'), 'button ghost'));
-        if (canPublish.includes(staffRole)) {
+        if (canPublish) {
           if (title.state !== 'published' || title.publishedVersion !== title.version) {
             controls.append(action(t('comingSoonPublish'), () => { void change('publish', title); }));
           }
@@ -323,6 +327,9 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
 
   return {
     isDetail: Boolean(detailSlug), loadLobby, renderDetail, renderLobby, loadDrafts, loadSaves, renderAdmin, favoriteStatus,
-    setStaffRole(role) { staffRole = role; }
+    setStaffAccess(role, allowed) {
+      staffRole = role;
+      canPublish = allowed;
+    }
   };
 }

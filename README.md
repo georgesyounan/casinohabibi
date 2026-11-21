@@ -62,7 +62,7 @@ The admin catalog section has a sample-data action that saves a local placeholde
 
 ### Coming Soon previews
 
-Open **Coming Soon** in **Game catalogue** to save a bilingual draft. Choose **Publish preview** to make its permanent URL available from the lobby. Content staff can edit drafts. Operator admins and provider staff can publish or archive previews. A positive rank places a published preview in **Featured**. Each visit shows up to six distinct previews drawn from the published catalogue in a stable **Discover** order.
+Open **Coming Soon** in **Game catalogue** to save a bilingual draft. Choose **Publish preview** to make its permanent URL available from the lobby. Operator admins and staff who have catalogue publishing rights for that brand can publish or archive previews. A positive rank places a published preview in **Featured**. Each visit shows up to six distinct previews drawn from the published catalogue in a stable **Discover** order.
 
 Signed-in players can keep their previews in Favorites across devices. Archiving removes the preview and its active favorites while preserving the first-save reference in **Preview saves** and the player's account export. The dashboard shows the published count and distinct first-save count. The staff audit history identifies each publish or archive by actor, preview, revision and request ID.
 
@@ -77,7 +77,13 @@ npm run dev
 
 Replace the example email and password with private values. Create the encryption key once with PowerShell and keep it somewhere private. For example, run `$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create(); $bytes = New-Object byte[] 32; $rng.GetBytes($bytes); [BitConverter]::ToString($bytes).Replace('-', '').ToLower()` in PowerShell. Paste that output as the `PROVIDER_KEY_ENCRYPTION` value each time you open a new command window. Changing it prevents stored provider credentials and MFA secrets from being decrypted.
 
-Roles are tenant-specific: `operator_admin` manages tenant staff and provider/config access, `operator_content` manages published tenant branding, `operator_provider` manages provider credentials and catalog, and `operator_support` reviews and replies to player support requests. Staff sessions expire after eight hours and use an HttpOnly, SameSite cookie. Set `SECURE_COOKIES=1` behind HTTPS.
+Roles are assigned per brand. Operator admins manage staff and have full publishing access. Content staff can edit website and catalogue drafts. Provider staff manage provider credentials and catalogue previews. Support staff handle player requests. In **Staff and permissions**, an admin can give content staff website or catalogue publishing rights and provider staff catalogue publishing rights. Existing content and provider accounts keep their prior website and catalogue publishing access respectively.
+
+In **Website content → Display and region**, set the available site languages, default language, optional public sections, editorial display market, and reporting time zone. Changes take effect when the draft is published. The existing demo activity chart uses UTC. The market and time zone are available to catalogue and reporting modules.
+
+**Audit log** shows all brand events to admins. Publishers see their own editorial events for the areas they can publish. Changes save with an audit ID, and retries with the same `X-Request-ID` and payload return the recorded result for audited publication, staff access, and support changes. The journal stores field names and change references. Private support notes stay in the case.
+
+Staff sessions expire after eight hours and use an HttpOnly, SameSite cookie. Set `SECURE_COOKIES=1` behind HTTPS.
 
 ## Platform tenant onboarding prototype
 

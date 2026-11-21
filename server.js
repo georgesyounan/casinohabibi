@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
+import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 
 const appEnvironment = process.env.APP_ENV || 'development';
 if (!['development', 'staging', 'production'].includes(appEnvironment)) throw new Error('APP_ENV must be development, staging, or production');
@@ -51,6 +52,7 @@ try {
 }
 const db = new DatabaseSync(join(dataDir, 'northplay.sqlite'));
 db.exec(`
+  PRAGMA busy_timeout = 5000;
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending', 'active', 'suspended', 'closed')), created_at INTEGER NOT NULL);
@@ -131,12 +133,28 @@ for (const table of ['platform_events', 'staff_events']) {
 }
 db.exec('CREATE INDEX IF NOT EXISTS staff_events_actor_activity ON staff_events(tenant_id, actor_id, created_at)');
 db.exec('CREATE INDEX IF NOT EXISTS staff_events_tenant_page ON staff_events(tenant_id, id)');
+transaction(() => {
+  const columns = db.prepare('PRAGMA table_info(tenant_staff_memberships)').all().map(({ name }) => name);
+  if (!columns.includes('publish_website')) {
+    db.exec('ALTER TABLE tenant_staff_memberships ADD COLUMN publish_website INTEGER NOT NULL DEFAULT 0 CHECK(publish_website IN (0, 1))');
+    db.exec("UPDATE tenant_staff_memberships SET publish_website = 1 WHERE role = 'operator_content'");
+  }
+  if (!columns.includes('publish_catalogue')) {
+    db.exec('ALTER TABLE tenant_staff_memberships ADD COLUMN publish_catalogue INTEGER NOT NULL DEFAULT 0 CHECK(publish_catalogue IN (0, 1))');
+    db.exec("UPDATE tenant_staff_memberships SET publish_catalogue = 1 WHERE role = 'operator_provider'");
+  }
+});
 for (const [column, definition] of [['verification_token', 'TEXT'], ['verified_at', 'INTEGER']]) {
   if (!db.prepare('PRAGMA table_info(tenant_domains)').all().some((entry) => entry.name === column)) {
     db.exec(`ALTER TABLE tenant_domains ADD COLUMN ${column} ${definition}`);
   }
 }
 db.prepare("INSERT OR IGNORE INTO tenants(id, slug, name, status, created_at) VALUES ('sandbox', 'sandbox', 'Northplay Sandbox', 'active', ?)").run(Date.now());
+const defaultBrandOptions = {
+  enabledSections: { comingSoon: true, faq: true },
+  displayMarket: '',
+  reportingTimeZone: 'UTC'
+};
 const defaultTenantConfig = {
   brandName: 'Northplay', brandLogo: '', brandFavicon: '', primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor: '#d7b45a', supportEmail: '',
   heroTitleEn: 'Your seat at the table.', heroTitleFr: 'Votre place à la table.',
@@ -150,7 +168,8 @@ const defaultTenantConfig = {
   ],
   featuredGameIds: ['gold', 'roulette'],
   footerTextEn: 'Simulated funds only. No cash value.', footerTextFr: 'Fonds fictifs uniquement. Aucune valeur monétaire.',
-  privacyUrlEn: '', privacyUrlFr: '', termsUrlEn: '', termsUrlFr: ''
+  privacyUrlEn: '', privacyUrlFr: '', termsUrlEn: '', termsUrlFr: '',
+  ...defaultBrandOptions
 };
 if (!db.prepare("SELECT 1 FROM tenant_config_versions WHERE tenant_id = 'sandbox' AND status = 'published'").get()) {
   db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES ('sandbox', 1, ?, 'published', ?)").run(JSON.stringify(defaultTenantConfig), Date.now());
@@ -241,9 +260,9 @@ if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === '
 }
 db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 installComingSoon(db);
-const comingSoon = createComingSoon(db, { fail, transaction, validArtwork: validBrandLogo });
-
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
+const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
+const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -319,14 +338,62 @@ function verifyTotp(secret, code, now = Date.now()) {
   return false;
 }
 
+const staffRoles = ['operator_admin', 'operator_content', 'operator_provider', 'operator_support'];
+const websiteRoles = ['operator_admin', 'operator_content'];
+const catalogueRoles = ['operator_admin', 'operator_content', 'operator_provider'];
+const supportRoles = ['operator_admin', 'operator_support'];
+
+function staffPermissions(staff) {
+  const isAdmin = staff.role === 'operator_admin';
+  const publishWebsite = isAdmin || (staff.role === 'operator_content' && Boolean(staff.publishWebsite));
+  const publishCatalogue = isAdmin || (catalogueRoles.includes(staff.role) && Boolean(staff.publishCatalogue));
+  return { publishWebsite, publishCatalogue, viewAudit: publishWebsite || publishCatalogue };
+}
+
+function staffSession(staff, tenantId) {
+  return {
+    id: staff.id, email: staff.email, role: staff.role, mfaEnabled: Boolean(staff.mfa_enabled),
+    brandId: tenantId, brandName: db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId).name,
+    permissions: staffPermissions(staff)
+  };
+}
+
 function staffContext(req, tenantId, allowedRoles = ['operator_admin']) {
   const token = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
-  const staff = token && db.prepare(`SELECT a.id, a.email, a.mfa_enabled, m.role FROM staff_sessions s
+  const staff = token && db.prepare(`SELECT a.id, a.email, a.mfa_enabled, m.role,
+    m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue FROM staff_sessions s
     JOIN staff_accounts a ON a.id = s.staff_id JOIN tenant_staff_memberships m ON m.staff_id = a.id AND m.tenant_id = s.tenant_id
     WHERE s.token = ? AND s.tenant_id = ? AND s.expires > ? AND m.status = 'active'`).get(hash(token), tenantId, Date.now());
   if (!staff) fail(401, 'staffAuth');
   if (!allowedRoles.includes(staff.role)) fail(403, 'staffForbidden');
   return staff;
+}
+
+function publishedTenantConfig(tenantId) {
+  const row = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
+  return { version: row.version, config: { ...defaultBrandOptions, ...JSON.parse(row.config) } };
+}
+
+function comingSoonEnabled(tenantId) {
+  const { enabled } = db.prepare(`SELECT coalesce(json_extract(config, '$.enabledSections.comingSoon'), 1) AS enabled
+    FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1`).get(tenantId);
+  return Boolean(enabled);
+}
+
+function validBrandOptions({ primaryLocale, enabledLocales, enabledSections, displayMarket, reportingTimeZone }) {
+  if (!Array.isArray(enabledLocales) || !enabledLocales.includes(primaryLocale) ||
+      new Set(enabledLocales).size !== enabledLocales.length || !enabledLocales.every((locale) => ['en-CA', 'fr-CA'].includes(locale)) ||
+      !enabledSections || Object.keys(enabledSections).sort().join(',') !== 'comingSoon,faq' ||
+      typeof enabledSections.comingSoon !== 'boolean' || typeof enabledSections.faq !== 'boolean' ||
+      typeof displayMarket !== 'string' || (displayMarket && !/^[A-Z]{2}(?:-[A-Z0-9]{1,3})?$/.test(displayMarket)) ||
+      typeof reportingTimeZone !== 'string' || reportingTimeZone.length > 64 || !/^[a-zA-Z0-9_+/-]+$/.test(reportingTimeZone) ||
+      /^[+-]/.test(reportingTimeZone)) return false;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: reportingTimeZone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function resolveTenant(req) {
@@ -506,7 +573,9 @@ function availableFavorites(tenantId) {
   for (const { provider, externalId } of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
     available.add(`provider:${provider}:${externalId}`);
   }
-  for (const key of comingSoon.keys(tenantId)) available.add(key);
+  if (comingSoonEnabled(tenantId)) {
+    for (const key of comingSoon.keys(tenantId)) available.add(key);
+  }
   return available;
 }
 
@@ -544,31 +613,37 @@ async function api(req, res, path, tenantId, requestId) {
   const player = cookie && db.prepare('SELECT player FROM sessions WHERE token = ? AND tenant_id = ? AND expires > ?').get(hash(cookie), tenantId, Date.now())?.player;
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
   const route = `${req.method} ${path}`;
+  const auditedChange = (roles, input, work, permission) => staffAudit.change(tenantId, requestId, route, input, () => {
+    const staff = staffContext(req, tenantId, roles);
+    if (!adminEnabled) fail(503, 'adminDisabled');
+    if (permission && !staffPermissions(staff)[permission]) fail(403, 'staffForbidden');
+    return staff;
+  }, work);
   if (req.method !== 'GET' && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   if (route === 'GET /api/coming-soon') {
+    if (!comingSoonEnabled(tenantId)) return { titles: [], featured: [], discover: [] };
     const seed = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1] || randomBytes(16).toString('hex');
     res.setHeader('Set-Cookie', `northplay_visit=${seed}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
     return comingSoon.lobby(tenantId, seed);
   }
   const preview = route.match(/^GET \/api\/coming-soon\/([a-z0-9-]{1,64})$/);
   if (preview) {
-    const title = comingSoon.published(tenantId, preview[1]);
+    const title = comingSoonEnabled(tenantId) && comingSoon.published(tenantId, preview[1]);
     if (!title) fail(404, 'comingSoonMissing');
     return title;
   }
   if (route === 'GET /api/admin/coming-soon') {
-    staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider']);
+    staffContext(req, tenantId, catalogueRoles);
     return comingSoon.drafts(tenantId);
   }
   if (route === 'POST /api/admin/coming-soon') {
-    staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider']);
+    staffContext(req, tenantId, catalogueRoles);
     const input = await body(req, 96 * 1024);
-    const staff = staffContext(req, tenantId, input?.action === 'save'
-      ? ['operator_admin', 'operator_content', 'operator_provider'] : ['operator_admin', 'operator_provider']);
-    return comingSoon.mutate(tenantId, staff.id, requestId, input);
+    const permission = ['publish', 'archive'].includes(input?.action) ? 'publishCatalogue' : undefined;
+    return auditedChange(catalogueRoles, input, (staff) => comingSoon.mutate(tenantId, staff.id, requestId, input), permission);
   }
   if (route === 'GET /api/admin/coming-soon/saves') {
-    staffContext(req, tenantId, ['operator_admin', 'operator_support']);
+    staffContext(req, tenantId, supportRoles);
     const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
     if (query.length > 254) fail(400, 'invalid');
     return comingSoon.saves(tenantId, query);
@@ -582,17 +657,18 @@ async function api(req, res, path, tenantId, requestId) {
     const salt = staff?.password_hash.split(':')[0] || '00000000000000000000000000000000';
     const candidate = `${salt}:${scryptSync(password.slice(0, 128), salt, 64).toString('hex')}`;
     if (!staff || !matches(candidate, staff.password_hash) || (staff.mfa_enabled && (!staff.mfa_secret || !verifyTotp(decryptStaffSecret(staff.mfa_secret), code)))) fail(401, 'staffCredentials');
-    const membership = db.prepare("SELECT role FROM tenant_staff_memberships WHERE staff_id = ? AND tenant_id = ? AND status = 'active'").get(staff.id, tenantId);
+    const membership = db.prepare("SELECT role, publish_website AS publishWebsite, publish_catalogue AS publishCatalogue FROM tenant_staff_memberships WHERE staff_id = ? AND tenant_id = ? AND status = 'active'").get(staff.id, tenantId);
     if (!membership) fail(403, 'staffForbidden');
     const token = randomBytes(32).toString('hex');
-    db.prepare('INSERT INTO staff_sessions(token, tenant_id, staff_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), tenantId, staff.id, Date.now() + 8 * 60 * 60 * 1000, Date.now());
-    db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_login', ?, ?, ?)").run(tenantId, staff.id, 'session', Date.now(), requestId);
+    transaction(() => {
+      db.prepare('INSERT INTO staff_sessions(token, tenant_id, staff_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), tenantId, staff.id, Date.now() + 8 * 60 * 60 * 1000, Date.now());
+      staffAudit.record(tenantId, staff.id, 'staff_login', 'session', requestId);
+    });
     res.setHeader('Set-Cookie', `northplay_staff=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=28800${secureCookie}`);
-    return { id: staff.id, email: email.trim().toLowerCase(), role: membership.role, mfaEnabled: Boolean(staff.mfa_enabled) };
+    return staffSession({ ...staff, email: email.trim().toLowerCase(), ...membership }, tenantId);
   }
   if (route === 'GET /api/admin/session') {
-    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
-    return { id: staff.id, email: staff.email, role: staff.role, mfaEnabled: Boolean(staff.mfa_enabled) };
+    return staffSession(staffContext(req, tenantId, staffRoles), tenantId);
   }
   if (route === 'GET /api/admin/overview') {
     staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
@@ -648,16 +724,16 @@ async function api(req, res, path, tenantId, requestId) {
     transaction(() => {
       db.prepare('UPDATE staff_accounts SET password_hash = ? WHERE id = ?').run(passwordHash, staff.id);
       db.prepare('DELETE FROM staff_sessions WHERE staff_id = ? AND token <> ?').run(staff.id, currentSessionToken);
-      db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_password_changed', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
+      staffAudit.record(tenantId, staff.id, 'staff_password_changed', staff.email, requestId, { recordId: staff.id, fields: ['password'] });
     });
     return { changed: true, revokedSessions };
   }
   if (route === 'POST /api/admin/logout') {
-    if (staffCookie) {
+    if (staffCookie) transaction(() => {
       const staff = db.prepare('SELECT staff_id FROM staff_sessions WHERE token = ? AND tenant_id = ?').get(hash(staffCookie), tenantId);
-      if (staff) db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_logout', ?, ?, ?)").run(tenantId, staff.staff_id, 'session', Date.now(), requestId);
+      if (staff) staffAudit.record(tenantId, staff.staff_id, 'staff_logout', 'session', requestId);
       db.prepare('DELETE FROM staff_sessions WHERE token = ? AND tenant_id = ?').run(hash(staffCookie), tenantId);
-    }
+    });
     res.setHeader('Set-Cookie', `northplay_staff=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
     return null;
   }
@@ -667,8 +743,10 @@ async function api(req, res, path, tenantId, requestId) {
     if (route === 'POST /api/admin/mfa/setup') {
       if (db.prepare('SELECT mfa_enabled FROM staff_accounts WHERE id = ?').get(staff.id).mfa_enabled) fail(409, 'staffMfaAlreadyEnabled');
       const secret = encodeBase32(randomBytes(20));
-      db.prepare('UPDATE staff_accounts SET mfa_secret = ? WHERE id = ?').run(encryptStaffSecret(secret), staff.id);
-      db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_mfa_setup', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
+      transaction(() => {
+        db.prepare('UPDATE staff_accounts SET mfa_secret = ? WHERE id = ?').run(encryptStaffSecret(secret), staff.id);
+        staffAudit.record(tenantId, staff.id, 'staff_mfa_setup', staff.email, requestId, { recordId: staff.id, fields: ['mfa'] });
+      });
       const publishedConfig = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
       const issuer = JSON.parse(publishedConfig.config).brandName || 'Northplay';
       const label = encodeURIComponent(`${issuer}:${staff.email}`);
@@ -678,67 +756,87 @@ async function api(req, res, path, tenantId, requestId) {
     const current = db.prepare('SELECT mfa_secret, mfa_enabled FROM staff_accounts WHERE id = ?').get(staff.id);
     if (!current.mfa_secret || !verifyTotp(decryptStaffSecret(current.mfa_secret), code)) fail(400, 'staffMfaInvalid');
     if (route === 'POST /api/admin/mfa/enable') {
-      db.prepare('UPDATE staff_accounts SET mfa_enabled = 1 WHERE id = ?').run(staff.id);
-      db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_mfa_enabled', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
+      transaction(() => {
+        db.prepare('UPDATE staff_accounts SET mfa_enabled = 1 WHERE id = ?').run(staff.id);
+        staffAudit.record(tenantId, staff.id, 'staff_mfa_enabled', staff.email, requestId, { recordId: staff.id, fields: ['mfa'] });
+      });
       return { enabled: true };
     }
-    db.prepare('UPDATE staff_accounts SET mfa_secret = NULL, mfa_enabled = 0 WHERE id = ?').run(staff.id);
-    db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'staff_mfa_disabled', ?, ?, ?)").run(tenantId, staff.id, staff.email, Date.now(), requestId);
+    transaction(() => {
+      db.prepare('UPDATE staff_accounts SET mfa_secret = NULL, mfa_enabled = 0 WHERE id = ?').run(staff.id);
+      staffAudit.record(tenantId, staff.id, 'staff_mfa_disabled', staff.email, requestId, { recordId: staff.id, fields: ['mfa'] });
+    });
     return { enabled: false };
   }
-  if (['GET /api/admin/staff', 'POST /api/admin/staff', 'POST /api/admin/staff/disable', 'POST /api/admin/staff/role', 'GET /api/admin/audit'].includes(route)) {
-    const actor = staffContext(req, tenantId, ['operator_admin']);
-    if (route === 'GET /api/admin/staff') return db.prepare('SELECT a.email, a.mfa_enabled AS mfaEnabled, m.role, m.status, m.created_at AS createdAt, (SELECT max(e.created_at) FROM staff_events e WHERE e.tenant_id = m.tenant_id AND e.actor_id = a.id) AS lastActivityAt FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? ORDER BY m.created_at').all(tenantId);
-    if (route === 'GET /api/admin/audit') {
-      const beforeValue = new URL(req.url, 'http://localhost').searchParams.get('before');
-      const before = beforeValue === null ? null : Number(beforeValue);
-      if (before !== null && (!Number.isSafeInteger(before) || before < 1)) fail(400, 'invalid');
-      const rows = db.prepare(`SELECT e.id, a.email AS actor, e.action, e.target, e.created_at AS createdAt, e.correlation_id AS correlationId FROM staff_events e JOIN staff_accounts a ON a.id = e.actor_id WHERE e.tenant_id = ? AND e.id < coalesce(?, 9223372036854775807) ORDER BY e.id DESC LIMIT 51`).all(tenantId, before);
-      const hasMore = rows.length > 50;
-      const events = rows.slice(0, 50);
-      return { events, nextCursor: hasMore ? events.at(-1).id : null };
-    }
-    const { email, password, role } = await body(req);
-    if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail(400, 'invalid');
+  if (route === 'GET /api/admin/audit') {
+    const actor = staffContext(req, tenantId, staffRoles);
+    const permissions = staffPermissions(actor);
+    if (!permissions.viewAudit) fail(403, 'staffForbidden');
+    const beforeValue = new URL(req.url, 'http://localhost').searchParams.get('before');
+    const before = beforeValue === null ? null : Number(beforeValue);
+    if (before !== null && (!Number.isSafeInteger(before) || before < 1)) fail(400, 'invalid');
+    return staffAudit.list(tenantId, {
+      ...actor, publishWebsite: Number(permissions.publishWebsite), publishCatalogue: Number(permissions.publishCatalogue)
+    }, before);
+  }
+  if (['GET /api/admin/staff', 'POST /api/admin/staff', 'POST /api/admin/staff/disable', 'POST /api/admin/staff/role'].includes(route)) {
+    staffContext(req, tenantId);
+    if (route === 'GET /api/admin/staff') return db.prepare(`SELECT a.email, a.mfa_enabled AS mfaEnabled, m.role, m.status,
+      m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue, m.created_at AS createdAt,
+      (SELECT max(e.created_at) FROM staff_events e WHERE e.tenant_id = m.tenant_id AND e.actor_id = a.id) AS lastActivityAt
+      FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? ORDER BY m.created_at`).all(tenantId)
+      .map((member) => ({ ...member, ...staffPermissions(member) }));
+    const input = await body(req);
+    const { email, password, role, publishWebsite, publishCatalogue, reason: reasonInput } = input ?? {};
+    const disable = route === 'POST /api/admin/staff/disable';
+    const changeRole = route === 'POST /api/admin/staff/role';
+    if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ||
+        (!disable && !staffRoles.includes(role)) ||
+        (publishWebsite !== undefined && (typeof publishWebsite !== 'boolean' || (publishWebsite && role !== 'operator_content'))) ||
+        (publishCatalogue !== undefined && (typeof publishCatalogue !== 'boolean' || (publishCatalogue && !['operator_content', 'operator_provider'].includes(role)))) ||
+        (reasonInput !== undefined && (typeof reasonInput !== 'string' || reasonInput.length > 240))) fail(400, 'invalid');
     const normalizedEmail = email.trim().toLowerCase();
-    if (route === 'POST /api/admin/staff/disable') {
-      const member = db.prepare('SELECT a.id, m.role FROM staff_accounts a JOIN tenant_staff_memberships m ON m.staff_id = a.id WHERE m.tenant_id = ? AND a.email = ? AND m.status = \'active\'').get(tenantId, normalizedEmail);
-      if (!member || member.id === actor.id) fail(409, 'staffLifecycle');
-      if (member.role === 'operator_admin' && db.prepare("SELECT count(*) AS total FROM tenant_staff_memberships WHERE tenant_id = ? AND role = 'operator_admin' AND status = 'active'").get(tenantId).total <= 1) fail(409, 'staffLifecycle');
-      db.prepare("UPDATE tenant_staff_memberships SET status = 'disabled' WHERE tenant_id = ? AND staff_id = ?").run(tenantId, member.id);
-      db.prepare('DELETE FROM staff_sessions WHERE tenant_id = ? AND staff_id = ?').run(tenantId, member.id);
-      db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, \'staff_disabled\', ?, ?, ?)').run(tenantId, actor.id, normalizedEmail, Date.now(), requestId);
-      return { email: normalizedEmail, status: 'disabled' };
-    }
-    if (typeof role !== 'string' || !['operator_admin', 'operator_content', 'operator_provider', 'operator_support'].includes(role)) fail(400, 'invalid');
-    if (route === 'POST /api/admin/staff/role') {
-      const member = db.prepare('SELECT a.id, m.role FROM staff_accounts a JOIN tenant_staff_memberships m ON m.staff_id = a.id WHERE m.tenant_id = ? AND a.email = ? AND m.status = \'active\'').get(tenantId, normalizedEmail);
-      if (!member || member.id === actor.id) fail(409, 'staffLifecycle');
-      if (member.role === role) return { email: normalizedEmail, role, changed: false };
-      if (member.role === 'operator_admin' && role !== 'operator_admin' && db.prepare("SELECT count(*) AS total FROM tenant_staff_memberships WHERE tenant_id = ? AND role = 'operator_admin' AND status = 'active'").get(tenantId).total <= 1) fail(409, 'staffLifecycle');
-      transaction(() => {
-        db.prepare('UPDATE tenant_staff_memberships SET role = ? WHERE tenant_id = ? AND staff_id = ? AND status = \'active\'').run(role, tenantId, member.id);
-        db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, \'staff_role_changed\', ?, ?, ?)').run(tenantId, actor.id, `${normalizedEmail}:${member.role}->${role}`, Date.now(), requestId);
+    const reason = reasonInput?.trim();
+    return auditedChange(['operator_admin'], input, (actor) => {
+      let target = db.prepare('SELECT id FROM staff_accounts WHERE email = ?').get(normalizedEmail);
+      const member = target && db.prepare(`SELECT role, status, publish_website AS publishWebsite, publish_catalogue AS publishCatalogue
+        FROM tenant_staff_memberships WHERE tenant_id = ? AND staff_id = ?`).get(tenantId, target.id);
+      if (disable || changeRole) {
+        if (member?.status !== 'active' || target.id === actor.id) fail(409, 'staffLifecycle');
+        if (member.role === 'operator_admin' && (disable || role !== 'operator_admin') &&
+            db.prepare("SELECT count(*) AS total FROM tenant_staff_memberships WHERE tenant_id = ? AND role = 'operator_admin' AND status = 'active'").get(tenantId).total <= 1) fail(409, 'staffLifecycle');
+      } else if (member?.status === 'active') fail(409, 'staffExists');
+
+      const keepGrants = member?.role === role;
+      const next = disable ? { ...member, status: 'disabled' } : {
+        role, status: 'active',
+        publishWebsite: Number(publishWebsite ?? (keepGrants && member.publishWebsite)),
+        publishCatalogue: Number(publishCatalogue ?? (keepGrants && member.publishCatalogue))
+      };
+      const fields = changedFields(member ?? {}, next);
+      const result = { email: normalizedEmail, role: next.role, status: next.status, ...staffPermissions(next) };
+      if (changeRole && !fields.length) return { ...result, changed: false };
+      if ((disable || changeRole || member || next.publishWebsite || next.publishCatalogue) && !reason) fail(400, 'staffReasonRequired');
+
+      if (!target) {
+        if (typeof password !== 'string' || password.length < 12 || password.length > 128) fail(400, 'invalid');
+        const salt = randomBytes(16).toString('hex');
+        const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
+        const { lastInsertRowid: id } = db.prepare('INSERT INTO staff_accounts(email, password_hash, created_at) VALUES (?, ?, ?)').run(normalizedEmail, passwordHash, Date.now());
+        target = { id };
+      }
+      db.prepare(`INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at, publish_website, publish_catalogue)
+        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tenant_id, staff_id) DO UPDATE SET
+          role = excluded.role, status = excluded.status, publish_website = excluded.publish_website, publish_catalogue = excluded.publish_catalogue`)
+        .run(tenantId, target.id, next.role, next.status, Date.now(), next.publishWebsite, next.publishCatalogue);
+      if (disable) db.prepare('DELETE FROM staff_sessions WHERE tenant_id = ? AND staff_id = ?').run(tenantId, target.id);
+      const action = disable ? 'staff_disabled' : changeRole ? 'staff_role_changed' : member ? 'staff_reenabled' : 'staff_created';
+      const auditId = staffAudit.record(tenantId, actor.id, action, normalizedEmail, requestId, {
+        recordId: target.id, fields, reason, previousStatus: member?.status ?? null, status: next.status,
+        previousRole: member?.role ?? null, role: next.role
       });
-      return { email: normalizedEmail, role, changed: true };
-    }
-    let target = db.prepare('SELECT id FROM staff_accounts WHERE email = ?').get(normalizedEmail);
-    if (!target) {
-      if (typeof password !== 'string' || password.length < 12 || password.length > 128) fail(400, 'invalid');
-      const salt = randomBytes(16).toString('hex');
-      const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
-      const { lastInsertRowid: id } = db.prepare('INSERT INTO staff_accounts(email, password_hash, created_at) VALUES (?, ?, ?)').run(normalizedEmail, passwordHash, Date.now());
-      target = { id };
-    }
-    const existingMembership = db.prepare('SELECT status FROM tenant_staff_memberships WHERE tenant_id = ? AND staff_id = ?').get(tenantId, target.id);
-    if (existingMembership?.status === 'active') fail(409, 'staffExists');
-    if (existingMembership) {
-      db.prepare("UPDATE tenant_staff_memberships SET role = ?, status = 'active' WHERE tenant_id = ? AND staff_id = ?").run(role, tenantId, target.id);
-    } else {
-      db.prepare("INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at) VALUES (?, ?, ?, 'active', ?)").run(tenantId, target.id, role, Date.now());
-    }
-    db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, actor.id, existingMembership ? 'staff_reenabled' : 'staff_created', normalizedEmail, Date.now(), requestId);
-    return { email: normalizedEmail, role, status: 'active' };
+      return changeRole ? { ...result, changed: true, auditId } : { ...result, auditId };
+    });
   }
   if (route.startsWith('GET /api/platform/tenants') || route.startsWith('POST /api/platform/tenants') ||
       route.startsWith('POST /api/platform/domains') || route === 'GET /api/platform/audit') {
@@ -837,30 +935,50 @@ async function api(req, res, path, tenantId, requestId) {
     fail(404, 'invalid');
   }
   if (route === 'GET /api/tenant') {
-    const config = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
-    return { tenant: db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId).name, version: config.version, config: JSON.parse(config.config) };
+    const published = publishedTenantConfig(tenantId);
+    return { tenant: db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId).name, ...published };
   }
   if (['GET /api/admin/config', 'POST /api/admin/config', 'POST /api/admin/config/publish'].includes(route)) {
     if (!adminEnabled) fail(503, 'adminDisabled');
-    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content']);
+    staffContext(req, tenantId, websiteRoles);
+    const getDraft = () => db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
     if (route === 'GET /api/admin/config') {
-      let draft = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
-      if (!draft) {
-        const published = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
-        const version = db.prepare('SELECT coalesce(max(version), 0) + 1 AS version FROM tenant_config_versions WHERE tenant_id = ?').get(tenantId).version;
-        db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, ?, ?, 'draft', ?)").run(tenantId, version, published.config, Date.now());
-        draft = { version, config: published.config };
-      }
-      return { version: draft.version, config: JSON.parse(draft.config) };
+      const draft = getDraft();
+      return draft
+        ? { version: draft.version, config: { ...defaultBrandOptions, ...JSON.parse(draft.config) }, status: 'draft' }
+        : { ...publishedTenantConfig(tenantId), status: 'published' };
     }
-    if (route === 'POST /api/admin/config') {
-      const { config } = await body(req, 96 * 1024);
-      if (!config || Object.keys(config).sort().join(',') !== 'accentColor,announcementEn,announcementFr,brandFavicon,brandLogo,brandName,enabledLocales,faqItems,featuredGameIds,footerTextEn,footerTextFr,heroIntroEn,heroIntroFr,heroTitleEn,heroTitleFr,primaryLocale,privacyUrlEn,privacyUrlFr,supportEmail,termsUrlEn,termsUrlFr' ||
+    const input = await body(req, 96 * 1024);
+    const { version: expectedVersion, config: proposed } = input ?? {};
+    if (expectedVersion !== undefined && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) fail(400, 'invalid');
+    const publish = route.endsWith('/publish');
+    return auditedChange(websiteRoles, input, (staff) => {
+      const draft = getDraft();
+      const published = publishedTenantConfig(tenantId);
+      const currentVersion = draft?.version ?? published.version;
+      if (expectedVersion !== undefined && currentVersion !== expectedVersion) fail(409, 'configConflict');
+      if (publish) {
+        if (!draft) fail(409, 'configDraftMissing');
+        const config = { ...defaultBrandOptions, ...JSON.parse(draft.config) };
+        db.prepare("UPDATE tenant_config_versions SET status = 'published' WHERE tenant_id = ? AND version = ?").run(tenantId, draft.version);
+        db.prepare('UPDATE tenants SET name = ? WHERE id = ?').run(config.brandName, tenantId);
+        const auditId = staffAudit.record(tenantId, staff.id, 'tenant_config_published', String(draft.version), requestId, {
+          recordId: tenantId, revision: draft.version, fields: changedFields(published.config, config), previousStatus: 'draft', status: 'published'
+        });
+        return { version: draft.version, status: 'published', auditId };
+      }
+      if (!proposed || typeof proposed !== 'object' || Array.isArray(proposed)) fail(400, 'invalid');
+      const previous = draft ? { ...defaultBrandOptions, ...JSON.parse(draft.config) } : published.config;
+      const config = {
+        enabledSections: previous.enabledSections, displayMarket: previous.displayMarket,
+        reportingTimeZone: previous.reportingTimeZone, ...proposed
+      };
+      const keys = Object.keys(defaultTenantConfig);
+      if (Object.keys(config).length !== keys.length || !keys.every((key) => Object.hasOwn(config, key)) ||
+          !validBrandOptions(config) ||
           typeof config.brandName !== 'string' || !config.brandName.trim() || config.brandName.length > 48 ||
           typeof config.brandLogo !== 'string' || (config.brandLogo !== '' && !validBrandLogo(config.brandLogo)) ||
           typeof config.brandFavicon !== 'string' || (config.brandFavicon !== '' && !validBrandFavicon(config.brandFavicon)) ||
-          config.primaryLocale !== 'en-CA' || !Array.isArray(config.enabledLocales) || config.enabledLocales.length !== 2 ||
-          !['en-CA', 'fr-CA'].every((locale) => config.enabledLocales.includes(locale)) ||
           typeof config.accentColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(config.accentColor) ||
           typeof config.supportEmail !== 'string' || config.supportEmail.length > 254 || (config.supportEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(config.supportEmail)) ||
           typeof config.heroTitleEn !== 'string' || !config.heroTitleEn.trim() || config.heroTitleEn.length > 120 ||
@@ -880,21 +998,18 @@ async function api(req, res, path, tenantId, requestId) {
           !['privacyUrlEn', 'privacyUrlFr', 'termsUrlEn', 'termsUrlFr'].every((key) => typeof config[key] === 'string' && validPolicyUrl(config[key])) ||
           typeof config.footerTextEn !== 'string' || !config.footerTextEn.trim() || config.footerTextEn.length > 160 ||
           typeof config.footerTextFr !== 'string' || !config.footerTextFr.trim() || config.footerTextFr.length > 160) fail(400, 'invalid');
-      const draft = db.prepare("SELECT version FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
-      const version = draft?.version ?? db.prepare('SELECT coalesce(max(version), 0) + 1 AS version FROM tenant_config_versions WHERE tenant_id = ?').get(tenantId).version;
-      if (draft) db.prepare('UPDATE tenant_config_versions SET config = ?, created_at = ? WHERE tenant_id = ? AND version = ?').run(JSON.stringify(config), Date.now(), tenantId, version);
-      else db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, ?, ?, 'draft', ?)").run(tenantId, version, JSON.stringify(config), Date.now());
-      db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'tenant_config_saved', ?, ?, ?)").run(tenantId, staff.id, String(version), Date.now(), requestId);
-      return { version, status: 'draft' };
-    }
-    const draft = db.prepare("SELECT version FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
-    if (!draft) fail(409, 'configDraftMissing');
-    transaction(() => {
-      db.prepare("UPDATE tenant_config_versions SET status = 'published' WHERE tenant_id = ? AND version = ? AND status = 'draft'").run(tenantId, draft.version);
-      db.prepare('UPDATE tenants SET name = ? WHERE id = ?').run(JSON.parse(db.prepare('SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND version = ?').get(tenantId, draft.version).config).brandName, tenantId);
-      db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'tenant_config_published', ?, ?, ?)").run(tenantId, staff.id, String(draft.version), Date.now(), requestId);
-    });
-    return { version: draft.version, status: 'published' };
+      config.enabledLocales = ['en-CA', 'fr-CA'].filter((locale) => config.enabledLocales.includes(locale));
+      config.enabledSections = { comingSoon: config.enabledSections.comingSoon, faq: config.enabledSections.faq };
+      const fields = changedFields(previous, config);
+      if (!fields.length) return { version: currentVersion, status: draft ? 'draft' : 'published', auditId: null };
+      const version = db.prepare('SELECT coalesce(max(version), 0) + 1 AS version FROM tenant_config_versions WHERE tenant_id = ?').get(tenantId).version;
+      if (draft) db.prepare('DELETE FROM tenant_config_versions WHERE tenant_id = ? AND version = ?').run(tenantId, draft.version);
+      db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, ?, ?, 'draft', ?)").run(tenantId, version, JSON.stringify(config), Date.now());
+      const auditId = staffAudit.record(tenantId, staff.id, 'tenant_config_saved', String(version), requestId, {
+        recordId: tenantId, revision: version, fields, previousStatus: draft ? 'draft' : 'published', status: 'draft'
+      });
+      return { version, status: 'draft', auditId };
+    }, publish ? 'publishWebsite' : undefined);
   }
   if (route === 'GET /api/account') {
     if (!player) return null;
@@ -1216,7 +1331,7 @@ async function api(req, res, path, tenantId, requestId) {
     return { id: ticketId, status: 'open', createdAt: now };
   }
   if (route === 'GET /api/admin/support') {
-    staffContext(req, tenantId, ['operator_admin', 'operator_support']);
+    staffContext(req, tenantId, supportRoles);
     const params = new URL(req.url, 'http://localhost').searchParams;
     const cursorUpdatedAt = params.get('beforeUpdatedAt');
     const cursorId = params.get('beforeId');
@@ -1243,49 +1358,39 @@ async function api(req, res, path, tenantId, requestId) {
     return { tickets: items, total, counts, nextCursor: hasMore ? { updatedAt: lastTicket.updatedAt, id: lastTicket.id } : null };
   }
   if (route === 'GET /api/admin/support/team') {
-    staffContext(req, tenantId, ['operator_admin', 'operator_support']);
+    staffContext(req, tenantId, supportRoles);
     return db.prepare("SELECT a.id, a.email, m.role FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? AND m.status = 'active' AND m.role IN ('operator_admin', 'operator_support') ORDER BY a.email").all(tenantId);
   }
-  if (route === 'POST /api/admin/support/assign') {
-    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const { ticketId, expectedUpdatedAt, staffId } = await body(req);
-    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt) || (staffId !== null && (!Number.isSafeInteger(staffId) || staffId < 1))) fail(400, 'invalid');
-    const ticket = db.prepare('SELECT updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
-    if (!ticket) fail(404, 'invalid');
-    if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
-    if (staffId !== null && !db.prepare("SELECT 1 FROM tenant_staff_memberships WHERE tenant_id = ? AND staff_id = ? AND status = 'active' AND role IN ('operator_admin', 'operator_support')").get(tenantId, staffId)) fail(400, 'invalid');
-    const now = Math.max(Date.now(), ticket.updatedAt + 1);
-    transaction(() => {
-      db.prepare('UPDATE support_tickets SET assigned_to = ?, updated_at = ? WHERE id = ? AND tenant_id = ?').run(staffId, now, ticketId, tenantId);
-      db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, staff.id, staffId === null ? 'support_ticket_unassigned' : 'support_ticket_assigned', `${ticketId}:${staffId ?? 'unassigned'}`, now, requestId);
-    });
-    return { ticketId, staffId, updatedAt: now };
-  }
-  if (route === 'POST /api/admin/support/note') {
-    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const { ticketId, expectedUpdatedAt, note } = await body(req, 8192);
-    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt) || typeof note !== 'string' || note.trim().length < 1 || note.trim().length > 2000) fail(400, 'invalid');
-    const ticket = db.prepare('SELECT updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
-    if (!ticket) fail(404, 'invalid');
-    if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
-    const now = Math.max(Date.now(), ticket.updatedAt + 1);
-    transaction(() => {
-      db.prepare('INSERT INTO support_ticket_notes(tenant_id, ticket_id, staff_id, note, created_at) VALUES (?, ?, ?, ?, ?)').run(tenantId, ticketId, staff.id, note.trim(), now);
-      db.prepare('UPDATE support_tickets SET updated_at = ? WHERE id = ? AND tenant_id = ?').run(now, ticketId, tenantId);
-      db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, \'support_ticket_note_added\', ?, ?, ?)').run(tenantId, staff.id, String(ticketId), now, requestId);
-    });
-    return { ticketId, createdAt: now };
-  }
-  if (route === 'POST /api/admin/support/reply') {
-    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_support']);
-    const { ticketId, expectedUpdatedAt, reply, status, priority } = await body(req, 8192);
-    const hasReply = typeof reply === 'string' && reply.trim().length > 0;
-    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt) || (reply !== undefined && typeof reply !== 'string') || (typeof reply === 'string' && reply.trim().length > 3000) || (status === 'answered' && !hasReply) || !['answered', 'closed'].includes(status) || !['low', 'normal', 'high', 'urgent'].includes(priority)) fail(400, 'invalid');
-    const ticket = db.prepare('SELECT id, updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
-    if (!ticket) fail(404, 'invalid');
-    if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
-    const now = Math.max(Date.now(), ticket.updatedAt + 1);
-    transaction(() => {
+  if (['POST /api/admin/support/assign', 'POST /api/admin/support/note', 'POST /api/admin/support/reply'].includes(route)) {
+    staffContext(req, tenantId, supportRoles);
+    const input = await body(req);
+    const { ticketId, expectedUpdatedAt, staffId, note, reply, status, priority } = input ?? {};
+    if (!Number.isSafeInteger(ticketId) || ticketId < 1 || !Number.isSafeInteger(expectedUpdatedAt)) fail(400, 'invalid');
+    return auditedChange(supportRoles, input, (staff) => {
+      const ticket = db.prepare('SELECT id, status, priority, assigned_to AS assignedTo, updated_at AS updatedAt FROM support_tickets WHERE id = ? AND tenant_id = ?').get(ticketId, tenantId);
+      if (!ticket) fail(404, 'invalid');
+      if (ticket.updatedAt !== expectedUpdatedAt) fail(409, 'supportConflict');
+      const now = Math.max(Date.now(), ticket.updatedAt + 1);
+      if (route.endsWith('/assign')) {
+        if (staffId !== null && (!Number.isSafeInteger(staffId) || staffId < 1 || !db.prepare("SELECT 1 FROM tenant_staff_memberships WHERE tenant_id = ? AND staff_id = ? AND status = 'active' AND role IN ('operator_admin', 'operator_support')").get(tenantId, staffId))) fail(400, 'invalid');
+        db.prepare('UPDATE support_tickets SET assigned_to = ?, updated_at = ? WHERE id = ? AND tenant_id = ?').run(staffId, now, ticketId, tenantId);
+        const auditId = staffAudit.record(tenantId, staff.id, staffId === null ? 'support_ticket_unassigned' : 'support_ticket_assigned', `${ticketId}:${staffId ?? 'unassigned'}`, requestId, {
+          recordId: ticketId, revision: now, fields: changedFields(ticket, { assignedTo: staffId })
+        }, now);
+        return { ticketId, staffId, updatedAt: now, auditId };
+      }
+      if (route.endsWith('/note')) {
+        if (typeof note !== 'string' || note.trim().length < 1 || note.trim().length > 2000) fail(400, 'invalid');
+        db.prepare('INSERT INTO support_ticket_notes(tenant_id, ticket_id, staff_id, note, created_at) VALUES (?, ?, ?, ?, ?)').run(tenantId, ticketId, staff.id, note.trim(), now);
+        db.prepare('UPDATE support_tickets SET updated_at = ? WHERE id = ? AND tenant_id = ?').run(now, ticketId, tenantId);
+        const auditId = staffAudit.record(tenantId, staff.id, 'support_ticket_note_added', String(ticketId), requestId, {
+          recordId: ticketId, revision: now, fields: ['privateNote']
+        }, now);
+        return { ticketId, createdAt: now, auditId };
+      }
+      const hasReply = typeof reply === 'string' && reply.trim().length > 0;
+      if ((reply !== undefined && typeof reply !== 'string') || (typeof reply === 'string' && reply.trim().length > 3000) ||
+          (status === 'answered' && !hasReply) || !['answered', 'closed'].includes(status) || !['low', 'normal', 'high', 'urgent'].includes(priority)) fail(400, 'invalid');
       if (hasReply) {
         db.prepare('UPDATE support_tickets SET reply = ?, status = ?, priority = ?, replied_by = ?, updated_at = ?, reply_thread_migrated = 1 WHERE id = ? AND tenant_id = ?').run(reply.trim(), status, priority, staff.id, now, ticketId, tenantId);
         db.prepare("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, staff_id, message, created_at) VALUES (?, ?, 'staff', ?, ?, ?)").run(tenantId, ticketId, staff.id, reply.trim(), now);
@@ -1293,9 +1398,13 @@ async function api(req, res, path, tenantId, requestId) {
         db.prepare('UPDATE support_tickets SET status = ?, priority = ?, updated_at = ? WHERE id = ? AND tenant_id = ?').run(status, priority, now, ticketId, tenantId);
       }
       const action = hasReply ? `support_ticket_${status}_priority_${priority}` : `support_ticket_closed_without_reply_priority_${priority}`;
-      db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, staff.id, action, String(ticketId), now, requestId);
+      const fields = changedFields(ticket, { status, priority });
+      if (hasReply) fields.push('reply');
+      const auditId = staffAudit.record(tenantId, staff.id, action, String(ticketId), requestId, {
+        recordId: ticketId, revision: now, fields, previousStatus: ticket.status, status
+      }, now);
+      return { id: ticketId, status, priority, updatedAt: now, replied: hasReply, auditId };
     });
-    return { id: ticketId, status, priority, updatedAt: now, replied: hasReply };
   }
   if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1 ORDER BY gc.title_en').all(tenantId);
   if (route === 'POST /api/signup' || route === 'POST /api/login') {
@@ -1453,7 +1562,8 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/providers' || route === 'POST /api/providers/list' || route === 'POST /api/providers/audit' || route === 'POST /api/providers/catalog' || route === 'POST /api/providers/catalog/preview' || route === 'POST /api/providers/catalog/list' || route === 'POST /api/providers/catalog/status') {
     if (!adminEnabled) fail(503, 'adminDisabled');
-    const staff = staffContext(req, tenantId, ['operator_admin', 'operator_provider']);
+    const providerRoles = ['operator_admin', 'operator_provider'];
+    staffContext(req, tenantId, providerRoles);
     if (route === 'POST /api/providers') {
       const { name, key } = await body(req);
       if (typeof name !== 'string' || !/^[\p{L}\p{N} ._-]{1,64}$/u.test(name) ||
@@ -1465,46 +1575,50 @@ async function api(req, res, path, tenantId, requestId) {
       const value = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64');
       const now = new Date().toISOString();
       transaction(() => {
+        const staff = staffContext(req, tenantId, providerRoles);
         const exists = db.prepare('SELECT 1 FROM providers WHERE name = ? AND tenant_id = ?').get(name, tenantId);
         db.prepare('INSERT INTO providers(name, encrypted_key, updated, tenant_id) VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id, name) DO UPDATE SET encrypted_key = excluded.encrypted_key, updated = excluded.updated').run(name, value, now, tenantId);
         db.prepare('INSERT INTO provider_events(name, action, created, tenant_id) VALUES (?, ?, ?, ?)').run(name, exists ? 'rotated' : 'added', now, tenantId);
-        db.prepare('INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, staff.id, exists ? 'provider_key_rotated' : 'provider_key_added', name, Date.now(), requestId);
+        staffAudit.record(tenantId, staff.id, exists ? 'provider_key_rotated' : 'provider_key_added', name, requestId, { fields: ['providerCredential'] });
       });
     }
     if (route === 'POST /api/providers/audit') {
       return db.prepare('SELECT name, action, created FROM provider_events WHERE tenant_id = ? ORDER BY id DESC LIMIT 100').all(tenantId);
     }
     if (route === 'POST /api/providers/catalog') {
-      const { name, games: importedGames, expectedRevision } = await body(req, 256 * 1024);
+      const input = await body(req, 256 * 1024);
+      const { name, games: importedGames, expectedRevision } = input ?? {};
       const providerRow = typeof name === 'string' && db.prepare('SELECT id FROM providers WHERE name = ? AND tenant_id = ?').get(name, tenantId);
       if (typeof name !== 'string' || !providerRow || typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision)) fail(400, 'invalid');
       validateCatalogGames(importedGames);
       const now = new Date().toISOString();
-      transaction(() => {
+      return auditedChange(providerRoles, input, (staff) => {
         if (providerCatalogSnapshot(providerRow.id, tenantId).revision !== expectedRevision) fail(409, 'catalogChanged');
         db.prepare('UPDATE game_catalog SET enabled = 0 WHERE provider_id = ? AND tenant_id = ?').run(providerRow.id, tenantId);
         const upsert = db.prepare('INSERT INTO game_catalog(provider_id, provider, tenant_id, external_id, title_en, title_fr, category, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT(tenant_id, provider_id, external_id) DO UPDATE SET title_en = excluded.title_en, title_fr = excluded.title_fr, category = excluded.category, enabled = 1');
         for (const game of importedGames) upsert.run(providerRow.id, name, tenantId, game.externalId, game.titleEn.trim(), game.titleFr.trim(), game.category);
         db.prepare('INSERT INTO provider_events(name, action, created, tenant_id) VALUES (?, ?, ?, ?)').run(name, `catalog_synced:${importedGames.length}`, now, tenantId);
-        db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, 'provider_catalog_synced', ?, ?, ?)").run(tenantId, staff.id, name, Date.now(), requestId);
-      });
-      return { imported: importedGames.length };
+        const auditId = staffAudit.record(tenantId, staff.id, 'provider_catalog_synced', name, requestId, { recordId: providerRow.id, fields: ['listings'] });
+        return { imported: importedGames.length, auditId };
+      }, 'publishCatalogue');
     }
     if (route === 'POST /api/providers/catalog/list') {
       return db.prepare('SELECT gc.provider AS name, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category, gc.enabled FROM game_catalog gc WHERE gc.tenant_id = ? ORDER BY gc.provider, gc.title_en LIMIT 2000').all(tenantId);
     }
     if (route === 'POST /api/providers/catalog/status') {
-      const { name, externalId, enabled } = await body(req);
+      const input = await body(req);
+      const { name, externalId, enabled } = input ?? {};
       if (typeof name !== 'string' || !/^[\p{L}\p{N} ._-]{1,64}$/u.test(name) || typeof externalId !== 'string' || !/^[\w.-]{1,128}$/.test(externalId) || typeof enabled !== 'boolean') fail(400, 'invalid');
-      const listing = db.prepare('SELECT id, enabled FROM game_catalog WHERE tenant_id = ? AND provider = ? AND external_id = ?').get(tenantId, name, externalId);
-      if (!listing) fail(404, 'invalid');
-      if (Boolean(listing.enabled) !== enabled) {
-        transaction(() => {
-          db.prepare('UPDATE game_catalog SET enabled = ? WHERE id = ? AND tenant_id = ?').run(enabled ? 1 : 0, listing.id, tenantId);
-          db.prepare("INSERT INTO staff_events(tenant_id, actor_id, action, target, created_at, correlation_id) VALUES (?, ?, ?, ?, ?, ?)").run(tenantId, staff.id, enabled ? 'catalog_listing_enabled' : 'catalog_listing_disabled', `${name}:${externalId}`, Date.now(), requestId);
+      return auditedChange(providerRoles, input, (staff) => {
+        const listing = db.prepare('SELECT id, enabled FROM game_catalog WHERE tenant_id = ? AND provider = ? AND external_id = ?').get(tenantId, name, externalId);
+        if (!listing) fail(404, 'invalid');
+        if (Boolean(listing.enabled) === enabled) return { name, externalId, enabled };
+        db.prepare('UPDATE game_catalog SET enabled = ? WHERE id = ? AND tenant_id = ?').run(Number(enabled), listing.id, tenantId);
+        const auditId = staffAudit.record(tenantId, staff.id, enabled ? 'catalog_listing_enabled' : 'catalog_listing_disabled', `${name}:${externalId}`, requestId, {
+          recordId: listing.id, fields: ['enabled']
         });
-      }
-      return { name, externalId, enabled };
+        return { name, externalId, enabled, auditId };
+      }, 'publishCatalogue');
     }
     if (route === 'POST /api/providers/catalog/preview') {
       const { name, games: importedGames } = await body(req, 256 * 1024);
@@ -1587,7 +1701,7 @@ createServer(async (req, res) => {
     }
     const preview = req.method === 'GET' && path.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/);
     if (req.method !== 'GET' || (!preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
-    if (preview && !comingSoon.published(tenantId, preview[1])) res.statusCode = 404;
+    if (preview && (!comingSoonEnabled(tenantId) || !comingSoon.published(tenantId, preview[1]))) res.statusCode = 404;
     const [file, type] = preview ? assets['/'] : assets[path];
     let content = readFileSync(new URL(`./public/${file}`, import.meta.url));
     if (type === 'text/html' && appBasePath) {
