@@ -2,6 +2,7 @@ import { catalogueCategories, games, matchesCatalogue, normalizeCatalogueText } 
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
+import { followupCopy, createPublicationFollowup } from './publication-followup.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
@@ -15,6 +16,7 @@ const copy = {
   ...playerAccessCopy,
   ...dashboardCopy,
   ...websiteContentCopy,
+  ...followupCopy,
   ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
@@ -1615,6 +1617,7 @@ const comingSoonUi = createComingSoonUi({
 });
 
 const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
+const followupUi = createPublicationFollowup({ api, t, element, appPath, locale: siteContentLocale });
 const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
 const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale,
   canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
@@ -1676,6 +1679,7 @@ function render() {
   }
   if (languageChanged && currentStaffRole === 'operator_admin') renderStaffList();
   if (languageChanged && currentStaffPermissions.viewAudit) renderStaffAudit();
+  if (languageChanged) followupUi.render();
   $('#close').setAttribute('aria-label', t('close'));
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
@@ -2699,10 +2703,14 @@ async function refreshOperatorOverview() {
     const result = await api('admin/overview?' + reportUi.params(), undefined, 'GET');
     if (request !== overviewRequest) return;
     latestOverview = result;
+    followupUi.update(result.publicationFollowup);
     $('#overview-export').disabled = false;
     renderOperatorOverview(result);
   } catch (error) {
-    if (request === overviewRequest) $('#overview-status').textContent = t(error.message);
+    if (request === overviewRequest) {
+      followupUi.update(null);
+      $('#overview-status').textContent = t(error.message);
+    }
   }
 }
 function renderOperatorOverview(overview) {

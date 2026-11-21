@@ -125,6 +125,19 @@
           </section>
           <p id="report-coverage" class="report-context" hidden></p>
           <div class="actions report-shortcuts"><a href="#coming-soon-admin" data-roles="operator_admin,operator_content,operator_provider" data-copy="adminNavCatalogue"></a><a href="#support-inbox" data-roles="operator_admin,operator_support" data-copy="supportInbox"></a></div>
+          <details id="publication-followup" class="admin-disclosure" hidden>
+            <summary><span data-copy="followupHeading"></span> <span id="followup-count"></span></summary>
+            <div class="admin-detail-body">
+              <form id="followup-filters" class="followup-filters">
+                <label><span data-copy="catalogueState"></span><select name="state"><option value="open" data-copy="followupOpen"></option><option value="resolved" data-copy="followupResolved"></option></select></label>
+                <label><span data-copy="followupFind"></span><input name="q" type="search" maxlength="120" autocomplete="off"></label>
+                <button type="submit" class="ghost" data-copy="comingSoonSearch"></button>
+              </form>
+              <p id="followup-status" role="status"></p>
+              <ul id="followup-list"></ul>
+              <div id="followup-pages" class="actions" hidden><button type="button" id="followup-prev" class="ghost" data-copy="playerPrevious"></button><button type="button" id="followup-next" class="ghost" data-copy="playerNext"></button></div>
+            </div>
+          </details>
           <details class="admin-disclosure"><summary data-copy="reportBrandSetup"></summary>
           <div class="admin-readiness"><div class="catalog-readiness"><strong data-copy="overviewBrandingStatus"></strong><span id="overview-branding-readiness">—</span><a class="readiness-link" data-roles="operator_admin,operator_content" href="#casino-settings" data-copy="goToCasinoSettings"></a><small data-copy="overviewBrandingNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewCatalogStatus"></strong><span id="overview-catalog-readiness">—</span><a id="catalog-readiness-link" class="readiness-link" data-roles="operator_admin,operator_provider" href="#catalog-management" data-copy="goToCatalogManagement"></a><small data-copy="overviewCatalogNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewMfaStatus"></strong><span id="overview-mfa-readiness">—</span><a class="readiness-link" href="#mfa-settings" data-copy="goToMfa"></a><small data-copy="overviewMfaNote"></small></div></div>
           </details>

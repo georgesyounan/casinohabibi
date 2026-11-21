@@ -165,6 +165,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     listRequest = 0,
     editRequest = 0;
   const pageSize = 8;
+  let linkedContent = new URLSearchParams(location.search).get('editContent');
   const say = (key) => {
     el('site-status').textContent = key ? t(key) : '';
   };
@@ -248,6 +249,10 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       if (record) {
         destinations();
         controls();
+      } else if (!busy && linkedContent) {
+        const match = /^(banner|help)\/([a-z0-9-]{1,64})$/.exec(linkedContent);
+        linkedContent = null;
+        if (match) await open({ kind: match[1], slug: match[2] }, { existing: true });
       }
     } catch (error) {
       if (id === listRequest) say(error.message);
@@ -363,15 +368,14 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     translation();
     history();
   }
-  async function open(item, refresh = false) {
+  async function open(item, { existing = Boolean(item.version), refresh = false } = {}) {
     if (busy) return;
     const id = ++editRequest;
     busy = true;
     say('loading');
     libraryView();
     try {
-      const existing = item.version || refresh;
-      const result = existing
+      const result = existing || refresh
         ? await api('admin/website-content/' + item.kind + '/' + item.slug, undefined, 'GET')
         : { kind: item.kind, slug: item.slug || '', version: 0 };
       if (id !== editRequest) return;
@@ -400,6 +404,11 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     readingImage = false;
     form.hidden = true;
     library.hidden = false;
+    const url = new URL(location.href);
+    if (url.searchParams.has('editContent')) {
+      url.searchParams.delete('editContent');
+      window.history.replaceState(window.history.state, '', url);
+    }
     say('');
     libraryView();
     el('site-search').focus();
@@ -560,7 +569,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     void change('archive');
   });
   el('site-reload').addEventListener('click', () => {
-    if (!isDirty() || window.confirm(t('siteDiscard'))) void open({ ...record, slug: address() }, true);
+    if (!isDirty() || window.confirm(t('siteDiscard'))) void open({ ...record, slug: address() }, { refresh: true });
   });
   return {
     load,

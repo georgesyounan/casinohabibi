@@ -323,6 +323,11 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     selected = null;
     dirty = conflict = false;
     form.hidden = true;
+    const url = new URL(location.href);
+    if (url.searchParams.has('editCard')) {
+      url.searchParams.delete('editCard');
+      window.history.replaceState(window.history.state, '', url);
+    }
     adminStatus.textContent = '';
     renderAdmin();
     (Array.from(list.querySelectorAll('button')).find((button) => button.dataset.slug === slug) || search).focus();
@@ -406,6 +411,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   }
 
   const draftSlug = new URLSearchParams(location.search).get('preview');
+  let linkedCard = new URLSearchParams(location.search).get('editCard');
   let draftPreview;
   $('draft-preview-language').addEventListener('change', renderAdmin);
 
@@ -430,6 +436,11 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
       refreshOnClose = false;
       if (showListStatus()) adminStatus.textContent = '';
       renderAdmin();
+      if (!draftSlug && linkedCard && !opening && form.hidden) {
+        const slug = linkedCard;
+        linkedCard = null;
+        if (/^[a-z0-9-]{1,64}$/.test(slug)) await openEditor({ slug });
+      }
       return true;
     } catch (error) {
       if (request === listRequest) {
