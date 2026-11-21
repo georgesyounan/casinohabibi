@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
+import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
 
 const appEnvironment = process.env.APP_ENV || 'development';
 if (!['development', 'staging', 'production'].includes(appEnvironment)) throw new Error('APP_ENV must be development, staging, or production');
@@ -262,6 +263,8 @@ db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, 
 installComingSoon(db);
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
+installPlayerAccess(db, transaction);
+const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
 const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
@@ -347,7 +350,8 @@ function staffPermissions(staff) {
   const isAdmin = staff.role === 'operator_admin';
   const publishWebsite = isAdmin || (staff.role === 'operator_content' && Boolean(staff.publishWebsite));
   const publishCatalogue = isAdmin || (catalogueRoles.includes(staff.role) && Boolean(staff.publishCatalogue));
-  return { publishWebsite, publishCatalogue, viewAudit: publishWebsite || publishCatalogue };
+  const managePlayerAccess = isAdmin || (staff.role === 'operator_support' && Boolean(staff.managePlayerAccess));
+  return { publishWebsite, publishCatalogue, viewAudit: publishWebsite || publishCatalogue, managePlayerAccess };
 }
 
 function staffSession(staff, tenantId) {
@@ -361,7 +365,7 @@ function staffSession(staff, tenantId) {
 function staffContext(req, tenantId, allowedRoles = ['operator_admin']) {
   const token = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
   const staff = token && db.prepare(`SELECT a.id, a.email, a.mfa_enabled, m.role,
-    m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue FROM staff_sessions s
+    m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue, m.manage_player_access AS managePlayerAccess FROM staff_sessions s
     JOIN staff_accounts a ON a.id = s.staff_id JOIN tenant_staff_memberships m ON m.staff_id = a.id AND m.tenant_id = s.tenant_id
     WHERE s.token = ? AND s.tenant_id = ? AND s.expires > ? AND m.status = 'active'`).get(hash(token), tenantId, Date.now());
   if (!staff) fail(401, 'staffAuth');
@@ -481,17 +485,46 @@ function limitAuthAttempts(req, route) {
   }
 }
 
-async function deliverTransactionalEmail(to, subject, text) {
+async function deliverTransactionalEmail(to, subject, text, deliveryId) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${resetEmailApiKey}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${resetEmailApiKey}`, 'Content-Type': 'application/json',
+      ...(deliveryId && { 'Idempotency-Key': deliveryId }) },
+    signal: AbortSignal.timeout(12_000),
     body: JSON.stringify({ from: resetEmailFrom, to: [to], subject, text })
   });
   if (!response.ok) throw new Error('Transactional email delivery failed');
 }
 
-function playerLinkBase(req) {
-  return publicBaseUrl || `http://${req.headers.host || `localhost:${port}`}${appBasePath}`;
+function localRecoveryPreview(req) {
+  const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'];
+  return appEnvironment === 'development' && !secureCookie && !resetEmailApiKey && loopback.includes(host) &&
+    (loopback.includes(req.socket.remoteAddress) || req.socket.remoteAddress === '::ffff:127.0.0.1') &&
+    loopback.includes(new URL('http://' + req.headers.host).hostname);
+}
+
+function requireEmailDelivery(req) {
+  if (!resetEmailApiKey && !localRecoveryPreview(req)) fail(503, 'recoveryDeliveryUnavailable');
+}
+
+function playerLinkBase(req, tenantId) {
+  if (publicSite && db.prepare('SELECT 1 FROM tenant_domains WHERE tenant_id = ? AND host = ? AND verified = 1').get(tenantId, publicSite.hostname)) return publicBaseUrl;
+  if (localRecoveryPreview(req)) return `http://${req.headers.host}${appBasePath}`;
+  const verifiedHost = new URL('http://' + req.headers.host).hostname;
+  return `https://${verifiedHost}${appBasePath}`;
+}
+
+async function sendPasswordReset(req, tenantId, email, locale, rawToken, deliveryId) {
+  const url = `${playerLinkBase(req, tenantId)}/?reset=${rawToken}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
+  if (resetEmailApiKey) {
+    const french = locale === 'fr-CA';
+    await deliverTransactionalEmail(email, french ? 'Réinitialisation de votre mot de passe' : 'Reset your password',
+      french ? `Utilisez ce lien dans les 30 prochaines minutes pour réinitialiser votre mot de passe. ${url}`
+        : `Use this link within 30 minutes to reset your password. ${url}`, deliveryId);
+    return;
+  }
+  requireEmailDelivery(req);
+  return url;
 }
 
 async function issuePlayerEmailVerification(req, playerId, tenantId, email, locale) {
@@ -502,7 +535,7 @@ async function issuePlayerEmailVerification(req, playerId, tenantId, email, loca
     db.prepare('DELETE FROM player_email_verifications WHERE expires <= ?').run(now);
     db.prepare('INSERT INTO player_email_verifications(token_hash, tenant_id, player_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), tenantId, playerId, now + 24 * 60 * 60 * 1000, now);
   });
-  const verifyUrl = `${playerLinkBase(req)}/?verify=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
+  const verifyUrl = `${playerLinkBase(req, tenantId)}/?verify=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
   if (resetEmailApiKey) {
     const french = locale === 'fr-CA';
     try {
@@ -513,10 +546,10 @@ async function issuePlayerEmailVerification(req, playerId, tenantId, email, loca
       db.prepare('DELETE FROM player_email_verifications WHERE token_hash = ?').run(hash(token));
       fail(503, 'unavailable');
     }
-  } else {
+  } else if (localRecoveryPreview(req)) {
     console.info(`Development email verification link for player ${playerId}: ${verifyUrl}`);
   }
-  return appEnvironment === 'development' && !resetEmailApiKey ? verifyUrl : undefined;
+  return localRecoveryPreview(req) ? verifyUrl : undefined;
 }
 
 async function body(req, maxBytes = 8192) {
@@ -525,6 +558,7 @@ async function body(req, maxBytes = 8192) {
     result += chunk;
     if (Buffer.byteLength(result) > maxBytes) fail(413, 'invalid');
   }
+  req.assertPlayerSession?.();
   try {
     const value = JSON.parse(result);
     if (!value || typeof value !== 'object' || Array.isArray(value)) fail(400, 'invalid');
@@ -595,7 +629,7 @@ function account(id, tenantId) {
   const hasMoreHistory = historyRows.length > 20;
   if (hasMoreHistory) historyRows.pop();
   return {
-    ...db.prepare('SELECT email, email_verified AS emailVerified FROM players WHERE id = ? AND tenant_id = ?').get(id, tenantId),
+    ...db.prepare('SELECT id, email, email_verified AS emailVerified, access_status AS status FROM players WHERE id = ? AND tenant_id = ?').get(id, tenantId),
     displayName: profile?.displayName || '',
     preferredLocale: profile?.preferredLocale || 'en-CA',
     balance: balance(id, tenantId),
@@ -610,7 +644,13 @@ function account(id, tenantId) {
 
 async function api(req, res, path, tenantId, requestId) {
   const cookie = req.headers.cookie?.match(/(?:^|; )northplay=([a-f0-9]{64})(?:;|$)/)?.[1];
-  const player = cookie && db.prepare('SELECT player FROM sessions WHERE token = ? AND tenant_id = ? AND expires > ?').get(hash(cookie), tenantId, Date.now())?.player;
+  const activeSession = () => cookie && db.prepare(`SELECT s.player FROM sessions s
+    JOIN players p ON p.id = s.player AND p.tenant_id = s.tenant_id AND p.access_status = 'active'
+    WHERE s.token = ? AND s.tenant_id = ? AND s.expires > ?`).get(hash(cookie), tenantId, Date.now())?.player;
+  const player = activeSession();
+  if (player && req.method !== 'GET' && /^\/api\/(?:account\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
+    req.assertPlayerSession = () => { if (activeSession() !== player) fail(401, 'signin'); };
+  }
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
   const route = `${req.method} ${path}`;
   const auditedChange = (roles, input, work, permission) => staffAudit.change(tenantId, requestId, route, input, () => {
@@ -648,6 +688,46 @@ async function api(req, res, path, tenantId, requestId) {
     if (query.length > 254) fail(400, 'invalid');
     return comingSoon.saves(tenantId, query);
   }
+  if (route === 'GET /api/admin/players') {
+    staffContext(req, tenantId, supportRoles);
+    const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
+    return playerAccess.search(tenantId, query);
+  }
+  const playerRoute = path.match(/^\/api\/admin\/players\/([1-9]\d*)(?:\/(access|recovery))?$/);
+  if (playerRoute) {
+    const staff = staffContext(req, tenantId, supportRoles);
+    const id = Number(playerRoute[1]);
+    if (!Number.isSafeInteger(id)) fail(400, 'invalid');
+    if (req.method === 'GET' && !playerRoute[2]) return playerAccess.detail(tenantId, id);
+    if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
+    const input = await body(req);
+    if (playerRoute[2] === 'access') return auditedChange(supportRoles, input, (actor) =>
+      playerAccess.changeStatus(tenantId, actor.id, requestId, id, input), 'managePlayerAccess');
+    if (!adminEnabled) fail(503, 'adminDisabled');
+    requireEmailDelivery(req);
+    limitAuthAttempts(req, 'player-recovery/' + tenantId + '/' + staff.id);
+    if (Object.keys(input).length) fail(400, 'invalid');
+    const rawToken = createHmac('sha256', encryptionKey).update(JSON.stringify(['staff-recovery', tenantId, staff.id, id, requestId])).digest('hex');
+    const tokenHash = hash(rawToken);
+    const result = auditedChange(supportRoles, input, (actor) => {
+      const target = playerAccess.newReset(tenantId, id, tokenHash);
+      const auditId = staffAudit.record(tenantId, actor.id, 'player_recovery_requested', 'player-' + id, requestId, { recordId: id });
+      db.prepare('INSERT INTO player_recovery_deliveries(audit_id, locale) VALUES (?, ?)').run(auditId, target.locale || 'en-CA');
+      return { id, auditId };
+    });
+    const dispatch = db.prepare('SELECT delivery, locale FROM player_recovery_deliveries WHERE audit_id = ?').get(result.auditId);
+    if (dispatch.delivery !== 'pending') return { ...result, delivery: dispatch.delivery };
+    const target = db.prepare(`SELECT p.email FROM player_password_resets r JOIN players p ON p.id = r.player_id AND p.tenant_id = r.tenant_id
+      WHERE r.token_hash = ? AND r.player_id = ? AND r.tenant_id = ? AND r.expires > ? AND p.access_status = 'active'`).get(tokenHash, id, tenantId, Date.now());
+    if (!target) return { ...result, delivery: 'expired' };
+    try {
+      const localUrl = await sendPasswordReset(req, tenantId, target.email, dispatch.locale, rawToken, 'player-reset/' + tokenHash.slice(0, 32));
+      const delivery = localUrl ? 'local' : 'sent';
+      const saved = db.prepare("UPDATE player_recovery_deliveries SET delivery = ? WHERE audit_id = ? AND delivery = 'pending'").run(delivery, result.auditId);
+      if (localUrl && saved.changes) console.info(`Development player recovery link: ${localUrl}`);
+      return { ...result, delivery };
+    } catch { fail(503, 'recoveryDeliveryUnavailable'); }
+  }
   if (route === 'POST /api/admin/login') {
     if (!adminEnabled) fail(503, 'adminDisabled');
     limitAuthAttempts(req, route);
@@ -657,7 +737,7 @@ async function api(req, res, path, tenantId, requestId) {
     const salt = staff?.password_hash.split(':')[0] || '00000000000000000000000000000000';
     const candidate = `${salt}:${scryptSync(password.slice(0, 128), salt, 64).toString('hex')}`;
     if (!staff || !matches(candidate, staff.password_hash) || (staff.mfa_enabled && (!staff.mfa_secret || !verifyTotp(decryptStaffSecret(staff.mfa_secret), code)))) fail(401, 'staffCredentials');
-    const membership = db.prepare("SELECT role, publish_website AS publishWebsite, publish_catalogue AS publishCatalogue FROM tenant_staff_memberships WHERE staff_id = ? AND tenant_id = ? AND status = 'active'").get(staff.id, tenantId);
+    const membership = db.prepare("SELECT role, publish_website AS publishWebsite, publish_catalogue AS publishCatalogue, manage_player_access AS managePlayerAccess FROM tenant_staff_memberships WHERE staff_id = ? AND tenant_id = ? AND status = 'active'").get(staff.id, tenantId);
     if (!membership) fail(403, 'staffForbidden');
     const token = randomBytes(32).toString('hex');
     transaction(() => {
@@ -782,24 +862,25 @@ async function api(req, res, path, tenantId, requestId) {
   if (['GET /api/admin/staff', 'POST /api/admin/staff', 'POST /api/admin/staff/disable', 'POST /api/admin/staff/role'].includes(route)) {
     staffContext(req, tenantId);
     if (route === 'GET /api/admin/staff') return db.prepare(`SELECT a.email, a.mfa_enabled AS mfaEnabled, m.role, m.status,
-      m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue, m.created_at AS createdAt,
+      m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue, m.manage_player_access AS managePlayerAccess, m.created_at AS createdAt,
       (SELECT max(e.created_at) FROM staff_events e WHERE e.tenant_id = m.tenant_id AND e.actor_id = a.id) AS lastActivityAt
       FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? ORDER BY m.created_at`).all(tenantId)
       .map((member) => ({ ...member, ...staffPermissions(member) }));
     const input = await body(req);
-    const { email, password, role, publishWebsite, publishCatalogue, reason: reasonInput } = input ?? {};
+    const { email, password, role, publishWebsite, publishCatalogue, managePlayerAccess, reason: reasonInput } = input ?? {};
     const disable = route === 'POST /api/admin/staff/disable';
     const changeRole = route === 'POST /api/admin/staff/role';
     if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ||
         (!disable && !staffRoles.includes(role)) ||
         (publishWebsite !== undefined && (typeof publishWebsite !== 'boolean' || (publishWebsite && role !== 'operator_content'))) ||
         (publishCatalogue !== undefined && (typeof publishCatalogue !== 'boolean' || (publishCatalogue && !['operator_content', 'operator_provider'].includes(role)))) ||
+        (managePlayerAccess !== undefined && (typeof managePlayerAccess !== 'boolean' || (managePlayerAccess && role !== 'operator_support'))) ||
         (reasonInput !== undefined && (typeof reasonInput !== 'string' || reasonInput.length > 240))) fail(400, 'invalid');
     const normalizedEmail = email.trim().toLowerCase();
     const reason = reasonInput?.trim();
     return auditedChange(['operator_admin'], input, (actor) => {
       let target = db.prepare('SELECT id FROM staff_accounts WHERE email = ?').get(normalizedEmail);
-      const member = target && db.prepare(`SELECT role, status, publish_website AS publishWebsite, publish_catalogue AS publishCatalogue
+      const member = target && db.prepare(`SELECT role, status, publish_website AS publishWebsite, publish_catalogue AS publishCatalogue, manage_player_access AS managePlayerAccess
         FROM tenant_staff_memberships WHERE tenant_id = ? AND staff_id = ?`).get(tenantId, target.id);
       if (disable || changeRole) {
         if (member?.status !== 'active' || target.id === actor.id) fail(409, 'staffLifecycle');
@@ -811,12 +892,13 @@ async function api(req, res, path, tenantId, requestId) {
       const next = disable ? { ...member, status: 'disabled' } : {
         role, status: 'active',
         publishWebsite: Number(publishWebsite ?? (keepGrants && member.publishWebsite)),
-        publishCatalogue: Number(publishCatalogue ?? (keepGrants && member.publishCatalogue))
+        publishCatalogue: Number(publishCatalogue ?? (keepGrants && member.publishCatalogue)),
+        managePlayerAccess: Number(managePlayerAccess ?? (keepGrants && member.managePlayerAccess))
       };
       const fields = changedFields(member ?? {}, next);
       const result = { email: normalizedEmail, role: next.role, status: next.status, ...staffPermissions(next) };
       if (changeRole && !fields.length) return { ...result, changed: false };
-      if ((disable || changeRole || member || next.publishWebsite || next.publishCatalogue) && !reason) fail(400, 'staffReasonRequired');
+      if ((disable || changeRole || member || next.publishWebsite || next.publishCatalogue || next.managePlayerAccess) && !reason) fail(400, 'staffReasonRequired');
 
       if (!target) {
         if (typeof password !== 'string' || password.length < 12 || password.length > 128) fail(400, 'invalid');
@@ -825,10 +907,11 @@ async function api(req, res, path, tenantId, requestId) {
         const { lastInsertRowid: id } = db.prepare('INSERT INTO staff_accounts(email, password_hash, created_at) VALUES (?, ?, ?)').run(normalizedEmail, passwordHash, Date.now());
         target = { id };
       }
-      db.prepare(`INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at, publish_website, publish_catalogue)
-        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tenant_id, staff_id) DO UPDATE SET
-          role = excluded.role, status = excluded.status, publish_website = excluded.publish_website, publish_catalogue = excluded.publish_catalogue`)
-        .run(tenantId, target.id, next.role, next.status, Date.now(), next.publishWebsite, next.publishCatalogue);
+      db.prepare(`INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at, publish_website, publish_catalogue, manage_player_access)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tenant_id, staff_id) DO UPDATE SET
+          role = excluded.role, status = excluded.status, publish_website = excluded.publish_website,
+          publish_catalogue = excluded.publish_catalogue, manage_player_access = excluded.manage_player_access`)
+        .run(tenantId, target.id, next.role, next.status, Date.now(), next.publishWebsite, next.publishCatalogue, next.managePlayerAccess);
       if (disable) db.prepare('DELETE FROM staff_sessions WHERE tenant_id = ? AND staff_id = ?').run(tenantId, target.id);
       const action = disable ? 'staff_disabled' : changeRole ? 'staff_role_changed' : member ? 'staff_reenabled' : 'staff_created';
       const auditId = staffAudit.record(tenantId, actor.id, action, normalizedEmail, requestId, {
@@ -1058,6 +1141,7 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/account/email-change/request') {
     if (!player) fail(401, 'signin');
+    requireEmailDelivery(req);
     limitAuthAttempts(req, route);
     const { email, password, locale } = await body(req);
     if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || typeof password !== 'string' || password.length > 128 || !['en-CA', 'fr-CA'].includes(locale)) fail(400, 'invalid');
@@ -1078,7 +1162,7 @@ async function api(req, res, path, tenantId, requestId) {
       db.prepare('DELETE FROM player_email_changes WHERE expires <= ?').run(now);
       db.prepare('INSERT INTO player_email_changes(token_hash, tenant_id, player_id, new_email, expires, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(hash(token), tenantId, player, newEmail, now + 24 * 60 * 60 * 1000, now);
     });
-    const changeUrl = `${playerLinkBase(req)}/?email-change=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
+    const changeUrl = `${playerLinkBase(req, tenantId)}/?email-change=${token}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
     if (resetEmailApiKey) {
       try {
         const french = locale === 'fr-CA';
@@ -1102,16 +1186,16 @@ async function api(req, res, path, tenantId, requestId) {
         // Keep the verified-new-address flow available if the security notice cannot be delivered.
       }
     }
-    return { message: 'emailChangeRequested', ...(appEnvironment === 'development' && !resetEmailApiKey ? { changeUrl } : {}) };
+    return { message: 'emailChangeRequested', ...(localRecoveryPreview(req) ? { changeUrl } : {}) };
   }
   if (route === 'POST /api/account/email-change/complete') {
     limitAuthAttempts(req, route);
     const { token } = await body(req);
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) fail(400, 'emailChangeInvalid');
-    const pending = db.prepare('SELECT player_id AS player, new_email AS newEmail FROM player_email_changes WHERE token_hash = ? AND tenant_id = ? AND expires > ?').get(hash(token), tenantId, Date.now());
-    if (!pending) fail(400, 'emailChangeInvalid');
-    if (db.prepare('SELECT 1 FROM players WHERE tenant_id = ? AND email = ? AND id <> ?').get(tenantId, pending.newEmail, pending.player)) fail(409, 'emailUnavailable');
     transaction(() => {
+      const pending = db.prepare('SELECT player_id AS player, new_email AS newEmail FROM player_email_changes WHERE token_hash = ? AND tenant_id = ? AND expires > ?').get(hash(token), tenantId, Date.now());
+      if (!pending) fail(400, 'emailChangeInvalid');
+      if (db.prepare('SELECT 1 FROM players WHERE tenant_id = ? AND email = ? AND id <> ?').get(tenantId, pending.newEmail, pending.player)) fail(409, 'emailUnavailable');
       db.prepare('UPDATE players SET email = ? WHERE id = ? AND tenant_id = ?').run(pending.newEmail, pending.player, tenantId);
       db.prepare('DELETE FROM player_email_changes WHERE player_id = ? AND tenant_id = ?').run(pending.player, tenantId);
       db.prepare('DELETE FROM player_email_verifications WHERE player_id = ? AND tenant_id = ?').run(pending.player, tenantId);
@@ -1157,10 +1241,11 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/email-verification/request') {
     limitAuthAttempts(req, route);
+    requireEmailDelivery(req);
     const { email, locale } = await body(req);
     if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !['en-CA', 'fr-CA'].includes(locale)) fail(400, 'invalid');
     const normalizedEmail = email.trim().toLowerCase();
-    const row = db.prepare('SELECT id FROM players WHERE email = ? AND tenant_id = ? AND email_verified = 0').get(normalizedEmail, tenantId);
+    const row = db.prepare("SELECT id FROM players WHERE email = ? AND tenant_id = ? AND email_verified = 0 AND access_status = 'active'").get(normalizedEmail, tenantId);
     const verifyUrl = row ? await issuePlayerEmailVerification(req, row.id, tenantId, normalizedEmail, locale) : undefined;
     return { message: 'emailVerificationRequested', ...(verifyUrl ? { verifyUrl } : {}) };
   }
@@ -1168,11 +1253,11 @@ async function api(req, res, path, tenantId, requestId) {
     limitAuthAttempts(req, route);
     const { token } = await body(req);
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) fail(400, 'emailVerificationInvalid');
-    const verification = db.prepare('SELECT player_id AS player FROM player_email_verifications WHERE token_hash = ? AND tenant_id = ? AND expires > ?').get(hash(token), tenantId, Date.now());
-    if (!verification) fail(400, 'emailVerificationInvalid');
     transaction(() => {
+      const verification = db.prepare('SELECT player_id AS player FROM player_email_verifications WHERE token_hash = ? AND tenant_id = ? AND expires > ?').get(hash(token), tenantId, Date.now());
+      if (!verification) fail(400, 'emailVerificationInvalid');
       db.prepare('UPDATE players SET email_verified = 1 WHERE id = ? AND tenant_id = ?').run(verification.player, tenantId);
-      db.prepare('DELETE FROM player_email_verifications WHERE player_id = ?').run(verification.player);
+      db.prepare('DELETE FROM player_email_verifications WHERE player_id = ? AND tenant_id = ?').run(verification.player, tenantId);
     });
     return { message: 'emailVerified' };
   }
@@ -1221,57 +1306,38 @@ async function api(req, res, path, tenantId, requestId) {
     limitAuthAttempts(req, route);
     const { email, locale } = await body(req);
     if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !['en-CA', 'fr-CA'].includes(locale)) fail(400, 'invalid');
+    requireEmailDelivery(req);
     const normalizedEmail = email.trim().toLowerCase();
-    const row = db.prepare('SELECT id FROM players WHERE email = ? AND tenant_id = ?').get(normalizedEmail, tenantId);
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = hash(rawToken);
+    const recipient = transaction(() => {
+      const row = db.prepare("SELECT id FROM players WHERE email = ? AND tenant_id = ? AND access_status = 'active'").get(normalizedEmail, tenantId);
+      return row && playerAccess.newReset(tenantId, row.id, tokenHash);
+    });
     let resetUrl;
-    if (row) {
-      const rawToken = randomBytes(32).toString('hex');
-      const now = Date.now();
-      transaction(() => {
-        db.prepare('DELETE FROM player_password_resets WHERE player_id = ? AND tenant_id = ?').run(row.id, tenantId);
-        db.prepare('DELETE FROM player_password_resets WHERE expires <= ?').run(now);
-        db.prepare('INSERT INTO player_password_resets(token_hash, tenant_id, player_id, expires, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(rawToken), tenantId, row.id, now + 30 * 60 * 1000, now);
-      });
-      resetUrl = `${playerLinkBase(req)}/?reset=${rawToken}&lang=${locale === 'fr-CA' ? 'fr' : 'en'}`;
-      if (resetEmailApiKey) {
-        const french = locale === 'fr-CA';
-        try {
-          const response = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${resetEmailApiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              from: resetEmailFrom,
-              to: [normalizedEmail],
-              subject: french ? 'Réinitialisation de votre mot de passe' : 'Reset your password',
-              text: french
-                ? `Utilisez ce lien dans les 30 prochaines minutes pour réinitialiser votre mot de passe : ${resetUrl}\nSi vous n’avez pas demandé cette réinitialisation, ignorez ce courriel.`
-                : `Use this link within 30 minutes to reset your password: ${resetUrl}\nIf you did not request this reset, you can ignore this email.`
-            })
-          });
-          if (!response.ok) throw new Error('Reset email was rejected');
-        } catch {
-          db.prepare('DELETE FROM player_password_resets WHERE token_hash = ?').run(hash(rawToken));
-          fail(503, 'unavailable');
-        }
-      } else {
-        console.info(`Development password reset link for ${normalizedEmail}: ${resetUrl}`);
+    if (recipient) {
+      try {
+        resetUrl = await sendPasswordReset(req, tenantId, recipient.email, locale, rawToken);
+      } catch {
+        db.prepare('DELETE FROM player_password_resets WHERE token_hash = ? AND tenant_id = ?').run(tokenHash, tenantId);
+        fail(503, 'recoveryDeliveryUnavailable');
       }
     }
-    return { message: 'passwordResetRequested', ...(row && appEnvironment === 'development' && !resetEmailApiKey ? { resetUrl } : {}) };
+    return { message: 'passwordResetRequested', ...(resetUrl && { resetUrl }) };
   }
   if (route === 'POST /api/password-reset/complete') {
     limitAuthAttempts(req, route);
     const { token, password } = await body(req);
     if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || typeof password !== 'string' || password.length < 10 || password.length > 128) fail(400, 'credentials');
-    const now = Date.now();
-    const reset = db.prepare('SELECT player_id AS player FROM player_password_resets WHERE token_hash = ? AND tenant_id = ? AND expires > ?').get(hash(token), tenantId, now);
-    if (!reset) fail(400, 'passwordResetInvalid');
-    const salt = randomBytes(16).toString('hex');
-    const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
     transaction(() => {
+      const reset = db.prepare(`SELECT r.player_id AS player FROM player_password_resets r JOIN players p ON p.id = r.player_id AND p.tenant_id = r.tenant_id
+        WHERE r.token_hash = ? AND r.tenant_id = ? AND r.expires > ? AND p.access_status = 'active'`).get(hash(token), tenantId, Date.now());
+      if (!reset) fail(400, 'passwordResetInvalid');
+      const salt = randomBytes(16).toString('hex');
+      const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
       db.prepare('UPDATE players SET password = ?, email_verified = 1 WHERE id = ? AND tenant_id = ?').run(passwordHash, reset.player, tenantId);
-      db.prepare('DELETE FROM player_password_resets WHERE player_id = ?').run(reset.player);
-      db.prepare('DELETE FROM sessions WHERE player = ?').run(reset.player);
+      db.prepare('DELETE FROM player_password_resets WHERE player_id = ? AND tenant_id = ?').run(reset.player, tenantId);
+      db.prepare('DELETE FROM sessions WHERE player = ? AND tenant_id = ?').run(reset.player, tenantId);
     });
     return { message: 'passwordResetComplete' };
   }
@@ -1417,6 +1483,7 @@ async function api(req, res, path, tenantId, requestId) {
     const salt = route.endsWith('signup') ? randomBytes(16).toString('hex') : row?.password.split(':')[0] || '00000000000000000000000000000000';
     const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
     if (route.endsWith('signup')) {
+      requireEmailDelivery(req);
       if (row) fail(409, 'credentials');
       row = transaction(() => {
         const { lastInsertRowid: id } = db.prepare('INSERT INTO players(email, password, tenant_id, email_verified, preferred_locale) VALUES (?, ?, ?, 0, ?)').run(cleanEmail, passwordHash, tenantId, locale || 'en-CA');
@@ -1431,12 +1498,17 @@ async function api(req, res, path, tenantId, requestId) {
       const verifyUrl = await issuePlayerEmailVerification(req, row.id, tenantId, cleanEmail, locale || 'en-CA');
       return { verificationRequired: true, ...(verifyUrl ? { verifyUrl } : {}) };
     }
-    if (!row.email_verified) fail(403, 'emailVerificationRequired');
-    if (db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(row.id)?.excluded_at) fail(403, 'excluded');
     const token = randomBytes(32).toString('hex');
-    if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
     const sessionStartedAt = Date.now();
-    db.prepare('INSERT INTO sessions(token, player, expires, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), row.id, sessionStartedAt + 86400000, tenantId, sessionStartedAt);
+    transaction(() => {
+      const current = db.prepare('SELECT access_status, email_verified, password FROM players WHERE id = ? AND tenant_id = ?').get(row.id, tenantId);
+      if (!current || current.password !== row.password) fail(401, 'credentials');
+      if (current.access_status === 'suspended') fail(403, 'playerSuspended');
+      if (!current.email_verified) fail(403, 'emailVerificationRequired');
+      if (db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(row.id)?.excluded_at) fail(403, 'excluded');
+      if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
+      db.prepare('INSERT INTO sessions(token, player, expires, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), row.id, sessionStartedAt + 86400000, tenantId, sessionStartedAt);
+    });
     res.setHeader('Set-Cookie', `northplay=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=86400${secureCookie}`);
     return { ...account(row.id, tenantId), sessionStartedAt };
   }
@@ -1652,6 +1724,7 @@ const assets = {
   '/app.js': ['app.js', 'text/javascript'],
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
+  '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
   '/hero.webp': ['hero.webp', 'image/webp'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml']

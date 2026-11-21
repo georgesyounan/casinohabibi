@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ import test from 'node:test';
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
-async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '' } = {}) {
+async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
@@ -23,13 +23,22 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
   await once(probe, 'listening');
   const { port } = probe.address();
   await new Promise((resolve) => probe.close(resolve));
-  const server = spawn(process.execPath, ['server.js'], {
+  const mailbox = join(directory, 'mail.jsonl');
+  const preload = join(directory, 'mailer.mjs');
+  if (captureMail) await writeFile(preload, `import { appendFileSync } from 'node:fs';
+    globalThis.fetch = async (url, options) => {
+      if (url !== 'https://api.resend.com/emails') throw new Error('Unexpected destination');
+      appendFileSync(process.env.TEST_MAILBOX, JSON.stringify({ ...JSON.parse(options.body), key: options.headers['Idempotency-Key'] }) + '\\n');
+      return new Response('{}', { status: 200 });
+    };`);
+  const server = spawn(process.execPath, [...(captureMail ? ['--import', preload] : []), 'server.js'], {
     env: {
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
       PROVIDER_KEY_ENCRYPTION: randomBytes(32).toString('hex'), SECURE_COOKIES: '0',
       SANDBOX_TENANT_HOSTS: sandboxTenantHosts,
-      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: ''
+      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
+      ...(captureMail && { TEST_MAILBOX: mailbox, PUBLIC_BASE_URL: 'https://localhost' + appBasePath, RESET_EMAIL_API_KEY: 'fixture', RESET_EMAIL_FROM: 'test@example.test' })
     }
   });
   const errors = [];
@@ -45,7 +54,7 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
     exited.then(([code]) => assert.fail(`Server exited with code ${code}\n${errors.join('')}`))
   ]);
   server.stdout.resume();
-  return { base: `http://127.0.0.1:${port}`, database };
+  return { base: `http://127.0.0.1:${port}`, database, readMail: async () => (await readFile(mailbox, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)) };
 }
 
 function client(base, cookies = new Map()) {
@@ -242,7 +251,7 @@ test('brand publication and audit use explicit, revocable grants and replay one 
   assert.equal((await admin('admin/staff', { ...editorCredentials, role: contentRole })).status, 200);
   const identity = await publisher('admin/login', publisherCredentials);
   assert.equal(identity.data.brandId, 'sandbox');
-  assert.deepEqual(identity.data.permissions, { publishWebsite: true, publishCatalogue: true, viewAudit: true });
+  assert.deepEqual(identity.data.permissions, { publishWebsite: true, publishCatalogue: true, viewAudit: true, managePlayerAccess: false });
   assert.equal((await draftEditor('admin/login', editorCredentials)).status, 200);
   assert.equal((await draftEditor('admin/audit')).status, 403);
 
@@ -451,4 +460,81 @@ test('published routes work under a directory and behind a prefix-stripping prox
   const playerLogout = await player('logout', {});
   assert.equal(playerLogout.status, 200);
   assert.ok(playerLogout.setCookies.some(cookieHasMount));
+});
+
+test('player access across devices, recovery delivery, brand isolation and revocable support grants', async (t) => {
+  const { base, database, readMail } = await startSandbox(t, { appBasePath: '/casinohabibi', captureMail: true });
+  const [desktop, phone, admin, support, otherBrand] = Array.from({ length: 5 }, () => client(base + '/casinohabibi'));
+  await admin('admin/login', staffCredentials);
+  const creds = { email: 'support@example.test', password: 'example-support-password' };
+  const role = { email: creds.email, role: 'operator_support' };
+  await admin('admin/staff', { ...role, password: creds.password });
+  const supporter = (await support('admin/login', creds)).data;
+  const signup = await desktop('signup', { ...playerCredentials, locale: 'fr-CA' });
+  assert.equal(signup.status, 200);
+  assert.equal(signup.data.verifyUrl, undefined);
+  const tokenIn = (mail, key) => new URL(mail.text.match(/https:\/\/\S+$/)[0]).searchParams.get(key);
+  const verification = (await readMail())[0];
+  assert.match(verification.text, /https:\/\/localhost\/casinohabibi\//);
+  await phone('email-verification/complete', { token: tokenIn(verification, 'verify') });
+  const id = (await desktop('login', playerCredentials)).data.id;
+  await phone('login', playerCredentials);
+  const route = 'admin/players/' + id;
+  assert.equal((await support('admin/players?q=player%40example')).data[0].id, id);
+  assert.equal((await support(route)).data.activeSessions, 2);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.prepare("INSERT INTO tenants VALUES ('second', 'second', 'Second Brand', 'active', ?)").run(Date.now());
+  db.prepare("UPDATE tenant_domains SET tenant_id = 'second' WHERE host = 'localhost'").run();
+  db.prepare("INSERT INTO tenant_staff_memberships(tenant_id, staff_id, role, status, created_at) VALUES ('second', ?, ?, 'active', ?)").run(supporter.id, role.role, Date.now());
+  await otherBrand('admin/login', creds, 'localhost');
+  assert.deepEqual((await otherBrand('admin/players?q=player', undefined, 'localhost')).data, []);
+  assert.equal((await otherBrand(route, undefined, 'localhost')).status, 404);
+
+  const deliveryKey = { 'X-Request-ID': randomUUID() };
+  const send = await support(route + '/recovery', {}, undefined, deliveryKey);
+  assert.equal(send.data.delivery, 'sent');
+  assert.deepEqual(Object.keys(send.data).sort(), ['auditId', 'delivery', 'id']);
+  assert.deepEqual((await support(route + '/recovery', {}, undefined, deliveryKey)).data, send.data);
+  const messages = await readMail();
+  assert.equal(messages.length, 2);
+  assert.deepEqual(messages[1].to, [playerCredentials.email]);
+  assert.match(messages[1].subject, /mot de passe/);
+  assert.ok(messages[1].key);
+  const initialReset = tokenIn(messages[1], 'reset');
+  const change = { status: 'suspended', version: 0, reason: 'Account owner requested a review' };
+  assert.equal((await support(route + '/access', change)).status, 403);
+  await admin('admin/staff/role', { ...role, managePlayerAccess: true, reason: 'Player access desk' });
+  assert.equal((await support(route + '/access', { ...change, reason: ' ' })).status, 400);
+  const headers = { 'X-Request-ID': randomUUID() };
+  const suspension = await support(route + '/access', change, undefined, headers);
+  assert.equal(suspension.status, 200);
+  assert.deepEqual((await support(route + '/access', change, undefined, headers)).data, suspension.data);
+  assert.equal((await desktop('account')).data, null);
+  assert.equal((await phone('account')).data, null);
+  assert.equal((await phone('login', playerCredentials)).data.error, 'playerSuspended');
+  assert.equal((await support(route + '/recovery', {})).data.error, 'playerSuspended');
+  assert.equal((await phone('password-reset/complete', { token: initialReset, password: 'replacement-password' })).data.error, 'passwordResetInvalid');
+  assert.equal((await support(route + '/access', { ...change, status: 'active' })).status, 409);
+  await admin('admin/staff/role', { ...role, managePlayerAccess: false, reason: 'End of shift' });
+  assert.equal((await support(route + '/access', { ...change, version: 1, status: 'active' })).status, 403);
+  await admin(route + '/access', { status: 'active', version: 1, reason: 'Review completed' });
+  assert.equal((await desktop('account')).data, null);
+  await desktop('login', playerCredentials);
+  await phone('login', playerCredentials);
+  const newPassword = { ...playerCredentials, password: 'replacement-password' };
+  await support(route + '/recovery', {});
+  const newReset = tokenIn((await readMail()).at(-1), 'reset');
+  assert.equal((await desktop('password-reset/complete', { token: newReset, password: newPassword.password })).status, 200);
+  assert.equal((await phone('account')).data, null);
+  assert.equal((await phone('password-reset/complete', { token: newReset, password: newPassword.password })).status, 400);
+  assert.equal((await phone('login', newPassword)).status, 200);
+  const detail = (await admin(route)).data;
+  assert.equal(detail.activeSessions, 1);
+  assert.equal(detail.events.filter(({ action }) => action === 'player_suspended').length, 1);
+  assert.equal(detail.events.find(({ action }) => action === 'player_restored').reason, 'Review completed');
+  await phone('safety/exclude', {});
+  await admin(route + '/access', { status: 'suspended', version: 2, reason: 'Review' });
+  await admin(route + '/access', { status: 'active', version: 3, reason: 'Review complete' });
+  assert.equal((await desktop('login', newPassword)).data.error, 'excluded');
 });

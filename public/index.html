@@ -207,9 +207,23 @@
             </div>
           </div>
           <form id="coming-soon-save-search" class="coming-soon-save-search">
-              <label><span data-copy="comingSoonSavesSearch"></span><input name="query" type="search" maxlength="254"></label>
+              <label><span data-copy="playerSearchLabel"></span><input name="query" type="search" maxlength="254"></label>
               <button type="submit" class="ghost" data-copy="comingSoonSearch"></button>
             </form>
+            <p id="player-search-status" role="status"></p>
+            <ul id="player-matches" class="player-matches"></ul>
+            <section id="player-record" class="admin-editor player-record" aria-labelledby="player-record-title" hidden>
+              <h3 id="player-record-title" tabindex="-1"></h3>
+              <p id="player-record-summary"></p>
+              <div class="actions" id="player-record-actions"></div>
+              <form id="player-status-form" hidden>
+                <label><span data-copy="staffReason"></span><textarea name="reason" rows="2" maxlength="240" required></textarea></label>
+                <div class="actions"><button type="submit" id="player-confirm-status"></button><button type="button" id="player-cancel-status" class="ghost" data-copy="playerCancel"></button></div>
+              </form>
+              <p role="status" id="player-action-status"></p>
+              <details id="player-event-details"><summary data-copy="playerAccessHistory"></summary><ol id="player-events"></ol></details>
+            </section>
+            <h3 data-copy="playerSaveHistory"></h3>
             <p id="coming-soon-saves-status" role="status"></p>
             <div class="audit-table-wrap" role="region" aria-labelledby="coming-soon-saves-heading" tabindex="0"><table class="coming-soon-saves-table" aria-labelledby="coming-soon-saves-heading">
               <thead><tr><th scope="col" data-copy="comingSoonSaveRef"></th><th scope="col" data-copy="email"></th><th scope="col" data-copy="comingSoon"></th><th scope="col" data-copy="supportFilter"></th><th scope="col" data-copy="comingSoonDate"></th></tr></thead>
@@ -347,6 +361,7 @@
               <label><span data-copy="staffRole"></span><select name="role"><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label>
               <p id="staff-role-help" class="staff-role-help"></p>
               <div class="staff-publishing-grants" id="staff-create-grants" hidden>
+                <label class="admin-check"><input type="checkbox" name="managePlayerAccess"><span data-copy="playerAccessGrant"></span></label>
                 <label class="admin-check"><input type="checkbox" name="publishWebsite"><span data-copy="staffPublishWebsite"></span></label>
                 <label class="admin-check"><input type="checkbox" name="publishCatalogue"><span data-copy="staffPublishCatalogue"></span></label>
               </div>

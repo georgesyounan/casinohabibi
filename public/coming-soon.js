@@ -53,7 +53,7 @@ const canEdit = ['operator_admin', 'operator_content', 'operator_provider'];
 const canReviewSaves = ['operator_admin', 'operator_support'];
 const searchable = (text) => text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, lobbyEnabled, isFrench, getFavorites, favoritePending, toggleFavorite }) {
+export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, openPlayer, lobbyEnabled, isFrench, getFavorites, favoritePending, toggleFavorite }) {
   const detailSlug = currentRoute.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
   const $ = (id) => document.getElementById(id);
   const form = $('coming-soon-form');
@@ -73,6 +73,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   let artwork = '';
   let saving = false;
   let saves;
+  let savesRequest = 0;
 
   const titleName = (title) => isFrench() ? title.titleFr : title.titleEn;
   const isFavorite = (key) => getFavorites().has(key);
@@ -232,7 +233,10 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     if (canReviewSaves.includes(staffRole) && saves) {
       $('coming-soon-saves-body').replaceChildren(...saves.map((entry) => {
         const row = element('tr');
-        for (const value of [`save-${entry.id}`, entry.email, entry.slug, stateText(entry.state), dateTime(entry.createdAt)]) row.append(element('td', value));
+        const player = element('td');
+        player.append(action(entry.email, () => openPlayer(entry.playerId), 'ghost'));
+        row.append(element('td', 'save-' + entry.id), player);
+        for (const value of [entry.slug, stateText(entry.state), dateTime(entry.createdAt)]) row.append(element('td', value));
         return row;
       }));
       $('coming-soon-saves-status').textContent = saves.length ? '' : t('comingSoonSavesEmpty');
@@ -240,13 +244,16 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   }
 
   async function loadSaves() {
+    const request = ++savesRequest;
     $('coming-soon-saves-status').textContent = t('loading');
     try {
       const query = new URLSearchParams({ q: saveForm.elements.query.value });
-      saves = await api(`admin/coming-soon/saves?${query}`, undefined, 'GET');
+      const rows = await api(`admin/coming-soon/saves?${query}`, undefined, 'GET');
+      if (request !== savesRequest) return;
+      saves = rows;
       renderAdmin();
     } catch (error) {
-      $('coming-soon-saves-status').textContent = t(error.message);
+      if (request === savesRequest) $('coming-soon-saves-status').textContent = t(error.message);
     }
   }
 
