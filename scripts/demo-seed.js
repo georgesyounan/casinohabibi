@@ -18,7 +18,7 @@ if (readFileSync(markerPath, 'utf8').trim() !== 'development') {
 const db = new DatabaseSync(databasePath);
 db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
 try {
-  const requiredTables = ['tenants', 'players', 'player_profiles', 'ledger', 'support_tickets', 'support_ticket_messages', 'player_safety'];
+  const requiredTables = ['tenants', 'players', 'player_profiles', 'ledger', 'support_tickets', 'support_ticket_messages', 'player_safety', 'player_report_visits', 'report_fixture_tenants'];
   for (const name of requiredTables) {
     if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)) {
       throw new Error(`The demo database is missing its ${name} table. Start the demo once to complete database setup, then retry.`);
@@ -47,7 +47,8 @@ try {
     const games = ['gold', 'blackjack', 'roulette', 'aurora'];
     const wagers = [250, 500, 1000];
     const now = Date.now();
-    const playerInsert = db.prepare('INSERT INTO players(email, password, tenant_id, email_verified, preferred_locale) VALUES (?, ?, \'sandbox\', 1, ?)');
+    const playerInsert = db.prepare("INSERT INTO players(email,password,tenant_id,email_verified,preferred_locale,report_fixture,first_verified_at) VALUES (?,?,'sandbox',1,?,1,?)");
+    const visitInsert = db.prepare("INSERT OR IGNORE INTO player_report_visits(tenant_id,player_id,minute,visited_at) VALUES ('sandbox',?,?,?)");
     const profileInsert = db.prepare('INSERT INTO player_profiles(tenant_id, player_id, display_name, preferred_locale, updated_at) VALUES (\'sandbox\', ?, ?, ?, ?)');
     const roundInsert = db.prepare('INSERT INTO ledger(player, game, wager, amount, request_id, created_at, outcome, tenant_id) VALUES (?, ?, ?, ?, ?, ?, NULL, \'sandbox\')');
     const ticketInsert = db.prepare('INSERT INTO support_tickets(tenant_id, player_id, category, message, status, priority, is_complaint, created_at, updated_at) VALUES (\'sandbox\', ?, ?, ?, ?, ?, 0, ?, ?)');
@@ -55,10 +56,14 @@ try {
 
     db.exec('BEGIN IMMEDIATE');
     try {
+      if (!db.prepare("SELECT 1 FROM coming_soon_titles WHERE tenant_id = 'sandbox' LIMIT 1").get()) {
+        db.prepare("INSERT OR IGNORE INTO report_fixture_tenants(tenant_id) VALUES ('sandbox')").run();
+      }
       const playerIds = players.map(([name, locale], index) => {
         const email = `northplay-showcase-${String(index + 1).padStart(2, '0')}@example.invalid`;
         const nonLoginSecret = `${randomBytes(16).toString('hex')}:${randomBytes(64).toString('hex')}`;
-        const result = playerInsert.run(email, nonLoginSecret, locale);
+        const oldestDay = Math.max(...Array.from({ length: 8 }, (_, r) => (index * 5 + r * 3) % 30));
+        const result = playerInsert.run(email, nonLoginSecret, locale, now - oldestDay * 86_400_000 - 10 * 60_000);
         const id = Number(result.lastInsertRowid);
         profileInsert.run(id, name, locale, now);
         return id;
@@ -71,6 +76,7 @@ try {
           const game = games[(playerIndex + roundIndex) % games.length];
           const wager = wagers[(playerIndex + roundIndex) % wagers.length];
           const outcome = (playerIndex + roundIndex) % 3 === 0 ? wager : (playerIndex + roundIndex) % 3 === 1 ? 0 : -wager;
+          visitInsert.run(playerIds[playerIndex], Math.floor(createdAt / 60_000), createdAt);
           roundInsert.run(playerIds[playerIndex], game, wager, outcome, `northplay-showcase-${playerIndex + 1}-${roundIndex + 1}`, createdAt);
         }
       });

@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 import { configureTransactionalEmail } from './lib/transactional-email.js';
+import { createDashboard } from './lib/dashboard.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
@@ -264,6 +265,7 @@ const savedTitles = createSavedTitles(db, { fail, transaction });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 installPlayerAccess(db, transaction);
+const dashboard = createDashboard(db, { transaction, fail });
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
 const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath, transaction });
 const adminEnabled = Boolean(encryptionKey);
@@ -428,8 +430,8 @@ function resolveTenant(req) {
   return tenant.id;
 }
 
-function transaction(work) {
-  db.exec('BEGIN IMMEDIATE');
+function transaction(work, { readOnly = false } = {}) {
+  db.exec(readOnly ? 'BEGIN' : 'BEGIN IMMEDIATE');
   try {
     const result = work();
     db.exec('COMMIT');
@@ -658,6 +660,7 @@ async function api(req, res, path, tenantId, requestId) {
   const savedResource = ['PUT', 'DELETE'].includes(req.method) && path.match(/^\/api\/me\/saved\/([1-9]\d{0,15})$/);
   if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
+  if (player && req.method === 'GET' && (path === '/api/account' || path === '/api/coming-soon' || path.startsWith('/api/coming-soon/'))) dashboard.recordVisit(tenantId, player);
   if (route === 'GET /api/coming-soon') {
     const cookie = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1];
     const lobby = comingSoon.lobby(tenantId, cookie, catalogueAudience(tenantId, catalogueLocale || 'default'), player, comingSoonEnabled(tenantId));
@@ -775,43 +778,29 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/admin/session') {
     return staffSession(staffContext(req, tenantId, staffRoles), tenantId);
   }
-  if (route === 'GET /api/admin/overview') {
-    staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
-    const periodValue = new URL(req.url, 'http://localhost').searchParams.get('days') || '30';
-    if (!['7', '30', '90'].includes(periodValue)) fail(400, 'invalid');
-    const periodDays = Number(periodValue);
-    const dayMilliseconds = 24 * 60 * 60 * 1000;
-    const since = Math.floor(Date.now() / dayMilliseconds) * dayMilliseconds - (periodDays - 1) * dayMilliseconds;
-    const players = db.prepare('SELECT count(*) AS total, coalesce(sum(email_verified), 0) AS verified FROM players WHERE tenant_id = ?').get(tenantId);
-    const showcaseDataLoaded = Boolean(db.prepare("SELECT 1 FROM players WHERE tenant_id = ? AND email LIKE 'northplay-showcase-%@example.invalid' LIMIT 1").get(tenantId));
-    const gameplay = db.prepare('SELECT count(*) AS rounds, count(DISTINCT player) AS active_players, coalesce(sum(wager), 0) AS wagered_cents FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ?').get(tenantId, since);
-    const demoRoundsByGame = db.prepare('SELECT game, count(*) AS rounds, count(DISTINCT player) AS active_players, coalesce(sum(wager), 0) AS wagered_cents FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ? GROUP BY game ORDER BY rounds DESC, game').all(tenantId, since);
-    const dailyRounds = new Map(db.prepare("SELECT date(created_at / 1000, 'unixepoch') AS day, count(*) AS rounds FROM ledger WHERE tenant_id = ? AND game IS NOT NULL AND created_at >= ? GROUP BY day").all(tenantId, since).map(({ day, rounds }) => [day, rounds]));
-    const demoRoundsByDay = Array.from({ length: periodDays }, (_, index) => {
-      const day = new Date(since + index * dayMilliseconds).toISOString().slice(0, 10);
-      return { day, rounds: dailyRounds.get(day) || 0 };
-    });
-    const support = db.prepare("SELECT count(*) AS open FROM support_tickets WHERE tenant_id = ? AND status = 'open'").get(tenantId);
-    const catalog = db.prepare('SELECT count(*) AS enabled FROM game_catalog WHERE tenant_id = ? AND enabled = 1').get(tenantId);
-    const publishedConfig = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
-    const draftConfig = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
-    return {
-      playerAccounts: players.total,
-      verifiedAccounts: players.verified,
-      showcaseDataLoaded,
-      periodDays,
-      demoRoundsInPeriod: gameplay.rounds,
-      activeDemoPlayersInPeriod: gameplay.active_players,
-      simulatedWagersCentsInPeriod: gameplay.wagered_cents,
-      demoRoundsByDay,
-      demoRoundsByGame,
-      openSupportTickets: support.open,
-      enabledCatalogListings: catalog.enabled,
-      ...comingSoon.counts(tenantId),
-      publishedConfigVersion: publishedConfig?.version ?? 0,
-      configNeedsPublish: Boolean(draftConfig && draftConfig.config !== publishedConfig?.config),
-      generatedAt: Date.now()
-    };
+  if (route === 'GET /api/admin/overview' || route === 'GET /api/admin/overview/records') {
+    const staff = staffContext(req, tenantId, staffRoles);
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    return transaction(() => {
+      const current = Date.now();
+      const detail = path.endsWith('/records');
+      const asOf = detail && params.has('asOf') ? Number(params.get('asOf')) : current;
+      if (!Number.isSafeInteger(asOf) || asOf < 0 || asOf > current) fail(400, 'invalid');
+      const published = publishedTenantConfig(tenantId);
+      const ctx = dashboard.context(tenantId, published.config, params, asOf);
+      if (detail) return dashboard.records(ctx, params.get('metric'), params, staff.role);
+      const settings = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
+      const draft = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'draft' ORDER BY version DESC LIMIT 1").get(tenantId);
+      const brands = db.prepare(`SELECT t.id, coalesce((SELECT json_extract(c.config, '$.brandName')
+        FROM tenant_config_versions c WHERE c.tenant_id = t.id AND c.status = 'published' ORDER BY c.version DESC LIMIT 1), t.name) AS name,
+        (SELECT d.host FROM tenant_domains d WHERE d.tenant_id = t.id AND d.verified = 1
+        ORDER BY CASE WHEN d.host IN ('localhost','127.0.0.1','::1') THEN 1 ELSE 0 END, d.host LIMIT 1) AS host
+        FROM tenant_staff_memberships m JOIN tenants t ON t.id = m.tenant_id WHERE m.staff_id = ? AND m.status = 'active'
+        AND t.status = 'active' ORDER BY name,t.id`).all(staff.id).filter((brand) => brand.id === tenantId || brand.host);
+      const catalog = db.prepare('SELECT count(*) AS enabled FROM game_catalog WHERE tenant_id = ? AND enabled = 1').get(tenantId);
+      return { ...dashboard.summary(ctx), brands, enabledCatalogListings: catalog.enabled, publishedConfigVersion: published.version,
+        configNeedsPublish: Boolean(draft && draft.config !== settings.config) };
+    }, { readOnly: true });
   }
   if (route === 'POST /api/admin/password') {
     const staff = staffContext(req, tenantId, ['operator_admin', 'operator_content', 'operator_provider', 'operator_support']);
@@ -1541,6 +1530,7 @@ async function api(req, res, path, tenantId, requestId) {
       if (db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(row.id)?.excluded_at) fail(403, 'excluded');
       if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
       db.prepare('INSERT INTO sessions(token, player, expires, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), row.id, sessionStartedAt + 86400000, tenantId, sessionStartedAt);
+      dashboard.recordVisit(tenantId, row.id, sessionStartedAt);
     });
     res.setHeader('Set-Cookie', `northplay=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=86400${secureCookie}`);
     return { ...account(row.id, tenantId), sessionStartedAt };
@@ -1757,6 +1747,7 @@ const assets = {
   '/app.js': ['app.js', 'text/javascript'],
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
+  '/dashboard.js': ['dashboard.js', 'text/javascript'],
   '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
   '/hero.webp': ['hero.webp', 'image/webp'],

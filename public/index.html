@@ -96,20 +96,39 @@
             </div>
             <button type="button" id="overview-refresh" class="ghost" data-copy="refreshOverview"></button>
           </div>
-          <p id="overview-showcase-note" class="overview-showcase-note" data-copy="overviewShowcaseData" hidden></p><p id="overview-showcase-prompt" class="overview-showcase-prompt" data-copy="overviewShowcasePrompt" hidden></p>
-          <dl class="overview-grid admin-kpis">
-            <div><dt data-copy="overviewPlayers"></dt><dd id="overview-players">—</dd></div>
-            <div><dt data-copy="overviewTickets"></dt><dd id="overview-tickets">—</dd><a href="#support-inbox" data-roles="operator_admin,operator_support" data-copy="supportInbox"></a></div>
-            <div><dt data-copy="comingSoonCount"></dt><dd id="overview-coming-soon">—</dd><a href="#coming-soon-admin" data-roles="operator_admin,operator_content,operator_provider" data-copy="adminNavComingSoon"></a></div>
-            <div><dt data-copy="comingSoonSaveCount"></dt><dd id="overview-coming-soon-saves">—</dd><a href="#coming-soon-saves" data-roles="operator_admin,operator_support" data-copy="adminNavPlayers"></a></div>
+          <form id="report-filters" class="report-filters">
+            <label id="report-brand-field" hidden><span data-copy="reportBrand"></span><select id="report-brand"></select></label>
+            <label><span data-copy="overviewPeriodLabel"></span><select id="overview-period"><option value="7" data-copy="overviewPeriod7"></option><option value="30" selected data-copy="overviewPeriod30"></option><option value="90" data-copy="overviewPeriod90"></option><option value="custom" data-copy="reportCustom"></option></select></label>
+            <label id="report-scope-field" hidden><span data-copy="reportSource"></span><select id="report-scope"><option value="site" data-copy="reportSite"></option><option value="test" data-copy="reportTest"></option></select></label>
+            <label data-report-custom hidden><span data-copy="reportFrom"></span><input id="report-from" type="date"></label>
+            <label data-report-custom hidden><span data-copy="reportTo"></span><input id="report-to" type="date"></label>
+            <button type="submit" data-report-custom hidden data-copy="reportApply"></button>
+            <button type="button" id="overview-export" class="ghost" data-copy="overviewExport" disabled></button>
+          </form>
+          <p id="report-context" class="report-context"></p><p id="overview-status" role="status"></p>
+          <dl class="overview-grid admin-kpis" id="report-cards">
+            <div><dt data-copy="reportSignups"></dt><dd id="report-signups">—</dd><dd class="report-action"><button type="button" data-report-metric="signups" data-copy="reportOpenPlayers" disabled></button></dd></div>
+            <div><dt data-copy="reportActive"></dt><dd id="report-active">—</dd><dd class="report-action"><button type="button" data-report-metric="active" data-copy="reportOpenPlayers" disabled></button></dd></div>
+            <div><dt data-copy="reportSaves"></dt><dd id="overview-coming-soon-saves">—</dd><dd class="report-action"><button type="button" data-report-metric="saves" data-copy="reportOpenSaves" disabled></button></dd></div>
+            <div><dt data-copy="reportPublished"></dt><dd id="overview-coming-soon">—</dd><dd class="report-action"><button type="button" data-report-metric="published" data-copy="reportOpenTitles" disabled></button></dd></div>
           </dl>
+          <section id="report-records" class="report-records" aria-labelledby="report-records-heading" hidden>
+            <div class="admin-page-heading"><h3 id="report-records-heading" tabindex="-1"></h3><button type="button" class="ghost" id="report-close" data-copy="reportClose"></button></div>
+            <p id="report-record-help"></p><p id="report-record-status" role="status"></p><ul id="report-record-list"></ul>
+            <div class="actions" id="report-record-pages" hidden><button type="button" id="report-prev" class="ghost" data-copy="playerPrevious"></button><span id="report-page"></span><button type="button" id="report-next" class="ghost" data-copy="playerNext"></button></div>
+          </section>
+          <p id="report-coverage" class="report-context" hidden></p>
+          <div class="actions report-shortcuts"><a href="#coming-soon-admin" data-roles="operator_admin,operator_content,operator_provider" data-copy="adminNavCatalogue"></a><a href="#support-inbox" data-roles="operator_admin,operator_support" data-copy="supportInbox"></a></div>
+          <details class="admin-disclosure"><summary data-copy="reportBrandSetup"></summary>
           <div class="admin-readiness"><div class="catalog-readiness"><strong data-copy="overviewBrandingStatus"></strong><span id="overview-branding-readiness">—</span><a class="readiness-link" data-roles="operator_admin,operator_content" href="#casino-settings" data-copy="goToCasinoSettings"></a><small data-copy="overviewBrandingNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewCatalogStatus"></strong><span id="overview-catalog-readiness">—</span><a id="catalog-readiness-link" class="readiness-link" data-roles="operator_admin,operator_provider" href="#catalog-management" data-copy="goToCatalogManagement"></a><small data-copy="overviewCatalogNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewMfaStatus"></strong><span id="overview-mfa-readiness">—</span><a class="readiness-link" href="#mfa-settings" data-copy="goToMfa"></a><small data-copy="overviewMfaNote"></small></div></div>
+          </details>
           <details class="admin-disclosure admin-metrics">
             <summary data-copy="adminDemoActivity"></summary>
             <div class="admin-detail-body">
               <p data-copy="operatorOverviewHelp"></p>
-              <div class="actions"><label class="overview-period"><span data-copy="overviewPeriodLabel"></span><select id="overview-period"><option value="7" data-copy="overviewPeriod7"></option><option value="30" data-copy="overviewPeriod30" selected></option><option value="90" data-copy="overviewPeriod90"></option></select></label><button type="button" id="overview-export" class="ghost" data-copy="overviewExport" disabled></button></div>
               <dl class="overview-grid">
+                <div><dt data-copy="overviewPlayers"></dt><dd id="overview-players">—</dd></div>
+                <div><dt data-copy="overviewTickets"></dt><dd id="overview-tickets">—</dd></div>
                 <div><dt data-copy="overviewVerified"></dt><dd id="overview-verified">—</dd></div>
                 <div><dt data-copy="overviewActivePlayers"></dt><dd id="overview-active-players">—</dd></div>
                 <div><dt data-copy="overviewRounds"></dt><dd id="overview-rounds">—</dd></div>
@@ -119,7 +138,6 @@
               <section class="overview-activity"><h3 data-copy="overviewActivityChart"></h3><p data-copy="overviewActivityHelp"></p><div id="overview-activity-chart" class="overview-activity-chart" role="img"></div><p id="overview-activity-summary" class="overview-activity-summary"></p><details><summary data-copy="overviewActivityDetails"></summary><ul id="overview-activity-values"></ul></details></section><section class="overview-game-activity"><h3 id="overview-game-heading" data-copy="overviewGameBreakdown"></h3><div class="audit-table-wrap" role="region" aria-labelledby="overview-game-heading" tabindex="0"><table id="overview-game-table" aria-labelledby="overview-game-heading"><thead><tr><th scope="col" data-copy="overviewGameName"></th><th scope="col" data-copy="overviewGameRounds"></th><th scope="col" data-copy="overviewGameShare"></th><th scope="col" data-copy="overviewGameActivePlayers"></th><th scope="col" data-copy="overviewGameWagered"></th></tr></thead><tbody></tbody></table></div></section>
             </div>
           </details>
-          <p id="overview-status" role="status"></p>
         </section>
         <section id="game-catalog" class="admin-page" data-admin-view data-roles="operator_admin,operator_content,operator_provider" aria-labelledby="game-catalog-title" hidden>
           <div class="admin-page-heading">

@@ -7,7 +7,7 @@ export const adminWorkspaceCopy = {
   adminNavDashboard: ['Dashboard', 'Tableau de bord'],
   adminNavCatalogue: ['Game catalogue', 'Catalogue de jeux'],
   adminNavComingSoon: ['Coming Soon', 'À venir'],
-  adminNavPlayers: ['Player activity', 'Activité des joueurs'],
+  adminNavPlayers: ['Players', 'Joueurs'],
   adminNavWebsite: ['Website content', 'Contenu du site'],
   adminNavStaff: ['Staff and permissions', 'Équipe et accès'],
   adminNavAudit: ['Audit log', 'Journal d’audit'],

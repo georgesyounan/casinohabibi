@@ -1,5 +1,6 @@
 import { games } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
+import { dashboardCopy, createReportUi } from './dashboard.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
@@ -11,6 +12,7 @@ const isAdminPage = currentRoute === '/admin';
 const copy = {
   ...comingSoonCopy,
   ...playerAccessCopy,
+  ...dashboardCopy,
   ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
@@ -109,9 +111,9 @@ const copy = {
   operatorOverviewHelp: ['Tenant-scoped demo activity. Gameplay metrics use the selected period, and wager totals are simulated CAD values with no cash value.', 'Activité fictive propre au casino. Les statistiques de jeu utilisent la période choisie et les mises sont des montants fictifs en CAD sans valeur monétaire.'],
   overviewShowcaseData: ['Fictional showcase records are included in these demo metrics and support examples.', 'Ces statistiques de démonstration et exemples de soutien comprennent des données fictives.'],
   overviewShowcasePrompt: ['For a presentation example, initialize a fresh demo folder, stop the server, double-click Load Northplay Showcase Data.bat, then restart the demo.', 'Pour préparer un aperçu, initialisez un nouveau dossier de démonstration, arrêtez le serveur, double-cliquez sur Load Northplay Showcase Data.bat, puis redémarrez la démo.'],
-  refreshOverview: ['Refresh overview', 'Actualiser l’aperçu'], overviewExport: ['Export demo metrics (CSV)', 'Exporter les statistiques de démo (CSV)'], overviewExportReady: ['Demo overview CSV downloaded. It contains aggregate demo metrics only.', 'Le fichier CSV de l’aperçu de démo a été téléchargé. Il ne contient que des statistiques agrégées.'],
+  refreshOverview: ['Refresh overview', 'Actualiser l’aperçu'], overviewExport: ['Export CSV', 'Exporter le CSV'], overviewExportReady: ['Report CSV downloaded.', 'Le rapport CSV a été téléchargé.'],
   overviewPeriodLabel: ['Activity period', 'Période d’activité'], overviewPeriod7: ['Last 7 days', '7 derniers jours'], overviewPeriod30: ['Last 30 days', '30 derniers jours'], overviewPeriod90: ['Last 90 days', '90 derniers jours'],
-  overviewActivityChart: ['Demo rounds by day (UTC)', 'Parties de démo par jour (UTC)'], overviewActivityHelp: ['Bar heights show daily demo rounds for the selected period.', 'La hauteur des barres représente les parties de démo quotidiennes pour la période choisie.'], overviewActivityDetails: ['View daily values', 'Voir les valeurs quotidiennes'], overviewActivitySummary: ['{total} demo rounds across {days} days. Busiest day: {date} ({rounds} rounds).', '{total} parties de démo sur {days} jours. Journée la plus active : {date} ({rounds} parties).'], overviewActivityDay: ['{date}: {rounds} demo rounds', '{date} : {rounds} parties de démo'],
+  overviewActivityChart: ['Demo rounds by day', 'Parties de démo par jour'], overviewActivityHelp: ['Bar heights show daily demo rounds for the selected period.', 'La hauteur des barres représente les parties de démo quotidiennes pour la période choisie.'], overviewActivityDetails: ['View daily values', 'Voir les valeurs quotidiennes'], overviewActivitySummary: ['{total} demo rounds across {days} days. Busiest day: {date} ({rounds} rounds).', '{total} parties de démo sur {days} jours. Journée la plus active : {date} ({rounds} parties).'], overviewActivityDay: ['{date}: {rounds} demo rounds', '{date} : {rounds} parties de démo'],
   overviewGameBreakdown: ['Built-in demo game activity', 'Activité des jeux de démo intégrés'], overviewGameName: ['Game', 'Jeu'], overviewGameRounds: ['Rounds', 'Parties'], overviewGameShare: ['Round share', 'Part des parties'], overviewGameActivePlayers: ['Active players', 'Joueurs actifs'], overviewGameWagered: ['Simulated wagers (CAD; no cash value)', 'Mises fictives (CAD; aucune valeur monétaire)'],
   overviewPlayers: ['Player accounts', 'Comptes joueurs'], overviewVerified: ['Email verified', 'Courriel confirmé'],
   overviewRounds: ['Demo rounds · {days} days', 'Parties fictives · {days} jours'], overviewActivePlayers: ['Players active in demo · {days} days', 'Joueurs ayant joué à la démo · {days} jours'], overviewWagered: ['Simulated wagers · {days} days', 'Mises fictives · {days} jours'],
@@ -316,9 +318,10 @@ const verifyToken = new URLSearchParams(location.search).get('verify');
 const emailChangeToken = new URLSearchParams(location.search).get('email-change');
 let pendingVerificationEmail;
 let pendingVerificationUrl;
-if (new URLSearchParams(location.search).get('lang') === 'fr') {
-  language = 1;
-  localStorage.setItem('northplay-language', 'fr');
+const requestedLanguage = new URLSearchParams(location.search).get('lang');
+if (['en', 'fr'].includes(requestedLanguage)) {
+  language = Number(requestedLanguage === 'fr');
+  localStorage.setItem('northplay-language', requestedLanguage);
 }
 let player;
 let playerSessionStartedAt;
@@ -1583,6 +1586,14 @@ const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => 
   if (load) void load();
 });
 
+const reportUi = createReportUi({ api, t, element, action, appPath, role: () => currentStaffRole, locale: () => language ? 'fr-CA' : 'en-CA',
+  refresh: refreshOperatorOverview, datesChanged: () => resetOverview('reportApplyHint'), openPlayer(reference) {
+    adminWorkspace.open('coming-soon-saves');
+    const form = $('#coming-soon-save-search');
+    form.elements.query.value = reference;
+    form.requestSubmit();
+  } });
+
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
@@ -2598,18 +2609,31 @@ $('#support-complaint-filter').addEventListener('change', renderSupportInbox);
 $('#support-topic-filter').addEventListener('change', renderSupportInbox);
 $('#support-priority-filter').addEventListener('change', renderSupportInbox);
 $('#support-assignee-filter').addEventListener('change', renderSupportInbox);
-async function refreshOperatorOverview() {
+let overviewRequest = 0;
+function resetOverview(message) {
+  ++overviewRequest;
+  latestOverview = null;
   $('#overview-export').disabled = true;
-  const requestedDays = Number($('#overview-period').value);
-  const overview = await api(`admin/overview?days=${requestedDays}`, undefined, 'GET');
-  if (requestedDays !== Number($('#overview-period').value)) return;
-  latestOverview = overview;
-  $('#overview-export').disabled = false;
-  renderOperatorOverview(overview);
+  reportUi.loading();
+  $('#overview .admin-metrics').hidden = true;
+  $('#overview-status').textContent = t(message);
+  return overviewRequest;
+}
+async function refreshOperatorOverview() {
+  const request = resetOverview('loading');
+  try {
+    const result = await api('admin/overview?' + reportUi.params(), undefined, 'GET');
+    if (request !== overviewRequest) return;
+    latestOverview = result;
+    $('#overview-export').disabled = false;
+    renderOperatorOverview(result);
+  } catch (error) {
+    if (request === overviewRequest) $('#overview-status').textContent = t(error.message);
+  }
 }
 function renderOperatorOverview(overview) {
-  $('#overview-showcase-note').hidden = !overview.showcaseDataLoaded;
-  $('#overview-showcase-prompt').hidden = Boolean(overview.showcaseDataLoaded || overview.playerAccounts > 0);
+  reportUi.render(overview);
+  $('#overview .admin-metrics').hidden = false;
   const locale = language ? 'fr-CA' : 'en-CA';
   const number = new Intl.NumberFormat(locale);
   for (const id of ['overview-rounds', 'overview-active-players', 'overview-wagered']) {
@@ -2636,7 +2660,7 @@ function renderOperatorOverview(overview) {
   const brandingStatus = overview.configNeedsPublish ? 'overviewBrandingPending' : 'overviewBrandingReady';
   $('#overview-branding-readiness').textContent = t(brandingStatus).replace('{version}', number.format(overview.publishedConfigVersion));
   $('#overview-mfa-readiness').textContent = t(currentStaffMfaEnabled ? 'overviewMfaEnabled' : 'overviewMfaDisabled');
-  $('#overview-status').textContent = t('overviewUpdated').replace('{time}', new Date(overview.generatedAt).toLocaleTimeString(locale));
+  $('#overview-status').textContent = t('overviewUpdated').replace('{time}', new Date(overview.generatedAt).toLocaleTimeString(locale, { timeZone: overview.reportingTimeZone }));
 }
 function renderOverviewActivity(overview) {
   const locale = language ? 'fr-CA' : 'en-CA';
@@ -2645,7 +2669,7 @@ function renderOverviewActivity(overview) {
   const total = data.reduce((sum, item) => sum + item.rounds, 0);
   const peak = data.reduce((best, item) => item.rounds > best.rounds ? item : best, { day: '', rounds: 0 });
   const peakDate = peak.day ? new Date(`${peak.day}T00:00:00Z`).toLocaleDateString(locale, { timeZone: 'UTC', dateStyle: 'medium' }) : '—';
-  const summary = t('overviewActivitySummary').replace('{total}', number.format(total)).replace('{days}', number.format(overview.periodDays)).replace('{date}', peakDate).replace('{rounds}', number.format(peak.rounds));
+  const summary = !total ? t('reportNoRounds') : t('overviewActivitySummary').replace('{total}', number.format(total)).replace('{days}', number.format(overview.periodDays)).replace('{date}', peakDate).replace('{rounds}', number.format(peak.rounds));
   const chart = $('#overview-activity-chart');
   chart.style.setProperty('--bar-count', data.length);
   chart.setAttribute('aria-label', `${t('overviewActivityChart')}. ${summary}`);
@@ -2681,33 +2705,22 @@ function renderOverviewGameActivity(overview) {
 function exportOperatorOverview() {
   if (!latestOverview) return;
   const overview = latestOverview;
-  const rows = language ? [
-    ['Rapport', 'Démo seulement', ''],
-    ['Généré le', new Date(overview.generatedAt).toISOString(), 'UTC'],
-    ['Période', `${overview.periodDays} derniers jours`, ''],
-    ['Comptes joueurs', overview.playerAccounts, 'comptes'],
-    ['Comptes avec courriel confirmé', overview.verifiedAccounts, 'comptes'],
-    ['Joueurs actifs dans la démo', overview.activeDemoPlayersInPeriod, 'joueurs'],
-    ['Parties de démo', overview.demoRoundsInPeriod, 'parties'],
-    ['Mises fictives', (overview.simulatedWagersCentsInPeriod / 100).toFixed(2), 'CAD · aucune valeur monétaire'],
-    ['Demandes de soutien ouvertes', overview.openSupportTickets, 'demandes'],
-    ['Fiches d’aperçu du catalogue activées', overview.enabledCatalogListings, 'fiches']
-  ] : [
-    ['Report', 'Demo only', ''],
-    ['Generated at', new Date(overview.generatedAt).toISOString(), 'UTC'],
-    ['Period', `Last ${overview.periodDays} days`, ''],
-    ['Player accounts', overview.playerAccounts, 'accounts'],
-    ['Email-verified accounts', overview.verifiedAccounts, 'accounts'],
-    ['Active demo players', overview.activeDemoPlayersInPeriod, 'players'],
-    ['Demo rounds', overview.demoRoundsInPeriod, 'rounds'],
-    ['Simulated wagers', (overview.simulatedWagersCentsInPeriod / 100).toFixed(2), 'CAD · no cash value'],
-    ['Open support tickets', overview.openSupportTickets, 'tickets'],
-    ['Enabled catalog preview listings', overview.enabledCatalogListings, 'listings']
+  const rows = [
+    [t('reportBrand'), overview.brands.find((brand) => brand.id === overview.brandId)?.name || overview.brandId, overview.brandId],
+    [t('overviewPeriodLabel'), overview.from + ' / ' + overview.to, overview.reportingTimeZone],
+    [t('reportSnapshot'), new Date(overview.generatedAt).toISOString(), 'UTC'],
+    [t('reportSource'), t(overview.scope === 'test' ? 'reportTest' : 'reportSite'), ''],
+    [t('reportSignups'), overview.totals.signups, ''], [t('reportActive'), overview.totals.active, ''],
+    [t('reportSaves'), overview.totals.saves, ''], [t('reportPublished'), overview.totals.published, t('reportSnapshot')],
+    [t('overviewPlayers'), overview.playerAccounts, ''], [t('overviewVerified'), overview.verifiedAccounts, ''],
+    [t('overviewActivePlayers').replace('{days}', overview.periodDays), overview.activeDemoPlayersInPeriod, ''],
+    [t('overviewRounds').replace('{days}', overview.periodDays), overview.demoRoundsInPeriod, ''],
+    [t('overviewWagered').replace('{days}', overview.periodDays), (overview.simulatedWagersCentsInPeriod / 100).toFixed(2), 'CAD'],
+    [t('overviewTickets'), overview.openSupportTickets, ''], [t('overviewCatalog'), overview.enabledCatalogListings, ''],
   ];
-  if (overview.showcaseDataLoaded) rows.push(language
-    ? ['Données de présentation fictives', 'Incluses', 'Les statistiques agrégées comprennent des exemples fictifs.']
-    : ['Fictional showcase data', 'Included', 'Aggregate metrics include sample presentation activity.']);
-  rows.push([language ? 'Parties quotidiennes (UTC)' : 'Daily rounds (UTC)', '', '']);
+  if (overview.undatedVerified) rows.push([t('reportUndated'), overview.undatedVerified, '']);
+  if (overview.scope === 'site' && overview.playerAccounts) rows.push([t('reportTrackingSince'), new Date(overview.startedAt).toISOString(), 'UTC']);
+  rows.push([t('overviewActivityChart'), '', overview.reportingTimeZone]);
   rows.push(...overview.demoRoundsByDay.map(({ day, rounds }) => [day, rounds, language ? 'parties' : 'rounds']));
   rows.push([language ? 'Activité par jeu de démo' : 'Demo activity by game', '', '']);
   for (const game of games) {
@@ -2722,16 +2735,13 @@ function exportOperatorOverview() {
   const blobUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = element('a', t('overviewExport'));
   link.href = blobUrl;
-  link.download = `northplay-demo-overview-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `casino-${overview.brandId}-${overview.scope}-${overview.from}-${overview.to}.csv`;
   document.body.append(link);
   link.click();
   setTimeout(() => { URL.revokeObjectURL(blobUrl); link.remove(); }, 60_000);
   $('#overview-status').textContent = t('overviewExportReady');
 }
 $('#overview-refresh').addEventListener('click', () => {
-  refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
-});
-$('#overview-period').addEventListener('change', () => {
   refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
 });
 $('#overview-export').addEventListener('click', exportOperatorOverview);
