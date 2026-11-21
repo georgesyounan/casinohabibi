@@ -271,3 +271,24 @@
 .player-record li + li { margin-block-start: .45rem; }
 .player-record form { display: grid; gap: .65rem; }
 .player-record [hidden], .player-record[hidden] { display: none; }
+
+.report-filters { display: flex; align-items: end; flex-wrap: wrap; gap: .65rem 1rem; margin: .5rem 0; }
+.report-filters label { min-width: 9.5rem; }
+.report-filters select, .report-filters input { width: 100%; }
+.admin-metrics .overview-activity-chart { gap: min(2px, calc(30% / var(--bar-count, 30))); }
+.report-context, #report-record-help { color: var(--muted); font-size: .86rem; }
+.report-shortcuts { margin-block: .9rem; gap: 1.25rem; }
+.report-shortcuts a, .report-records a { color: var(--green); }
+.admin-kpis .report-action { font-size: inherit; margin: .2rem 0 0; }
+.admin-kpis button, .report-record-link { border: 0; background: transparent; padding: .3rem 0; color: var(--green); text-decoration: underline; }
+.report-records { margin-block: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 10px; }
+.report-records h3 { margin: 0; }
+#report-record-list { margin: .5rem 0; padding: 0; list-style: none; }
+#report-record-list li { padding: .45rem 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+#report-record-list small { display: block; color: var(--muted); }
+.report-filters [hidden], .admin-kpis button[hidden] { display: none; }
+@media (max-width: 600px) {
+  .report-filters { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; }
+  .report-filters label { min-width: 0; }
+  .report-filters button { min-width: 0; }
+}

@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createSavedTitles } from '../lib/saved-titles.js';
+import { reportPeriod } from '../lib/dashboard.js';
 
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
@@ -711,4 +712,166 @@ test('existing first saves migrate once with original dates and references', () 
     assert.deepEqual(db.prepare('SELECT save_id, action, created_at FROM coming_soon_activity').all().map((row) => ({ ...row })),
       [{ save_id: 43, action: 'save', created_at: 1000 }]);
   } finally { db.close(); }
+});
+
+test('dashboard dates follow the brand calendar through both daylight-saving transitions', () => {
+  function period(from, to = from) {
+    return reportPeriod(new URLSearchParams({ from, to }), 'America/Toronto', Date.UTC(2025, 0, 3), () => { throw new Error('invalid dates'); });
+  }
+  const spring = period('2024-03-10');
+  assert.equal(spring.start, Date.parse('2024-03-10T05:00:00Z'));
+  assert.equal(spring.end - spring.start, 23 * 3_600_000);
+  const fall = period('2024-11-03');
+  assert.equal(fall.start, Date.parse('2024-11-03T04:00:00Z'));
+  assert.equal(fall.end - fall.start, 25 * 3_600_000);
+  assert.equal(period('2024-01-01', '2024-12-31').days, 366);
+  for (const dates of [['2024-02-30'], ['2025-02-01'], ['2024-05-02','2024-05-01'], ['2024-01-01','2025-01-01']]) {
+    assert.throws(() => period(...dates), /invalid dates/);
+  }
+});
+
+test('dashboard totals match paged records, honour roles, and isolate catalogue eligibility, test data and history', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const [staff, editor, phone, laptop, guest] = Array.from({ length: 5 }, () => client(base));
+  await staff('admin/login', staffCredentials);
+  const credentials = { email: 'dashboard-editor@example.test', password: 'example-editor-password' };
+  await staff('admin/staff', { ...credentials, role: 'operator_content' });
+  await editor('admin/login', credentials);
+  assert.equal((await guest('admin/overview')).status, 401);
+  await guest('coming-soon');
+  assert.deepEqual((await staff('admin/overview')).data.totals, { signups: 0, active: 0, saves: 0, published: 0 });
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  const config = (jsonPath, value) => db.prepare("UPDATE tenant_config_versions SET config = json_set(config, ?, json(?)) WHERE tenant_id = 'sandbox' AND status = 'published'").run(jsonPath, JSON.stringify(value));
+  config('$.reportingTimeZone', 'America/Toronto');
+  config('$.displayMarket', 'CA-QC');
+  const create = async (name, extra) => {
+    const draft = (await staff('admin/coming-soon', cardDraft(name, extra))).data.title;
+    return (await staff('admin/coming-soon', { action: 'publish', slug: draft.slug, version: draft.version })).data.title;
+  };
+  const first = await create('Orchard', { displayMarket: 'CA', locales: ['fr-CA'] });
+  await create('Unlisted in Quebec', { displayMarket: 'MX' });
+  await staff('admin/coming-soon', cardDraft('Draft only'));
+  await register(phone);
+  const playerId = (await laptop('login', playerCredentials)).data.id;
+  await phone('account');
+  await laptop('coming-soon');
+  const change = (device, method) => device('me/saved/' + first.id + '?locale=fr-CA', undefined, undefined, {}, method);
+  const firstSave = (await change(phone, 'PUT')).data;
+  await change(laptop, 'DELETE');
+  await change(laptop, 'PUT');
+  await phone('logout', {});
+  await laptop('logout', {});
+  const firstVerification = db.prepare('SELECT first_verified_at FROM players WHERE id = ?').get(playerId).first_verified_at;
+  db.prepare('UPDATE players SET email_verified = 0 WHERE id = ?').run(playerId);
+  db.prepare('UPDATE players SET email_verified = 1 WHERE id = ?').run(playerId);
+  assert.equal(db.prepare('SELECT first_verified_at FROM players WHERE id = ?').get(playerId).first_verified_at, firstVerification);
+  const summary = (await staff('admin/overview?days=7')).data;
+  assert.deepEqual(summary.totals, { signups: 1, active: 1, saves: 1, published: 1 });
+  assert.deepEqual((await editor('admin/overview?days=7')).data.totals, summary.totals);
+  assert.equal(summary.reportingTimeZone, 'America/Toronto');
+  assert.equal(summary.brands.length, 1);
+  const qs = new URLSearchParams({ brand: summary.brandId, scope: summary.scope, from: summary.from, to: summary.to,
+    asOf: summary.generatedAt, stamp: summary.catalogueStamp, zone: summary.reportingTimeZone });
+  const list = (who, metric, more = '') => who('admin/overview/records?' + qs + '&metric=' + metric + more);
+  for (const [metric, total] of Object.entries(summary.totals)) {
+    const result = (await list(staff, metric)).data;
+    assert.equal(result.total, total);
+    assert.equal(result.entries.length, total);
+    const row = result.entries[0];
+    if (metric === 'published') {
+      assert.equal(row.slug, first.slug);
+      assert.deepEqual(row.locales, ['fr-CA']);
+      assert.ok(row.at > 0);
+    } else {
+      assert.equal(row.playerId, playerId);
+      if (metric === 'saves') assert.equal(row.activityId, firstSave.activityId);
+    }
+    assert.equal((await list(editor, metric)).status, metric === 'published' ? 200 : 403);
+  }
+  assert.equal((await staff('admin/overview?brand=other')).status, 403);
+  assert.equal((await staff('admin/overview/records?metric=active&brand=other')).status, 403);
+  assert.equal((await staff('admin/overview?days=1')).status, 400);
+  assert.equal((await staff('admin/overview?days=7&from=2024-08-13&to=2024-08-23')).status, 400);
+  assert.equal((await list(staff, 'saves', '&before=-1')).status, 400);
+  assert.equal((await list(guest, 'active')).status, 401);
+  await staff('admin/coming-soon', { action: 'archive', slug: first.slug, version: first.version });
+  assert.equal((await list(staff, 'published')).status, 409);
+  const afterArchive = (await staff('admin/overview')).data;
+  assert.equal(afterArchive.totals.published, 0);
+  assert.equal(afterArchive.totals.saves, 1);
+  await create('Enabled language', { locales: ['en-CA'] });
+  config('$.enabledLocales', ['fr-CA']);
+  assert.equal((await staff('admin/overview')).data.totals.published, 0);
+  config('$.enabledLocales', ['en-CA','fr-CA']);
+  config('$.enabledSections.comingSoon', false);
+  assert.equal((await staff('admin/overview')).data.totals.published, 0);
+  config('$.reportingTimeZone', 'UTC');
+  assert.equal((await list(staff, 'active')).status, 409);
+  config('$.reportingTimeZone', 'America/Toronto');
+  const insert = db.prepare("INSERT INTO players (email,password,tenant_id,email_verified,report_fixture,first_verified_at) VALUES (?,'unused','sandbox',1,?,?)");
+  insert.run('example-showcase@example.invalid', 1, summary.generatedAt);
+  insert.run('unknown-date@example.invalid', 0, null);
+  const next = (await staff('admin/overview?scope=test')).data;
+  assert.equal(next.totals.signups, 1);
+  assert.equal(next.playerAccounts, 1);
+  const site = (await staff('admin/overview')).data;
+  assert.equal(site.scope, 'site');
+  assert.equal(site.undatedVerified, 1);
+  assert.equal(site.verifiedAccounts, 2);
+  assert.equal(site.totals.signups, 1);
+  const midnight = Date.parse('2024-03-10T05:00:00Z');
+  for (let n = 0; n < 12; n++) insert.run('range-' + n + '@example.invalid', 0, midnight + n);
+  insert.run('before-day@example.invalid', 0, midnight - 1);
+  insert.run('after-day@example.invalid', 0, Date.parse('2024-03-11T04:00:00Z'));
+  const range = 'from=2024-03-10&to=2024-03-10';
+  assert.equal((await staff('admin/overview?' + range)).data.totals.signups, 12);
+  const detail = 'admin/overview/records?metric=signups&' + range;
+  const page1 = (await staff(detail)).data;
+  const page2 = (await staff(detail + '&before=' + page1.nextCursor)).data;
+  assert.equal(page1.entries.length, 10);
+  assert.equal(page2.entries.length, 2);
+  assert.equal(page2.nextCursor, null);
+  assert.equal(page1.total, 12);
+  assert.equal(new Set([...page1.entries, ...page2.entries].map((entry) => entry.id)).size, 12);
+});
+
+test('a seeded test brand goes from five to six previews and a second authorized brand keeps its own report', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const staff = client(base), other = client(base), player = client(base);
+  await staff('admin/login', staffCredentials);
+  execFileSync(process.execPath, ['scripts/demo-seed.js'], { env: { ...process.env, APP_ENV: 'development', DATA_DIR: dirname(database) } });
+  const overview = async (scope = '') => (await staff('admin/overview?days=90' + (scope ? '&scope=' + scope : ''))).data;
+  const initial = await overview();
+  assert.equal(initial.scope, 'test');
+  assert.deepEqual(initial.totals, { signups: 8, active: 8, saves: 0, published: 0 });
+  for (let i = 1; i <= 6; i++) {
+    const { title } = (await staff('admin/coming-soon', cardDraft('Test card ' + i))).data;
+    await staff('admin/coming-soon', { action: 'publish', slug: title.slug, version: title.version });
+    assert.equal((await overview()).totals.published, i);
+  }
+  await register(player);
+  const publicCards = (await player('coming-soon')).data.titles;
+  await player('me/saved/' + publicCards[0].id, undefined, undefined, {}, 'PUT');
+  await player('me/saved/' + publicCards[0].id, undefined, undefined, {}, 'PUT');
+  assert.deepEqual((await overview()).totals, { signups: 9, active: 9, saves: 1, published: 6 });
+  assert.deepEqual((await overview('site')).totals, { signups: 0, active: 0, saves: 0, published: 0 });
+  assert.equal((await staff('admin/overview/records?scope=test&metric=published')).data.entries.length, 6);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.exec(`INSERT INTO tenants(id,slug,name,status,created_at) VALUES ('second','second','Internal Tenant Two','active',1);
+    UPDATE tenant_domains SET tenant_id = 'second' WHERE host = 'localhost';
+    INSERT INTO tenant_config_versions(tenant_id,version,config,status,created_at)
+      SELECT 'second',version,json_set(config,'$.brandName','Second Brand'),'published',created_at FROM tenant_config_versions WHERE status = 'published' AND tenant_id = 'sandbox' ORDER BY version DESC LIMIT 1;
+    INSERT INTO tenant_staff_memberships(tenant_id,staff_id,role,status,created_at)
+      SELECT 'second',staff_id,'operator_support','active',1 FROM tenant_staff_memberships WHERE tenant_id = 'sandbox';`);
+  assert.ok((await overview()).brands.some((brand) => brand.id === 'second' && brand.name === 'Second Brand' && brand.host === 'localhost'));
+  assert.equal((await staff('admin/overview', undefined, 'localhost')).status, 401);
+  assert.equal((await other('admin/login', staffCredentials, 'localhost')).status, 200);
+  const second = (await other('admin/overview', undefined, 'localhost')).data;
+  assert.equal(second.brandId, 'second');
+  assert.deepEqual(second.totals, { signups: 0, active: 0, saves: 0, published: 0 });
+  db.exec("UPDATE tenant_staff_memberships SET status = 'disabled' WHERE tenant_id = 'second'");
+  assert.equal((await overview()).brands.length, 1);
+  assert.equal((await other('admin/overview', undefined, 'localhost')).status, 401);
 });
