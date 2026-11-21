@@ -1148,6 +1148,10 @@ test('website publication survives request chunk boundaries, concurrent edits an
   assert.deepEqual(log.publication, { action: 'publish', record: 'website-content/help/accents' });
   assert.equal(log.tenantId, 'sandbox');
   assert.equal(log.errorCode, 'internal');
+  const failedItem = (await staff('admin/publication-followup?q=' + header['X-Request-ID'])).data.items[0];
+  assert.equal(failedItem.reason, 'unavailable');
+  assert.equal(failedItem.record, 'website-content/help/accents');
+  assert.deepEqual((await staff('admin/publication-followup?q=preferences')).data.items.map((item) => item.id), [failedItem.id]);
   assert.equal((await client(base)('help/accents')).status, 404);
   assert.equal((await staff('admin/website-content/help/accents')).data.version, 2);
   db.exec('DROP TRIGGER deny_publication');
@@ -1155,6 +1159,67 @@ test('website publication survives request chunk boundaries, concurrent edits an
   assert.equal(published.status, 200);
   assert.deepEqual((await staff('admin/website-content', action, undefined, header)).data, published.data);
   assert.equal((await staff('admin/website-content/help/accents')).data.history.length, 1);
+  const resolved = (await staff('admin/publication-followup?state=resolved')).data.items;
+  assert.deepEqual(resolved.map((row) => [row.id, row.auditId]), [[failedItem.id, published.data.auditId]]);
+});
+
+test('publication follow-up limits references by brand and grant, pages attempts, and resolves the matching record on success', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const [owner, publisher, other, guest] = Array.from({ length: 4 }, () => client(base));
+  await owner('admin/login', staffCredentials);
+  const first = { email: 'publisher-one@example.test', password: 'fixture-password-one' };
+  const second = { email: 'publisher-two@example.test', password: 'fixture-password-two' };
+  for (const [who, creds] of [[publisher, first], [other, second]]) {
+    await owner('admin/staff', { ...creds, role: 'operator_content', publishCatalogue: true, reason: 'Publish the test catalogue' });
+    assert.equal((await who('admin/login', creds)).status, 200);
+  }
+  const follow = 'admin/publication-followup', endpoint = 'admin/coming-soon';
+  const input = cardDraft('Midnight', { titleFr: 'Étoiles de nuit', collectionEn: 'Night journey', collectionFr: '' });
+  const title = (await publisher(endpoint, input)).data.title;
+  const operation = { action: 'publish', slug: title.slug, version: title.version };
+  const header = { 'X-Request-ID': randomUUID() };
+  assert.equal((await guest(follow)).status, 401);
+  assert.deepEqual((await owner('admin/overview')).data.publicationFollowup, { total: 0, open: 0 });
+  for (let i = 0; i < 2; i++) assert.equal((await publisher(endpoint, operation, undefined, header)).data.error, 'comingSoonCollectionTranslation');
+  assert.deepEqual((await publisher('admin/overview')).data.publicationFollowup, { total: 1, open: 1 });
+  assert.deepEqual((await other(follow)).data.items, []);
+  const problem = (await owner(follow + '?q=' + header['X-Request-ID'])).data.items[0];
+  assert.deepEqual([problem.record, problem.titleEn, problem.attempts, problem.actor], ['coming-soon/midnight', 'Midnight', 2, first.email]);
+  assert.equal(problem.auditId, null);
+  assert.deepEqual((await owner(follow + '?q=etoiles+nuit')).data.items.map((item) => item.id), [problem.id]);
+  assert.deepEqual((await other(follow + '?q=etoiles+nuit')).data.items, []);
+  assert.equal((await other(endpoint, operation)).data.error, 'comingSoonCollectionTranslation');
+  assert.equal((await owner(follow + '?q=midnight')).data.total, 2);
+  const updated = (await publisher(endpoint, { ...input, slug: title.slug, version: title.version, collectionFr: 'Voyage de nuit' })).data.title;
+  assert.equal((await owner(follow)).data.total, 2);
+  const published = (await owner(endpoint, { ...operation, version: updated.version })).data;
+  assert.ok(published.auditId);
+  assert.deepEqual((await owner(follow)).data.counts, { total: 2, open: 0 });
+  assert.equal((await owner(follow + '?state=resolved&q=' + header['X-Request-ID'])).data.items[0].auditId, published.auditId);
+  const personal = (await publisher(follow + '?state=resolved')).data.items;
+  assert.equal(personal.length, 1);
+  assert.ok(personal[0].resolvedAt);
+  assert.equal(personal[0].auditId, null);
+  // A successful action on another record cannot clear an outstanding problem.
+  for (let n = 0; n < 7; n++) {
+    const draft = (await publisher(endpoint, { ...input, titleEn: 'Record ' + n })).data.title;
+    await publisher(endpoint, { ...operation, slug: draft.slug, version: draft.version });
+  }
+  assert.equal((await owner(endpoint, { action: 'archive', slug: title.slug, version: published.title.version })).status, 200);
+  const page = (await owner(follow)).data, tail = (await owner(follow + '?page=2')).data;
+  assert.deepEqual([page.total, page.items.length, tail.items.length], [7, 6, 1]);
+  assert.equal(new Set([...page.items, ...tail.items].map((r) => r.id)).size, 7);
+  assert.equal((await owner(follow + '?q=record-2')).data.total, 1);
+  assert.equal((await owner(follow + '?state=all')).status, 400);
+  assert.equal((await owner(follow + '?page=-1')).status, 400);
+  assert.equal((await owner('admin/staff/role', { email: first.email, role: 'operator_content', publishCatalogue: false, reason: 'End test publishing shift' })).status, 200);
+  assert.equal((await publisher(follow)).status, 403);
+  assert.equal((await publisher('admin/overview')).data.publicationFollowup, null);
+  const db = new DatabaseSync(database);
+  try {
+    db.exec("INSERT INTO tenants VALUES('other','other','Other Brand','active',1); UPDATE tenant_domains SET tenant_id='other' WHERE host='localhost'");
+    assert.equal((await owner(follow, undefined, 'localhost')).status, 401);
+  } finally { db.close(); }
 });
 
 test('P1 recovery drill restores account, catalogue, saved activity, website revisions and publication receipts into a second instance', async (t) => {

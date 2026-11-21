@@ -336,3 +336,11 @@
 #site-history-list { padding-inline: 2rem 1rem; overflow-wrap: anywhere; }
 #site-reload { color: var(--green); }
 #site-status, #coming-soon-admin-status { overflow-wrap: anywhere; }
+.followup-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .7rem; }
+.followup-filters label { flex: 1 1 12rem; min-width: 0; }
+#followup-count, #followup-status, #followup-list small { color: var(--muted); }
+#followup-count { font-weight: 500; }
+#followup-list { padding: 0; list-style: none; }
+#followup-list li { display: grid; gap: .35rem; padding: .9rem 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+#followup-list li p { margin: 0; }
+#followup-list .followup-title { color: var(--green); font-weight: 700; justify-self: start; }
