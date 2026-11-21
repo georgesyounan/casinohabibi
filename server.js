@@ -660,6 +660,11 @@ async function api(req, res, path, tenantId, requestId) {
     const staff = staffContext(req, tenantId, roles);
     if (!adminEnabled) fail(503, 'adminDisabled');
     if (permission && !staffPermissions(staff)[permission]) fail(403, 'staffForbidden');
+    if (['publish', 'archive'].includes(input?.action) && typeof input.slug === 'string' && input.slug.length <= 64 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug)) {
+      if (path === '/api/admin/coming-soon') req.publication = { action: input.action, record: 'coming-soon/' + input.slug };
+      if (path === '/api/admin/website-content' && ['help', 'banner'].includes(input.kind))
+        req.publication = { action: input.action, record: 'website-content/' + input.kind + '/' + input.slug };
+    }
     return staff;
   }, work);
   const savedResource = ['PUT', 'DELETE'].includes(req.method) && path.match(/^\/api\/me\/saved\/([1-9]\d{0,15})$/);
@@ -1794,6 +1799,7 @@ createServer(async (req, res) => {
   res.setHeader('X-Request-ID', requestId);
   res.on('finish', () => {
     const entry = { event: 'http_request', requestId, method: req.method, path, status: res.statusCode, durationMs: Date.now() - startedAt };
+    if (req.publication) entry.publication = req.publication;
     if (tenantId) entry.tenantId = tenantId;
     if (errorCode) entry.errorCode = errorCode;
     console.log(JSON.stringify(entry));

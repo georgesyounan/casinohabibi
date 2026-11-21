@@ -7,6 +7,7 @@ import { createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createSavedTitles } from '../lib/saved-titles.js';
@@ -15,8 +16,9 @@ import { reportPeriod } from '../lib/dashboard.js';
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
-async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'northplay-test-'));
+async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false,
+  dataDirectory, encryptionKey = randomBytes(32).toString('hex'), onRequest } = {}) {
+  const directory = dataDirectory || await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
     const db = new DatabaseSync(database);
@@ -39,9 +41,9 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
     env: {
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
-      PROVIDER_KEY_ENCRYPTION: randomBytes(32).toString('hex'), SECURE_COOKIES: '0',
+      PROVIDER_KEY_ENCRYPTION: encryptionKey, SECURE_COOKIES: '0',
       SANDBOX_TENANT_HOSTS: sandboxTenantHosts,
-      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
+      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_SENDMAIL: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
       ...(captureMail && { TEST_MAILBOX: mailbox, PUBLIC_BASE_URL: 'https://localhost' + appBasePath, RESET_EMAIL_API_KEY: 'fixture', RESET_EMAIL_FROM: 'test@example.test' })
     }
   });
@@ -51,13 +53,18 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
   t.after(async () => {
     server.kill();
     await exited;
-    await rm(directory, { recursive: true, force: true });
+    if (!dataDirectory) await rm(directory, { recursive: true, force: true });
   });
   await Promise.race([
     once(server.stdout, 'data'),
     exited.then(([code]) => assert.fail(`Server exited with code ${code}\n${errors.join('')}`))
   ]);
-  server.stdout.resume();
+  if (onRequest) {
+    createInterface({ input: server.stdout }).on('line', (line) => {
+      const entry = JSON.parse(line);
+      if (entry.event === 'http_request') onRequest(entry);
+    });
+  } else server.stdout.resume();
   return { base: `http://127.0.0.1:${port}`, database, readMail: async () => (await readFile(mailbox, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)) };
 }
 
@@ -1005,8 +1012,13 @@ test('website content keeps drafts private, publishes single bilingual revisions
   assert.equal((await guest('website-content')).data.help.length, 0);
 });
 
-test('website publication survives request chunk boundaries, concurrent edits and an audited transaction retry', async (t) => {
-  const { base, database } = await startSandbox(t);
+test('website publication survives request chunk boundaries, concurrent edits and an audited transaction retry', { timeout: 20_000 }, async (t) => {
+  const header = { 'X-Request-ID': randomUUID() };
+  let observeFailure;
+  const failedRequest = new Promise((resolve) => { observeFailure = resolve; });
+  const { base, database } = await startSandbox(t, { onRequest(entry) {
+    if (entry.requestId === header['X-Request-ID'] && entry.status === 500) observeFailure(entry);
+  } });
   const staff = client(base);
   const login = await staff('admin/login', staffCredentials);
   const cookie = login.setCookies[0].split(';')[0];
@@ -1057,11 +1069,16 @@ test('website publication survives request chunk boundaries, concurrent edits an
   const db = new DatabaseSync(database);
   t.after(() => db.close());
   const action = { kind: 'help', slug: 'accents', version: 2, action: 'publish' };
-  const header = { 'X-Request-ID': randomUUID() };
   db.exec(
     "CREATE TRIGGER deny_publication BEFORE INSERT ON staff_events WHEN NEW.action='website_content_published' BEGIN SELECT RAISE(ABORT,'test rollback'); END"
   );
-  assert.equal((await staff('admin/website-content', action, undefined, header)).status, 500);
+  const failed = await staff('admin/website-content', action, undefined, header);
+  assert.equal(failed.status, 500);
+  assert.equal(failed.data.requestId, header['X-Request-ID']);
+  const log = await failedRequest;
+  assert.deepEqual(log.publication, { action: 'publish', record: 'website-content/help/accents' });
+  assert.equal(log.tenantId, 'sandbox');
+  assert.equal(log.errorCode, 'internal');
   assert.equal((await client(base)('help/accents')).status, 404);
   assert.equal((await staff('admin/website-content/help/accents')).data.version, 2);
   db.exec('DROP TRIGGER deny_publication');
@@ -1069,4 +1086,112 @@ test('website publication survives request chunk boundaries, concurrent edits an
   assert.equal(published.status, 200);
   assert.deepEqual((await staff('admin/website-content', action, undefined, header)).data, published.data);
   assert.equal((await staff('admin/website-content/help/accents')).data.history.length, 1);
+});
+
+test('P1 recovery drill restores account, catalogue, saved activity, website revisions and publication receipts into a second instance', async (t) => {
+  const encryptionKey = randomBytes(32).toString('hex');
+  const source = await startSandbox(t, { encryptionKey });
+  const staff = client(source.base),
+    player = client(source.base);
+  await staff('admin/login', staffCredentials);
+  await register(player);
+  const account = (await player('account')).data;
+  const card = (await staff('admin/coming-soon', cardDraft('Neon Orchard'))).data.title;
+  const publishedCard = (
+    await staff('admin/coming-soon', { action: 'publish', slug: card.slug, version: card.version })
+  ).data;
+  const savePath = 'me/saved/' + card.id;
+  const saved = (await player(savePath, undefined, undefined, {}, 'PUT')).data;
+  assert.ok(publishedCard.auditId && saved.activityId);
+  const path = 'admin/website-content',
+    page = { kind: 'help', slug: 'saved-titles' };
+  const content = {
+    titleEn: 'Saving titles',
+    titleFr: 'Mes favoris',
+    bodyEn: 'How to save a title.',
+    bodyFr: 'Comment garder un favori.',
+    artwork: '',
+    altEn: '',
+    altFr: '',
+    linkEn: '',
+    linkFr: '',
+    target: 'title/' + card.slug
+  };
+  const draft = (await staff(path, { ...page, action: 'save', version: 0, content })).data;
+  const operation = { ...page, action: 'publish', version: draft.version };
+  const header = { 'X-Request-ID': randomUUID() };
+  const publishedPage = (await staff(path, operation, undefined, header)).data;
+  assert.ok(publishedPage.auditId);
+  const newDraft = (
+    await staff(path, {
+      ...page,
+      action: 'save',
+      version: publishedPage.version,
+      content: { ...content, titleFr: 'Brouillon privé' }
+    })
+  ).data;
+  assert.equal(newDraft.status, 'changed');
+  const events = (await staff('admin/audit')).data.events.filter((e) =>
+    [publishedCard.auditId, publishedPage.auditId].includes(e.id)
+  );
+  assert.equal(events.length, 2);
+  const root = await mkdtemp(join(tmpdir(), 'northplay-restore-drill-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const backup = join(root, 'snapshot.sqlite'),
+    restoredDirectory = join(root, 'restored');
+  const dbOp = (...args) =>
+    JSON.parse(
+      execFileSync(process.execPath, ['scripts/db-ops.js', ...args], {
+        env: { ...process.env, APP_ENV: 'development', DATA_DIR: dirname(source.database) },
+        encoding: 'utf8'
+      })
+    );
+  const snapshot = dbOp('backup', backup);
+  assert.equal(dbOp('verify', backup).sha256, snapshot.sha256);
+  assert.equal(dbOp('prepare-restore', backup, restoredDirectory).sourceSha256, snapshot.sha256);
+  assert.equal((await staff(path, { ...page, action: 'archive', version: newDraft.version })).status, 200);
+  await player(savePath, undefined, undefined, {}, 'DELETE');
+  await staff('admin/coming-soon', { action: 'archive', slug: card.slug, version: publishedCard.title.version });
+  assert.equal((await client(source.base)('help/saved-titles')).status, 404);
+  await t.test('start the restored service and verify the snapshot through its public and staff APIs', async (t) => {
+    const restored = await startSandbox(t, { dataDirectory: restoredDirectory, encryptionKey });
+    assert.equal((await (await fetch(restored.base + '/readyz')).json()).status, 'ready');
+    const owner = client(restored.base),
+      member = client(restored.base),
+      visitor = client(restored.base);
+    await owner('admin/login', staffCredentials);
+    const identity = (await member('login', playerCredentials)).data;
+    assert.equal(identity.id, account.id);
+    assert.equal(identity.emailVerified, 1);
+    const listing = (await visitor('coming-soon/' + card.slug)).data;
+    assert.deepEqual([listing.id, listing.slug], [card.id, card.slug]);
+    const restoredCard = (await owner('admin/coming-soon')).data.find((row) => row.id === card.id);
+    assert.equal(restoredCard.publishedVersion, publishedCard.title.publishedVersion);
+    assert.deepEqual(
+      (await member('me/saved')).data.titles.map((row) => row.activityId),
+      [saved.activityId]
+    );
+    assert.deepEqual((await member(savePath, undefined, undefined, {}, 'PUT')).data, saved);
+    const profile = (await owner('admin/players/' + account.id)).data;
+    assert.deepEqual(
+      profile.savedActivity.entries.map((row) => row.id),
+      [saved.activityId]
+    );
+    const publicPage = (await visitor('help/saved-titles?locale=fr-CA')).data;
+    assert.deepEqual([publicPage.revision, publicPage.title], [publishedPage.revision, 'Mes favoris']);
+    assert.match(publicPage.link.href, /\/coming-soon\/neon-orchard\?/);
+    const editorial = (await owner(path + '/help/saved-titles')).data;
+    assert.deepEqual([editorial.draftRevision, editorial.content.titleFr], [newDraft.revision, 'Brouillon privé']);
+    assert.deepEqual((await owner(path, operation, undefined, header)).data, publishedPage);
+    const restoredEvents = (await owner('admin/audit')).data.events;
+    assert.deepEqual(
+      restoredEvents.filter((e) => events.some((original) => e.id === original.id)),
+      events
+    );
+    assert.deepEqual(
+      restoredEvents.filter((e) => e.correlationId === header['X-Request-ID']).map((e) => e.id),
+      [publishedPage.auditId]
+    );
+    assert.equal((await client(source.base)('help/saved-titles')).status, 404);
+  });
 });

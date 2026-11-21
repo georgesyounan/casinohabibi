@@ -306,3 +306,4 @@
 #site-editor-heading, #site-revision { margin: 0; }
 #site-history-list { padding-inline: 2rem 1rem; overflow-wrap: anywhere; }
 #site-reload { color: var(--green); }
+#site-status, #coming-soon-admin-status { overflow-wrap: anywhere; }

@@ -346,6 +346,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
       adminStatus.textContent = result.auditId ? `${message} ${t('comingSoonAuditRef').replace('{id}', result.auditId)}` : message;
     } catch (error) {
       adminStatus.textContent = t(error.message);
+      if (error.requestId) adminStatus.append(' · ' + t('supportReference') + ' ' + error.requestId);
       if (error.message === 'comingSoonConflict') void loadDrafts(false);
     } finally {
       saving = false;

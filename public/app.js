@@ -440,6 +440,7 @@ function updateSessionReminder() {
   displayedReminderLanguage = language;
 }
 
+const pendingPublications = new Map();
 async function api(path, data, method = 'POST') {
   const headers = {};
   const options = { method, headers };
@@ -449,16 +450,38 @@ async function api(path, data, method = 'POST') {
   }
   const auditedMutation = data !== undefined && /^(admin\/(config|website-content|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
   const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
-  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
+  const publication = (path === 'admin/website-content' || path === 'admin/coming-soon') &&
+    ['publish', 'archive'].includes(data?.action);
+  let attempt;
+  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) {
+    if (publication) {
+      const signature = JSON.stringify([data.kind, data.slug, data.action, data.version]);
+      attempt = pendingPublications.get(path);
+      if (attempt?.signature !== signature) {
+        attempt = { signature, id: crypto.randomUUID() };
+        pendingPublications.set(path, attempt);
+      }
+    }
+    headers['X-Request-ID'] = attempt?.id || crypto.randomUUID();
+  }
   const send = async () => {
     const response = await fetch(appPath('/api/' + path), options);
     return { response, payload: await response.json() };
   };
-  const { response, payload } = await send().catch((error) => {
+  const { response, payload } = await send().catch(async (error) => {
     if (!headers['X-Request-ID']) throw error;
-    return send();
+    try { return await send(); }
+    catch (retryError) {
+      retryError.requestId = headers['X-Request-ID'];
+      throw retryError;
+    }
   });
-  if (!response.ok) throw new Error(payload.error);
+  if (attempt && response.status < 500 && pendingPublications.get(path) === attempt) pendingPublications.delete(path);
+  if (!response.ok) {
+    const error = new Error(payload.error);
+    error.requestId = response.headers.get('X-Request-ID') || headers['X-Request-ID'];
+    throw error;
+  }
   return payload;
 }
 

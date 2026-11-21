@@ -468,6 +468,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       if (id === editRequest) {
         conflict = committed || error.message === 'siteContentConflict';
         say(committed ? 'siteContentRefreshNeeded' : error.message);
+        if (error.requestId) el('site-status').append(' · ' + t('supportReference') + ' ' + error.requestId);
       }
     } finally {
       if (id === editRequest) {

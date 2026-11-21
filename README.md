@@ -140,6 +140,10 @@ Staging and production use the matching scripts, such as `npm run db:backup:stag
 
 Backups contain player and operational data. Store them outside the application checkout with restricted access and encrypted storage, and copy them to a separate failure domain using your deployment's protected backup process. The CLI does not schedule backups, encrypt them, or delete old backups. Test restore procedures regularly in an isolated directory.
 
+Run `node --test --test-name-pattern="P1 recovery drill" test/sandbox.test.js` for the phase-one restore drill. It creates a synthetic verified player, a saved catalogue card, a published bilingual help page and an unpublished revision. It snapshots the running test service, verifies the manifest, and starts a second local instance using the restored data and the same test encryption key. The assertions compare the original account, saved activity, revisions, audit IDs and replay receipt. The drill also changes the source after the snapshot to verify that the two instances operate independently.
+
+If a catalogue or website publication fails, its editor displays a request reference. Look up the reference as `requestId` in the service's JSON log to find the brand, action, record and status. Retrying the same publication in the editor after an interrupted response or server error reuses the reference. After success, the Audit Log matches it to the committed revision. Run `node --test --test-name-pattern="website publication survives" test/sandbox.test.js` to exercise a failed publication, trace it and retry.
+
 This prototype uses simulated funds. An operator with provider access can upload or paste a JSON catalog into the admin area; the lobby validates the bilingual titles and categories, then previews added, changed, unchanged, and removed listings before syncing. The server checks that the catalog has not changed since that preview. The protected catalog API stores listings only and does not launch games. Provider connection tests, launch sessions, and real-money services are future work.
 
 ## Verification
