@@ -1,6 +1,15 @@
 import { games } from './catalog.js';
+import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
+import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
+const appBasePath = document.documentElement.dataset.appBasePath;
+const appPath = (path) => appBasePath + path;
+const currentRoute = location.pathname.startsWith(appPath('/'))
+  ? location.pathname.slice(appBasePath.length) : location.pathname;
+const isAdminPage = currentRoute === '/admin';
 const copy = {
+  ...comingSoonCopy,
+  ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
   skipToContent: ['Skip to main content', 'Passer au contenu principal'],
@@ -53,7 +62,7 @@ const copy = {
   browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
   clearGameSearch: ['Clear search', 'Effacer la recherche'],
   providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
-  catalogResultSummary: ['Showing {games} playable demo games · {previews} non-playable provider previews', 'Jeux fictifs jouables : {games} · Aperçus de fournisseurs non jouables : {previews}'],
+  catalogResultSummary: ['Playable demo games: {games} · Previews: {previews}', 'Jeux fictifs jouables : {games} · Aperçus : {previews}'],
   addFavorite: ['Add {game} to favorites', 'Ajouter {game} aux favoris'], removeFavorite: ['Remove {game} from favorites', 'Retirer {game} des favoris'], noFavoriteGames: ['You have not saved any games yet.', 'Vous n’avez pas encore enregistré de jeux.'],
   favoritesLocal: ['Favorites saved in this browser.', 'Favoris enregistrés dans ce navigateur.'], favoritesSynced: ['Favorites saved to your account.', 'Favoris enregistrés dans votre compte.'], favoriteSaveFailed: ['Could not sync favorites to your account. The change was reverted.', 'Impossible de synchroniser les favoris avec votre compte. Le changement a été annulé.'],
   disclaimer: ['Simulated funds only. No cash value.', 'Fonds fictifs uniquement. Aucune valeur monétaire.'],
@@ -269,6 +278,9 @@ const copy = {
 
 const $ = (selector) => document.querySelector(selector);
 const auditActionLabels = {
+  coming_soon_draft_saved: comingSoonCopy.comingSoonAuditSaved,
+  coming_soon_published: comingSoonCopy.comingSoonAuditPublished,
+  coming_soon_archived: comingSoonCopy.comingSoonAuditArchived,
   staff_login: ['Staff sign-in', 'Connexion du personnel'], staff_logout: ['Staff sign-out', 'Déconnexion du personnel'], staff_password_changed: ['Staff password changed', 'Mot de passe du personnel modifié'],
   staff_mfa_setup: ['Authenticator setup started', 'Configuration de l’authentificateur commencée'], staff_mfa_enabled: ['Two-step verification enabled', 'Vérification en deux étapes activée'], staff_mfa_disabled: ['Two-step verification disabled', 'Vérification en deux étapes désactivée'],
   staff_created: ['Staff account added', 'Compte du personnel ajouté'], staff_disabled: ['Staff account disabled', 'Compte du personnel désactivé'], staff_reenabled: ['Staff account re-enabled', 'Compte du personnel réactivé'], staff_role_changed: ['Staff role changed', 'Rôle du membre du personnel modifié'],
@@ -317,6 +329,7 @@ try {
 }
 let favorites = new Set(guestFavorites);
 let favoriteSavePending = false;
+let favoriteStatusKey;
 let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let result;
@@ -373,7 +386,7 @@ function demoBalanceResetDetails(rawOutcome) {
 function updateSessionReminder() {
   const banner = $('#session-reminder');
   if (!banner) return;
-  if (!player || !playerSessionStartedAt || location.pathname === '/admin') {
+  if (!player || !playerSessionStartedAt || isAdminPage) {
     banner.hidden = true;
     displayedReminderPeriod = undefined;
     displayedReminderLanguage = undefined;
@@ -418,7 +431,7 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const response = await fetch('/api/' + path, options);
+  const response = await fetch(appPath('/api/' + path), options);
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error);
   return payload;
@@ -427,9 +440,9 @@ async function api(path, data, method = 'POST') {
 function applyTenant(config) {
   tenantBrandName = config.brandName;
   tenantFeaturedGameIds = Array.isArray(config.featuredGameIds) ? config.featuredGameIds : ['gold', 'roulette'];
-  renderFeaturedGameEditor(tenantFeaturedGameIds);
+  if (savedTenantDraftSignature === undefined) renderFeaturedGameEditor(tenantFeaturedGameIds);
   const favicon = $('#tenant-favicon');
-  favicon.href = config.brandFavicon || '/favicon.svg';
+  favicon.href = config.brandFavicon || appPath('/favicon.svg');
   if (config.brandFavicon) favicon.type = config.brandFavicon.startsWith('data:image/png;') ? 'image/png' : 'image/webp';
   else favicon.type = 'image/svg+xml';
   tenantPolicyLinks = {
@@ -534,7 +547,7 @@ function updateTenantPreview() {
   $('#tenant-preview-name').textContent = brandName || t('previewBrandPlaceholder');
   $('#tenant-preview-email').textContent = supportEmail || t('previewEmailPlaceholder');
   $('#tenant-preview-swatch').style.backgroundColor = accentColor || '#b8ec9d';
-  $('#tenant-preview-favicon').src = form.elements.brandFavicon.value || '/favicon.svg';
+  $('#tenant-preview-favicon').src = form.elements.brandFavicon.value || appPath('/favicon.svg');
   const previewSwatch = $('#tenant-preview-swatch');
   previewSwatch.replaceChildren();
   if (form.elements.brandLogo.value) {
@@ -620,7 +633,8 @@ function tenantConfigSignature(config) {
 }
 
 function updateDocumentTitle() {
-  document.title = language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
+  document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
+    : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
 
@@ -1354,7 +1368,7 @@ async function adoptAccountFavorites(account) {
   favorites = merged;
   if (!guestFavorites.size) return true;
   try {
-    const saved = await api('account/favorites', { favorites: [...merged] });
+    const saved = await api('account/favorites', { favorites: [...guestFavorites], merge: true });
     favorites = new Set(saved.favorites);
     account.favorites = [...favorites];
     guestFavorites = new Set();
@@ -1373,29 +1387,41 @@ async function toggleFavorite(key) {
   if (!player) {
     guestFavorites = new Set(favorites);
     cacheGuestFavorites();
-    $('#favorites-status').textContent = t('favoritesLocal');
+    announceFavorite('favoritesLocal');
     renderCatalog();
     return;
   }
   favoriteSavePending = true;
   renderCatalog();
   try {
-    const saved = await api('account/favorites', { favorites: [...favorites] });
+    const saved = await api('account/favorite', { key, saved: favorites.has(key) });
     favorites = new Set(saved.favorites);
     player.favorites = [...favorites];
     guestFavorites = new Set();
     cacheGuestFavorites();
-    $('#favorites-status').textContent = t('favoritesSynced');
+    announceFavorite('favoritesSynced');
   } catch {
     favorites = previous;
-    $('#favorites-status').textContent = t('favoriteSaveFailed');
+    announceFavorite('favoriteSaveFailed');
   } finally {
     favoriteSavePending = false;
     renderCatalog();
   }
 }
 
+function announceFavorite(message) {
+  favoriteStatusKey = message;
+  $('#favorites-status').textContent = t(message);
+  comingSoonUi.favoriteStatus(t(message));
+}
+
 function renderCatalog() {
+  const editorial = comingSoonUi.renderLobby(filter, searchQuery);
+  const previewTitle = comingSoonUi.renderDetail();
+  if (previewTitle) {
+    updateDocumentTitle();
+    document.title = `${previewTitle} · ${document.title}`;
+  }
   const catalog = $('#catalog');
   catalog.replaceChildren();
   const createArt = (icon, theme) => {
@@ -1440,17 +1466,17 @@ function renderCatalog() {
   }).sort((a, b) => providerSort === 'recent'
     ? b.id - a.id
     : providerTitleCollator.compare(language ? a.titleFr : a.titleEn, language ? b.titleFr : b.titleEn));
-  const hasListings = demoGames.length + visibleGames.length > 0;
+  const hasListings = demoGames.length + visibleGames.length + editorial.count > 0;
   $('#catalog-controls').hidden = !games.length && !providerGames.length;
   $('#provider-sort-control').hidden = !providerGames.length;
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
   $('#catalog-summary').textContent = t('catalogResultSummary')
     .replace('{games}', countFormat.format(demoGames.length))
-    .replace('{previews}', countFormat.format(visibleGames.length));
+    .replace('{previews}', countFormat.format(visibleGames.length + editorial.count));
   $('#catalog-summary').hidden = !games.length && !providerGames.length;
   $('#catalog-empty').hidden = hasListings;
-  const hasAvailableFavorite = games.some((game) => favorites.has(`demo:${game.id}`)) ||
+  const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
   const noFavorites = filter === 'favorites' && !hasAvailableFavorite;
   const noRecentGames = filter === 'recent' && recentGameOrder.size === 0;
@@ -1505,6 +1531,29 @@ let supportInboxTotal = 0;
 let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
 let latestOverview = null;
+const comingSoonUi = createComingSoonUi({
+  api, t, element, action, appPath, currentRoute,
+  isFrench: () => Boolean(language),
+  getFavorites: () => favorites,
+  favoritePending: () => favoriteSavePending,
+  toggleFavorite
+});
+
+const adminLoaders = {
+  overview: () => refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); }),
+  'coming-soon-admin': comingSoonUi.loadDrafts,
+  'coming-soon-saves': comingSoonUi.loadSaves,
+  'catalog-management': refreshManagedCatalog,
+  'support-inbox': () => { if (!supportInboxEntries) void refreshSupportInbox(); },
+  'casino-settings': () => { if (savedTenantDraftSignature === undefined) void requestTenantDraft(); },
+  'staff-management': () => refreshStaffList().catch((error) => { $('#staff-status').textContent = t(error.message); }),
+  'audit-log': () => refreshStaffAudit().catch((error) => { $('#staff-audit-summary').textContent = t(error.message); })
+};
+const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => {
+  const load = adminLoaders[panel] || adminLoaders[view];
+  if (load) void load();
+});
+
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
@@ -1512,8 +1561,9 @@ function render() {
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
-  $('#skip-link').href = location.pathname === '/admin' ? '#admin' : '#lobby';
+  $('#skip-link').href = isAdminPage ? '#admin' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
+  if (languageChanged) adminWorkspace.syncPicker();
   updateStaffRoleHelp();
   const announcement = $('#lobby-announcement');
   announcement.textContent = t('announcement');
@@ -1537,13 +1587,21 @@ function render() {
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
   renderCatalog();
+  if (favoriteStatusKey) announceFavorite(favoriteStatusKey);
+  comingSoonUi.renderAdmin();
   updateCatalogPreview();
   if (supportInboxEntries) renderSupportInbox();
   if ($('#dialog').open) renderDialog();
   updateSessionReminder();
-  if (currentStaffId) refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
-  if (['operator_admin', 'operator_provider'].includes(currentStaffRole)) refreshManagedCatalog();
+  if (latestOverview) renderOperatorOverview(latestOverview);
+  if (languageChanged && adminWorkspace.isOpen('catalog-management')) void refreshManagedCatalog();
 }
+
+$('#skip-link').addEventListener('click', (event) => {
+  if (!isAdminPage || !currentStaffId) return;
+  event.preventDefault();
+  adminWorkspace.focusCurrent();
+});
 
 $('#language').addEventListener('click', async () => {
   const previousLanguage = language;
@@ -1684,9 +1742,10 @@ function updateCatalogPreview() {
 async function refreshManagedCatalog() {
   const status = $('#catalog-list-status');
   const container = $('#managed-catalog');
-  status.textContent = '';
+  status.textContent = t('loading');
   try {
-    const listings = await api('providers/catalog/list', undefined, 'POST');
+    const listings = await api('providers/catalog/list', {});
+    status.textContent = '';
     if (!listings.length) {
       container.replaceChildren(element('p', t('catalogListingsEmpty')));
       return;
@@ -1701,7 +1760,6 @@ async function refreshManagedCatalog() {
         try {
           await api('providers/catalog/status', { name: listing.name, externalId: listing.externalId, enabled: !listing.enabled });
           await refreshManagedCatalog();
-          await refreshOperatorOverview();
           status.textContent = t('catalogListingUpdated');
         } catch (error) {
           status.textContent = t(error.message);
@@ -1781,7 +1839,7 @@ $('#load-sample-catalog').addEventListener('click', async () => {
       return;
     }
     catalogReview = { signature, result: preview };
-    const providers = await api('providers/list');
+    const providers = await api('providers/list', {});
     $('#providers').replaceChildren(...providers.map((provider) => element('li', provider.name + ' · ••••••••')));
     providerStatus = 'sampleProviderReady';
     $('#provider-status').textContent = t(providerStatus);
@@ -1839,10 +1897,6 @@ $('#catalog-sync').addEventListener('submit', async (event) => {
   button.disabled = true;
   try {
     const response = await api('providers/catalog', { name: name.trim(), games: imported, expectedRevision });
-    providerGames = await api('games', undefined, 'GET');
-    renderCatalog();
-    await refreshManagedCatalog();
-    await refreshOperatorOverview();
     $('#catalog-status').textContent = t('synced') + ' · ' + response.imported;
     catalogReview = undefined;
     updateCatalogPreview();
@@ -1877,8 +1931,7 @@ async function loadTenantDraft() {
     form.elements[`faq${index}QuestionFr`].value = item.questionFr;
     form.elements[`faq${index}AnswerFr`].value = item.answerFr;
   });
-  tenantFeaturedGameIds = Array.isArray(draft.config.featuredGameIds) ? draft.config.featuredGameIds : ['gold', 'roulette'];
-  renderFeaturedGameEditor(tenantFeaturedGameIds);
+  renderFeaturedGameEditor(Array.isArray(draft.config.featuredGameIds) ? draft.config.featuredGameIds : ['gold', 'roulette']);
   form.elements.termsUrlEn.value = draft.config.termsUrlEn || '';
   form.elements.termsUrlFr.value = draft.config.termsUrlFr || '';
   form.elements.privacyUrlEn.value = draft.config.privacyUrlEn || '';
@@ -1886,6 +1939,8 @@ async function loadTenantDraft() {
   form.elements.footerTextEn.value = draft.config.footerTextEn || copy.disclaimer[0];
   form.elements.footerTextFr.value = draft.config.footerTextFr || copy.disclaimer[1];
   savedTenantDraftSignature = tenantConfigSignature();
+  $('#tenant-config-fields').disabled = false;
+  $('#save-config').disabled = false;
   updateTenantPreview();
   $('#tenant-config-status').textContent = `v${draft.version}`;
 }
@@ -1942,10 +1997,21 @@ $('#remove-brand-favicon').addEventListener('click', () => {
   $('#brand-favicon-file').value = '';
   updateTenantPreview();
 });
-$('#load-config').addEventListener('click', async () => {
+async function requestTenantDraft() {
+  const button = $('#load-config');
+  if (button.disabled) return;
+  button.disabled = true;
+  $('#tenant-config-status').textContent = t('loading');
   try { await loadTenantDraft(); }
   catch (error) { $('#tenant-config-status').textContent = t(error.message); }
-});
+  finally { button.disabled = false; }
+}
+$('#load-config').addEventListener('click', requestTenantDraft);
+$('#tenant-config').addEventListener('invalid', (event) => {
+  const panel = event.target.closest('[data-admin-panel]');
+  const firstInvalid = event.currentTarget.querySelector('input:invalid, textarea:invalid, select:invalid');
+  if (panel?.hidden && event.target === firstInvalid) adminWorkspace.open(panel.id, false);
+}, true);
 $('#tenant-config').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1973,17 +2039,18 @@ $('#tenant-config').addEventListener('submit', async (event) => {
     savedTenantDraftSignature = tenantConfigSignature(config);
     updateTenantPreview();
     $('#tenant-config-status').textContent = `${t('draftSaved')} v${result.version}`;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
 });
-$('#publish-config').addEventListener('click', async () => {
+$('#publish-config').addEventListener('click', async (event) => {
+  event.currentTarget.disabled = true;
   try {
     const result = await api('admin/config/publish', {});
+    savedTenantDraftSignature = null;
     const published = await api('tenant', undefined, 'GET');
     applyTenant(published.config);
     $('#tenant-config-status').textContent = `${t('configPublished')} v${result.version}`;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#tenant-config-status').textContent = t(error.message); }
+  finally { updateTenantPreview(); }
 });
 
 async function refreshStaffList() {
@@ -2128,7 +2195,7 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
   $('#staff-audit-range-error').hidden = !invalidRange;
   $('#staff-audit-range-error').textContent = invalidRange ? t('staffAuditRangeInvalid') : '';
   if (invalidRange) return [];
-  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : action.startsWith('provider_') || action.startsWith('catalog_') ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
+  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
   return source.filter((entry) => {
     const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
@@ -2141,6 +2208,7 @@ function supportPlayerIdentity(ticket) {
 function renderSupportInbox() {
   if (!supportInboxEntries) return;
   const container = $('#support-tickets');
+  const openTicket = container.querySelector('details[data-ticket-id][open]')?.dataset.ticketId;
   const status = $('#support-inbox-status');
   const summary = $('#support-summary');
   const query = $('#support-search').value.trim().toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
@@ -2188,10 +2256,18 @@ function renderSupportInbox() {
     return;
   }
   container.replaceChildren(...tickets.map((ticket) => {
-    const article = element('article', '', 'support-ticket');
+    const details = element('details', '', 'support-ticket');
+    details.dataset.ticketId = String(ticket.id);
+    details.name = 'admin-support-ticket';
+    details.open = details.dataset.ticketId === openTicket;
     const playerIdentity = supportPlayerIdentity(ticket);
-    article.append(element('h3', `#${ticket.id} · ${playerIdentity}`));
-    article.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
+    const summary = element('summary');
+    const brief = element('span', '', 'support-ticket-summary');
+    brief.append(element('strong', `#${ticket.id} · ${playerIdentity}`));
+    brief.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
+    summary.append(brief);
+    const article = element('div', '', 'support-ticket-body');
+    details.append(summary, article);
     if (ticket.isComplaint) article.append(element('strong', t('supportComplaintBadge'), 'complaint-badge'));
     if (!ticket.isComplaint && ticket.category === 'responsible_play') {
       const locale = language ? 'fr-CA' : 'en-CA';
@@ -2345,13 +2421,13 @@ function renderSupportInbox() {
       }, 'ghost');
       article.append(closeWithoutReply);
     }
-    return article;
+    return details;
   }));
 }
 
 async function refreshSupportInbox(restart = false) {
   const status = $('#support-inbox-status');
-  status.textContent = '';
+  status.textContent = t('loading');
   try {
     const targetPageCount = restart ? 1 : Math.max(supportInboxPageCount, 1);
     supportInboxTeam = await api('admin/support/team', undefined, 'GET');
@@ -2374,6 +2450,7 @@ async function refreshSupportInbox(restart = false) {
     supportInboxPageCount = pagesLoaded;
     supportInboxHasMore = cursor !== null;
     renderSupportInbox();
+    status.textContent = '';
     return true;
   } catch (error) {
     status.textContent = t(error.message);
@@ -2416,8 +2493,12 @@ async function refreshOperatorOverview() {
   $('#overview-export').disabled = true;
   const requestedDays = Number($('#overview-period').value);
   const overview = await api(`admin/overview?days=${requestedDays}`, undefined, 'GET');
+  if (requestedDays !== Number($('#overview-period').value)) return;
   latestOverview = overview;
   $('#overview-export').disabled = false;
+  renderOperatorOverview(overview);
+}
+function renderOperatorOverview(overview) {
   $('#overview-showcase-note').hidden = !overview.showcaseDataLoaded;
   $('#overview-showcase-prompt').hidden = Boolean(overview.showcaseDataLoaded || overview.playerAccounts > 0);
   const locale = language ? 'fr-CA' : 'en-CA';
@@ -2436,10 +2517,12 @@ async function refreshOperatorOverview() {
   renderOverviewGameActivity(overview);
   $('#overview-tickets').textContent = number.format(overview.openSupportTickets);
   $('#overview-catalog').textContent = number.format(overview.enabledCatalogListings);
+  $('#overview-coming-soon').textContent = number.format(overview.publishedComingSoon);
+  $('#overview-coming-soon-saves').textContent = number.format(overview.firstComingSoonSaves);
   const catalogReady = overview.enabledCatalogListings > 0;
   $('#overview-catalog-readiness').textContent = t(catalogReady ? 'overviewCatalogReady' : 'overviewCatalogEmpty');
   const catalogLink = $('#catalog-readiness-link');
-  catalogLink.href = catalogReady ? '#catalog-management' : '#provider-tools';
+  catalogLink.href = catalogReady ? '#catalog-management' : '#catalog-import';
   catalogLink.textContent = t(catalogReady ? 'goToCatalogManagement' : 'goToCatalogSetup');
   const brandingStatus = overview.configNeedsPublish ? 'overviewBrandingPending' : 'overviewBrandingReady';
   $('#overview-branding-readiness').textContent = t(brandingStatus).replace('{version}', number.format(overview.publishedConfigVersion));
@@ -2544,7 +2627,7 @@ $('#overview-period').addEventListener('change', () => {
 });
 $('#overview-export').addEventListener('click', exportOperatorOverview);
 
-function showStaffSession(session) {
+function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
   currentStaffId = session.id;
   currentStaffRole = session.role;
@@ -2556,17 +2639,12 @@ function showStaffSession(session) {
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
   $('#staff-identity').textContent = `${session.email} · ${staffRoleLabel(session.role)}`;
-  for (const section of document.querySelectorAll('[data-roles]')) section.hidden = !section.dataset.roles.split(',').includes(session.role);
-  refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
-  if (['operator_admin', 'operator_provider'].includes(session.role)) refreshManagedCatalog();
+  comingSoonUi.setStaffRole(session.role);
   $('#mfa-setup').hidden = session.mfaEnabled;
   $('#mfa-verify').hidden = false;
   $('#mfa-verify').querySelector('button[type=submit]').hidden = session.mfaEnabled;
   $('#mfa-disable').hidden = !session.mfaEnabled;
-  if (session.role === 'operator_admin') refreshStaffList().catch((error) => { $('#staff-status').textContent = t(error.message); });
-  if (session.role === 'operator_admin') refreshStaffAudit().catch(() => {});
-  if (['operator_admin', 'operator_support'].includes(session.role)) refreshSupportInbox();
-  if (['operator_admin', 'operator_content'].includes(session.role)) loadTenantDraft().catch(() => {});
+  adminWorkspace.setRole(session.role, focus);
 }
 $('#staff-login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -2579,7 +2657,7 @@ $('#staff-login-form').addEventListener('submit', async (event) => {
   $('#staff-login-status').textContent = '';
   try {
     const session = await api('admin/login', { email, password, code });
-    showStaffSession(session);
+    showStaffSession(session, true);
     form.reset();
     $('#staff-login-status').textContent = '';
   } catch (error) { $('#staff-login-status').textContent = t(error.message); }
@@ -2612,18 +2690,16 @@ $('#staff-password-form').addEventListener('submit', async (event) => {
     button.disabled = false;
   }
 });
-$('#staff-logout').addEventListener('click', async () => {
-  await api('admin/logout', {});
-  currentStaffEmail = undefined;
-  currentStaffId = undefined;
-  currentStaffRole = undefined;
-  currentStaffMfaEnabled = false;
-  currentMfaSetupUri = undefined;
-  $('#mfa-secret').hidden = true;
-  $('#mfa-copy-setup').hidden = true;
-  $('#mfa-status').textContent = '';
-  $('#admin-tools').hidden = true;
-  $('#staff-login').hidden = false;
+$('#staff-logout').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await api('admin/logout', {});
+    location.reload();
+  } catch (error) {
+    $('#admin-session-status').textContent = t(error.message);
+    button.disabled = false;
+  }
 });
 $('#staff-search').addEventListener('input', renderStaffList);
 $('#staff-filter-role').addEventListener('change', renderStaffList);
@@ -2772,7 +2848,6 @@ $('#mfa-verify').addEventListener('submit', async (event) => {
     $('#mfa-verify').querySelector('button[type=submit]').hidden = true;
     $('#mfa-disable').hidden = false;
     currentStaffMfaEnabled = true;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 $('#mfa-disable').addEventListener('click', async () => {
@@ -2788,16 +2863,23 @@ $('#mfa-disable').addEventListener('click', async () => {
     $('#mfa-secret').hidden = true;
     currentMfaSetupUri = undefined;
     currentStaffMfaEnabled = false;
-    refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); });
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 
-$('#lobby').hidden = location.pathname === '/admin';
-$('#admin').hidden = !$('#lobby').hidden;
+document.body.classList.toggle('admin-route', isAdminPage);
+$('#admin-view-lobby').hidden = !isAdminPage;
+$('#lobby').hidden = isAdminPage || comingSoonUi.isDetail;
+$('#admin').hidden = !isAdminPage;
+$('#coming-soon-detail').hidden = !comingSoonUi.isDetail;
 render();
-if (location.pathname === '/admin') {
+if (isAdminPage) {
   try { showStaffSession(await api('admin/session', undefined, 'GET')); }
   catch { $('#staff-login').hidden = false; $('#admin-tools').hidden = true; }
+}
+if (!isAdminPage) {
+  try { await comingSoonUi.loadLobby(); }
+  catch { /* The preview renders its localized unavailable state. */ }
+  renderCatalog();
 }
 try {
   const published = await api('tenant', undefined, 'GET');
@@ -2805,30 +2887,29 @@ try {
 } catch {
   // Use the shared default brand if tenant settings are unavailable.
 }
-try {
-  providerGames = await api('games', undefined, 'GET');
+if (!isAdminPage) {
+  try { providerGames = await api('games', undefined, 'GET'); }
+  catch { /* Keep the local catalogue available. */ }
   renderCatalog();
-} catch {
-  renderCatalog();
-}
-try {
-  player = await api('account', undefined, 'GET');
-  if (player) {
-    const favoritesSynced = await adoptAccountFavorites(player);
-    if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
+  try {
+    player = await api('account', undefined, 'GET');
+    if (player) {
+      const favoritesSynced = await adoptAccountFavorites(player);
+      if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
+    }
+    playerSessionStartedAt = player?.sessionStartedAt;
+    if (player?.preferredLocale) {
+      language = player.preferredLocale === 'fr-CA' ? 1 : 0;
+      localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+    }
+    updateAccount();
+    render();
+  } catch {
+    // The catalogue remains available when the account service is offline.
   }
-  playerSessionStartedAt = player?.sessionStartedAt;
-  if (player?.preferredLocale) {
-    language = player.preferredLocale === 'fr-CA' ? 1 : 0;
-    localStorage.setItem('northplay-language', language ? 'fr' : 'en');
-  }
-  updateAccount();
-  render();
-} catch {
-  // The catalogue remains available when the account service is offline.
+  window.setInterval(updateSessionReminder, 60_000);
+  updateSessionReminder();
+  if (resetToken) openPanel('passwordReset');
+  else if (verifyToken) openPanel('emailVerification');
+  else if (emailChangeToken) openPanel('emailChange');
 }
-window.setInterval(updateSessionReminder, 60_000);
-updateSessionReminder();
-if (resetToken) openPanel('passwordReset');
-else if (verifyToken) openPanel('emailVerification');
-else if (emailChangeToken) openPanel('emailChange');

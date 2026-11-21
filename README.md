@@ -50,11 +50,21 @@ Staging and production require an explicit data directory, host, valid encryptio
 
 Startup also rejects invalid ports, malformed encryption keys, incomplete bootstrap credentials, short platform tokens, and missing required staging/production settings before it opens the database.
 
+For a site hosted under a URL directory, set `APP_BASE_PATH` to that directory, such as `/casinohabibi`. It defaults to the path in `PUBLIC_BASE_URL` when configured. The reverse proxy can forward the directory unchanged or strip it before forwarding to Node. Keep the existing data directory and encryption key when updating a deployment.
+
 ## Operator administration
+
+Open `/admin` for the Dashboard. Use the sidebar on desktop or the section picker on a phone to access the game catalogue, player activity, support, website content, staff, audit log and your security settings. Your staff role determines which sections are available. In **Website content**, changes entered across the tabs are saved together as one draft.
 
 To enable tenant administration manually, set `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (at least 12 characters), and `PROVIDER_KEY_ENCRYPTION` (a 32-byte key represented by 64 hex characters) in the server environment. The Windows demo launcher can create these local settings on first run. The old shared `ADMIN_TOKEN` is no longer used. The bootstrap account is added as a sandbox operator admin if it does not already exist; its password is not reset on later starts. Generate the encryption key locally, keep it private, and retain the same key for any database you intend to keep. Open `/admin` and sign in with the bootstrap credentials. Staff can change their own password from the Admin page; the current password is required, and other sessions for that staff identity are revoked. The operator admin can add staff accounts or grant a tenant role to an existing staff identity, change active staff roles, disable accounts, and re-enable previously disabled accounts with a selected tenant role. Operators cannot change their own role or demote the last active operator admin. These staff actions are recorded in the tenant audit history. Operator admins can search and filter the history, load events in pages of 50, and export the filtered events as CSV. Provider and configuration actions require an appropriate tenant role and are recorded in tenant staff audit events. The casino settings form edits the casino name, optional locally stored PNG/JPEG/WebP logo (up to 48 KB) and PNG/WebP favicon (up to 16 KB), accent colour, support email, English and Canadian French lobby headline and introduction, an optional bilingual announcement, three editable bilingual FAQ entries, optional English and Canadian French terms and privacy links (HTTPS only), and a bilingual footer disclaimer, with a side-by-side preview before saving and publishing. Staff can enable authenticator-based two-step verification from the admin page.
 
 The admin catalog section has a sample-data action that saves a local placeholder provider key and prepares a bilingual catalog for preview. Review the proposed changes and choose **Sync catalog** to display the listings as preview-only cards. This action does not contact an external provider or launch its games.
+
+### Coming Soon previews
+
+Open **Coming Soon** in **Game catalogue** to save a bilingual draft. Choose **Publish preview** to make its permanent URL available from the lobby. Content staff can edit drafts. Operator admins and provider staff can publish or archive previews. A positive rank places a published preview in **Featured**. Each visit shows up to six distinct previews drawn from the published catalogue in a stable **Discover** order.
+
+Signed-in players can keep their previews in Favorites across devices. Archiving removes the preview and its active favorites while preserving the first-save reference in **Preview saves** and the player's account export. The dashboard shows the published count and distinct first-save count. The staff audit history identifies each publish or archive by actor, preview, revision and request ID.
 
 In Windows Command Prompt, set the variables in the same window before starting the server:
 

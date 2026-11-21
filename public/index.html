@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-CA">
+<html lang="en-CA" data-app-base-path="">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,6 +8,7 @@
 <title>Northplay Casino</title>
 <link id="tenant-favicon" rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/admin.css">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -15,7 +16,7 @@
 <header><div class="shell bar">
 <a class="brand" href="/"><span aria-hidden="true">✧</span> NORTHPLAY</a>
 <nav aria-label="Navigation"><a href="/#games" data-copy="lobby"></a><a href="/#play-safely" data-copy="playSafely"></a><a href="/admin" data-copy="admin"></a></nav>
-<div class="actions"><button id="language" class="ghost" type="button"></button><button id="account" type="button" data-copy="signin"></button></div>
+<div class="actions"><a id="admin-view-lobby" href="/" data-copy="adminViewLobby" hidden></a><button id="language" class="ghost" type="button"></button><button id="account" type="button" data-copy="signin"></button></div>
 </div></header>
 <div id="session-reminder" class="session-reminder shell" role="status" aria-live="polite" hidden></div>
 <main id="lobby" class="shell" tabindex="-1">
@@ -32,68 +33,339 @@
 <div class="filters" id="filters"><button data-filter="all" data-copy="all" aria-pressed="true"></button><button data-filter="slots" data-copy="slots" aria-pressed="false"></button><button data-filter="table" data-copy="table" aria-pressed="false"></button><button data-filter="live" data-copy="live" aria-pressed="false"></button><button data-filter="favorites" data-copy="favorites" aria-pressed="false"></button><button data-filter="recent" data-copy="recentGames" aria-pressed="false"></button></div></div>
 <p id="catalog-summary" class="catalog-summary" role="status" aria-live="polite" hidden></p>
 <p id="favorites-status" role="status" aria-live="polite"></p>
-<div id="catalog-empty" class="empty-state" hidden><span aria-hidden="true">✧</span><div><h3 data-copy="catalogEmptyTitle"></h3><p data-copy="catalogEmpty"></p><button id="browse-all-games" type="button" class="ghost" data-copy="browseAllGames" hidden></button><button id="clear-game-search" type="button" class="ghost" data-copy="clearGameSearch" hidden></button></div></div><div id="catalog" class="cards"></div></section>
+<div id="catalog-empty" class="empty-state" hidden><span aria-hidden="true">✧</span><div><h3 data-copy="catalogEmptyTitle"></h3><p data-copy="catalogEmpty"></p><button id="browse-all-games" type="button" class="ghost" data-copy="browseAllGames" hidden></button><button id="clear-game-search" type="button" class="ghost" data-copy="clearGameSearch" hidden></button></div></div><div id="catalog" class="cards"></div>
+<section id="coming-soon" class="coming-soon" hidden aria-labelledby="coming-soon-heading">
+  <h2 id="coming-soon-heading" data-copy="comingSoon"></h2>
+  <p id="coming-soon-empty" data-copy="comingSoonEmpty" hidden></p>
+  <section id="coming-soon-featured" hidden><h3 data-copy="comingSoonFeatured"></h3><div class="cards"></div></section>
+  <section id="coming-soon-discover" hidden><h3 data-copy="comingSoonDiscover"></h3><div class="cards"></div></section>
+  <div id="coming-soon-filtered" hidden><div class="cards"></div></div>
+</section></section>
 <section class="steps-section"><div class="section-heading"><p class="eyebrow" data-copy="simpleEyebrow"></p><h2 data-copy="simpleHeading"></h2><p data-copy="simpleIntro"></p></div>
 <div class="steps-grid"><article class="info-card"><span class="step-number">01</span><h3 data-copy="stepOneTitle"></h3><p data-copy="stepOneText"></p></article><article class="info-card"><span class="step-number">02</span><h3 data-copy="stepTwoTitle"></h3><p data-copy="stepTwoText"></p></article><article class="info-card"><span class="step-number">03</span><h3 data-copy="stepThreeTitle"></h3><p data-copy="stepThreeText"></p></article></div></section>
 <section id="play-safely" class="safety-section"><div class="safety-copy"><p class="eyebrow" data-copy="safetyEyebrow"></p><h2 data-copy="safetyHeading"></h2><p data-copy="safetyIntro"></p><button id="safety-controls" type="button" data-copy="safetyCta"></button></div>
 <div class="safety-tools"><article><span aria-hidden="true">◷</span><div><h3 data-copy="breakTitle"></h3><p data-copy="breakText"></p></div></article><article><span aria-hidden="true">⌁</span><div><h3 data-copy="limitTitle"></h3><p data-copy="limitText"></p></div></article><article><span aria-hidden="true">◎</span><div><h3 data-copy="excludeTitle"></h3><p data-copy="excludeText"></p></div></article></div></section>
 <section id="faq" class="faq-section"><div class="section-heading"><p class="eyebrow" data-copy="helpEyebrow"></p><h2 data-copy="faqTitle"></h2></div><div id="faq-list" class="faq-list"></div></section>
 </main>
+<main id="coming-soon-detail" class="shell coming-soon-detail" tabindex="-1" hidden>
+  <a href="/#coming-soon" data-copy="comingSoonBack"></a>
+  <div id="coming-soon-detail-content"><p role="status" data-copy="loading"></p></div>
+  <p id="coming-soon-favorite-status" role="status"></p>
+</main>
 <main id="admin" class="shell admin" tabindex="-1" hidden>
-<section id="staff-login"><h1 data-copy="staffLogin"></h1><p data-copy="staffLoginHelp"></p>
-<form id="staff-login-form"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="username"></label>
-<div class="password-field"><label for="staff-login-password" data-copy="staffPassword"></label><div class="password-control"><input id="staff-login-password" name="password" type="password" minlength="12" required autocomplete="current-password"><button type="button" class="ghost password-toggle" data-staff-password-toggle aria-label="Show password" aria-pressed="false" data-copy="showPassword"></button></div></div>
-<label><span data-copy="mfaCode"></span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"><small data-copy="mfaLoginHint"></small></label>
-<button type="submit" data-copy="staffSignIn"></button></form><p role="status" id="staff-login-status"></p></section>
-<div id="admin-tools" hidden><div class="admin-session"><span id="staff-identity"></span><button type="button" id="staff-logout" class="ghost" data-copy="staffSignOut"></button></div>
-<section class="tenant-admin operator-overview" data-roles="operator_admin,operator_content,operator_provider,operator_support"><div class="overview-heading"><div><h2 data-copy="operatorOverview"></h2><p data-copy="operatorOverviewHelp"></p><p id="overview-showcase-note" class="overview-showcase-note" data-copy="overviewShowcaseData" hidden></p><p id="overview-showcase-prompt" class="overview-showcase-prompt" data-copy="overviewShowcasePrompt" hidden></p></div><div class="actions"><label class="overview-period"><span data-copy="overviewPeriodLabel"></span><select id="overview-period"><option value="7" data-copy="overviewPeriod7"></option><option value="30" data-copy="overviewPeriod30" selected></option><option value="90" data-copy="overviewPeriod90"></option></select></label><button type="button" id="overview-refresh" class="ghost" data-copy="refreshOverview"></button><button type="button" id="overview-export" class="ghost" data-copy="overviewExport" disabled></button></div></div><dl class="overview-grid"><div><dt data-copy="overviewPlayers"></dt><dd id="overview-players">—</dd></div><div><dt data-copy="overviewVerified"></dt><dd id="overview-verified">—</dd></div><div><dt data-copy="overviewRounds"></dt><dd id="overview-rounds">—</dd></div><div><dt data-copy="overviewActivePlayers"></dt><dd id="overview-active-players">—</dd></div><div><dt data-copy="overviewWagered"></dt><dd id="overview-wagered">—</dd></div><div><dt data-copy="overviewTickets"></dt><dd id="overview-tickets">—</dd></div><div><dt data-copy="overviewCatalog"></dt><dd id="overview-catalog">—</dd></div></dl><section class="overview-activity"><h3 data-copy="overviewActivityChart"></h3><p data-copy="overviewActivityHelp"></p><div id="overview-activity-chart" class="overview-activity-chart" role="img"></div><p id="overview-activity-summary" class="overview-activity-summary"></p><details><summary data-copy="overviewActivityDetails"></summary><ul id="overview-activity-values"></ul></details></section><section class="overview-game-activity"><h3 id="overview-game-heading" data-copy="overviewGameBreakdown"></h3><div class="audit-table-wrap"><table id="overview-game-table" aria-labelledby="overview-game-heading"><thead><tr><th scope="col" data-copy="overviewGameName"></th><th scope="col" data-copy="overviewGameRounds"></th><th scope="col" data-copy="overviewGameShare"></th><th scope="col" data-copy="overviewGameActivePlayers"></th><th scope="col" data-copy="overviewGameWagered"></th></tr></thead><tbody></tbody></table></div></section><div class="catalog-readiness"><strong data-copy="overviewBrandingStatus"></strong><span id="overview-branding-readiness">—</span><a class="readiness-link" data-roles="operator_admin,operator_content" href="#casino-settings" data-copy="goToCasinoSettings"></a><small data-copy="overviewBrandingNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewCatalogStatus"></strong><span id="overview-catalog-readiness">—</span><a id="catalog-readiness-link" class="readiness-link" data-roles="operator_admin,operator_provider" href="#catalog-management" data-copy="goToCatalogManagement"></a><small data-copy="overviewCatalogNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewMfaStatus"></strong><span id="overview-mfa-readiness">—</span><a class="readiness-link" href="#mfa-settings" data-copy="goToMfa"></a><small data-copy="overviewMfaNote"></small></div><p id="overview-status" role="status"></p></section>
-<section class="tenant-admin staff-password-settings"><h2 data-copy="staffChangePasswordTitle"></h2><p data-copy="staffChangePasswordHelp"></p><form id="staff-password-form"><label><span data-copy="currentPassword"></span><input name="currentPassword" type="password" minlength="1" maxlength="128" required autocomplete="current-password"></label><label><span data-copy="staffNewPassword"></span><input name="newPassword" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label><label><span data-copy="staffConfirmPassword"></span><input name="confirmPassword" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label><button type="submit" data-copy="staffChangePasswordSave"></button></form><p role="status" id="staff-password-status"></p></section>
-<section class="tenant-admin" id="casino-settings" data-roles="operator_admin,operator_content"><h2 data-copy="tenantSettings"></h2><p data-copy="tenantSettingsHelp"></p>
-<form id="tenant-config"><label><span data-copy="brandName"></span><input name="brandName" maxlength="48" required></label>
-<label><span data-copy="brandLogoLabel"></span><input id="brand-logo-file" type="file" accept="image/png,image/jpeg,image/webp"><small data-copy="brandLogoHelp"></small></label><input name="brandLogo" type="hidden"><button type="button" id="remove-brand-logo" class="ghost" data-copy="removeBrandLogo"></button>
-<label><span data-copy="brandFaviconLabel"></span><input id="brand-favicon-file" type="file" accept="image/png,image/webp"><small data-copy="brandFaviconHelp"></small></label><input name="brandFavicon" type="hidden"><button type="button" id="remove-brand-favicon" class="ghost" data-copy="removeBrandFavicon"></button>
-<label><span data-copy="accentColor"></span><input name="accentColor" type="color" required></label>
-<label><span data-copy="supportEmail"></span><input name="supportEmail" type="email" maxlength="254"></label>
-<label><span data-copy="heroTitleEn"></span><input name="heroTitleEn" maxlength="120" required></label>
-<label><span data-copy="heroTitleFr"></span><input name="heroTitleFr" maxlength="120" required></label>
-<label><span data-copy="heroIntroEn"></span><textarea name="heroIntroEn" rows="3" maxlength="300" required></textarea></label>
-<label><span data-copy="heroIntroFr"></span><textarea name="heroIntroFr" rows="3" maxlength="300" required></textarea></label>
-<fieldset><legend data-copy="featuredDemoGames"></legend><p data-copy="featuredDemoGamesHelp"></p><div id="featured-game-options" class="featured-game-options"></div></fieldset>
-<label><span data-copy="announcementEnLabel"></span><textarea name="announcementEn" rows="2" maxlength="140"></textarea></label>
-<label><span data-copy="announcementFrLabel"></span><textarea name="announcementFr" rows="2" maxlength="140"></textarea><small data-copy="announcementHelp"></small></label>
-<h3 data-copy="faqEditorTitle"></h3><p data-copy="faqEditorHelp"></p>
-<fieldset><legend data-copy="faqOne"></legend><label><span data-copy="faqQuestionEn"></span><input name="faq0QuestionEn" maxlength="140" required></label><label><span data-copy="faqAnswerEn"></span><textarea name="faq0AnswerEn" rows="3" maxlength="500" required></textarea></label><label><span data-copy="faqQuestionFr"></span><input name="faq0QuestionFr" maxlength="140" required></label><label><span data-copy="faqAnswerFr"></span><textarea name="faq0AnswerFr" rows="3" maxlength="500" required></textarea></label></fieldset>
-<fieldset><legend data-copy="faqTwo"></legend><label><span data-copy="faqQuestionEn"></span><input name="faq1QuestionEn" maxlength="140" required></label><label><span data-copy="faqAnswerEn"></span><textarea name="faq1AnswerEn" rows="3" maxlength="500" required></textarea></label><label><span data-copy="faqQuestionFr"></span><input name="faq1QuestionFr" maxlength="140" required></label><label><span data-copy="faqAnswerFr"></span><textarea name="faq1AnswerFr" rows="3" maxlength="500" required></textarea></label></fieldset>
-<fieldset><legend data-copy="faqThree"></legend><label><span data-copy="faqQuestionEn"></span><input name="faq2QuestionEn" maxlength="140" required></label><label><span data-copy="faqAnswerEn"></span><textarea name="faq2AnswerEn" rows="3" maxlength="500" required></textarea></label><label><span data-copy="faqQuestionFr"></span><input name="faq2QuestionFr" maxlength="140" required></label><label><span data-copy="faqAnswerFr"></span><textarea name="faq2AnswerFr" rows="3" maxlength="500" required></textarea></label></fieldset>
-<h3 data-copy="policyLinksTitle"></h3><p data-copy="policyUrlHelp"></p>
-<label><span data-copy="termsUrlEn"></span><input name="termsUrlEn" type="url" maxlength="2048"></label><label><span data-copy="termsUrlFr"></span><input name="termsUrlFr" type="url" maxlength="2048"></label>
-<label><span data-copy="privacyUrlEn"></span><input name="privacyUrlEn" type="url" maxlength="2048"></label><label><span data-copy="privacyUrlFr"></span><input name="privacyUrlFr" type="url" maxlength="2048"></label>
-<h3 data-copy="footerTextTitle"></h3><label><span data-copy="footerTextEnLabel"></span><textarea name="footerTextEn" rows="2" maxlength="160" required></textarea></label><label><span data-copy="footerTextFrLabel"></span><textarea name="footerTextFr" rows="2" maxlength="160" required></textarea></label>
-<div class="actions"><button type="button" id="load-config" data-copy="loadConfig"></button><button type="submit" data-copy="saveDraft"></button><button type="button" id="publish-config" class="ghost" data-copy="publishConfig"></button></div>
-</form><aside class="tenant-preview"><p class="eyebrow" data-copy="tenantPreviewTitle"></p><p data-copy="tenantPreviewHelp"></p><div class="tenant-preview-brand"><span id="tenant-preview-swatch" aria-hidden="true"></span><img id="tenant-preview-favicon" class="tenant-preview-favicon" alt=""><strong id="tenant-preview-name"></strong></div><p id="tenant-preview-featured" class="featured-preview" hidden></p><p class="tenant-preview-contact"><span data-copy="supportEmail"></span> · <span id="tenant-preview-email"></span></p><div class="tenant-preview-copy"><article><small data-copy="heroPreviewEn"></small><h3 id="tenant-preview-title-en"></h3><p id="tenant-preview-intro-en"></p></article><article lang="fr-CA"><small data-copy="heroPreviewFr"></small><h3 id="tenant-preview-title-fr"></h3><p id="tenant-preview-intro-fr"></p></article></div><div id="tenant-preview-announcement" class="preview-announcement" hidden><p><small data-copy="announcementEnLabel"></small><span id="tenant-preview-announcement-en"></span></p><p lang="fr-CA"><small data-copy="announcementFrLabel"></small><span id="tenant-preview-announcement-fr"></span></p></div><div class="preview-faq"><h3 data-copy="faqEditorTitle"></h3><article><strong id="tenant-preview-faq-0-question-en"></strong><p id="tenant-preview-faq-0-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-0-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-0-answer-fr"></p></article><article><strong id="tenant-preview-faq-1-question-en"></strong><p id="tenant-preview-faq-1-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-1-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-1-answer-fr"></p></article><article><strong id="tenant-preview-faq-2-question-en"></strong><p id="tenant-preview-faq-2-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-2-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-2-answer-fr"></p></article></div><div class="preview-announcement"><p><small data-copy="footerTextEnLabel"></small><span id="tenant-preview-footer-en"></span></p><p lang="fr-CA"><small data-copy="footerTextFrLabel"></small><span id="tenant-preview-footer-fr"></span></p></div></aside><p role="status" id="tenant-config-status"></p></section>
-<section class="tenant-admin" data-roles="operator_admin"><h2 data-copy="staffManagement"></h2>
-<form id="staff-create"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="off"></label><label><span data-copy="temporaryPassword"></span><input name="password" type="password" minlength="12" autocomplete="new-password"></label>
-<label><span data-copy="staffRole"></span><select name="role"><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label><button type="submit" data-copy="staffCreate"></button></form><p id="staff-role-help" class="staff-role-help"></p>
-<p role="status" id="staff-status"></p><h3 id="staff-list-heading" data-copy="staffAccountsHeading"></h3><div class="staff-filters"><label><span data-copy="staffSearch"></span><input id="staff-search" type="search" autocomplete="off"></label><label><span data-copy="staffFilterRole"></span><select id="staff-filter-role"><option value="all" data-copy="staffFilterAll"></option><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label><label><span data-copy="staffFilterStatus"></span><select id="staff-filter-status"><option value="all" data-copy="staffFilterAll"></option><option value="active" data-copy="active"></option><option value="disabled" data-copy="disabled"></option></select></label><label><span data-copy="staffFilterMfa"></span><select id="staff-filter-mfa"><option value="all" data-copy="staffFilterAll"></option><option value="enabled" data-copy="staffFilterMfaEnabled"></option><option value="disabled" data-copy="staffFilterMfaDisabled"></option></select></label><label><span data-copy="staffFilterActivity"></span><select id="staff-filter-activity"><option value="all" data-copy="staffFilterAll"></option><option value="has" data-copy="staffActivityHas"></option><option value="none" data-copy="staffActivityNone"></option></select></label><label><span data-copy="staffSort"></span><select id="staff-sort"><option value="newest" data-copy="staffSortNewest"></option><option value="oldest" data-copy="staffSortOldest"></option><option value="email" data-copy="staffSortEmail"></option><option value="activity" data-copy="staffSortActivity"></option></select></label></div><p id="staff-count" class="staff-count" role="status" aria-live="polite"></p><button type="button" id="staff-export" class="ghost" data-copy="staffExport" disabled></button><ul id="staff-list" aria-labelledby="staff-list-heading"></ul><h3 id="staff-audit-heading" data-copy="staffAuditHeading"></h3><div class="staff-audit-filters"><label><span data-copy="staffAuditSearch"></span><input id="staff-audit-search" type="search" autocomplete="off"></label><label><span data-copy="staffAuditFilter"></span><select id="staff-audit-filter"><option value="all" data-copy="staffFilterAll"></option><option value="staff" data-copy="staffAuditCategoryStaff"></option><option value="auth" data-copy="staffAuditCategoryAuth"></option><option value="mfa" data-copy="staffAuditCategoryMfa"></option><option value="casino" data-copy="staffAuditCategoryCasino"></option><option value="support" data-copy="staffAuditCategorySupport"></option><option value="providers" data-copy="staffAuditCategoryProviders"></option><option value="other" data-copy="staffAuditCategoryOther"></option></select></label></div><div class="staff-audit-dates"><label><span data-copy="staffAuditFrom"></span><input id="staff-audit-from" type="date"></label><label><span data-copy="staffAuditTo"></span><input id="staff-audit-to" type="date"></label></div><p id="staff-audit-range-error" class="form-error" role="alert" hidden></p><p id="staff-audit-summary" class="staff-count" role="status" aria-live="polite"></p><button type="button" id="staff-audit-refresh" class="ghost" data-copy="staffAudit"></button><button type="button" id="staff-audit-export" class="ghost" data-copy="staffAuditExport" disabled></button><div class="audit-table-wrap"><table id="staff-audit" aria-labelledby="staff-audit-heading"><thead><tr><th scope="col" data-copy="staffAuditTimestamp"></th><th scope="col" data-copy="staffAuditActor"></th><th scope="col" data-copy="staffAuditAction"></th><th scope="col" data-copy="staffAuditTarget"></th><th scope="col" data-copy="staffAuditRequestId"></th></tr></thead><tbody></tbody></table></div><button type="button" id="staff-audit-load-more" class="ghost" data-copy="staffAuditLoadMore" hidden></button></section>
-<section class="tenant-admin" id="mfa-settings"><h2 data-copy="mfaTitle"></h2><p data-copy="mfaHelp"></p><button type="button" id="mfa-setup" data-copy="mfaSetup"></button><pre id="mfa-secret" hidden></pre><button type="button" id="mfa-copy-setup" class="ghost" data-copy="mfaCopySetup" hidden></button>
-<form id="mfa-verify"><label><span data-copy="mfaCode"></span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"></label><button type="submit" data-copy="mfaEnable"></button><button type="button" id="mfa-disable" class="ghost" data-copy="mfaDisable"></button></form><p role="status" id="mfa-status"></p></section>
-<section class="tenant-admin support-inbox" data-roles="operator_admin,operator_support"><h2 data-copy="supportInbox"></h2><p data-copy="supportInboxHelp"></p><button type="button" id="support-inbox-refresh" class="ghost" data-copy="supportRefresh"></button><div class="support-controls"><label><span data-copy="supportSearch"></span><input id="support-search" type="search" autocomplete="off"></label><label><span data-copy="supportFilter"></span><select id="support-filter"><option value="all" data-copy="supportFilterAll"></option><option value="open" data-copy="supportStatusOpen"></option><option value="answered" data-copy="supportStatusAnswered"></option><option value="closed" data-copy="supportStatusClosed"></option></select></label><label><span data-copy="supportComplaintFilter"></span><select id="support-complaint-filter"><option value="all" data-copy="supportComplaintAll"></option><option value="complaints" data-copy="supportComplaintOnly"></option><option value="requests" data-copy="supportNonComplaints"></option></select></label><label><span data-copy="supportTopicFilter"></span><select id="support-topic-filter"><option value="all" data-copy="supportTopicAll"></option><option value="account" data-copy="supportCategoryAccount"></option><option value="game" data-copy="supportCategoryGame"></option><option value="responsible_play" data-copy="supportCategoryResponsible"></option><option value="other" data-copy="supportCategoryOther"></option></select></label><label><span data-copy="supportPriority"></span><select id="support-priority-filter"><option value="all" data-copy="supportPriorityAll"></option><option value="low" data-copy="supportPriorityLow"></option><option value="normal" data-copy="supportPriorityNormal"></option><option value="high" data-copy="supportPriorityHigh"></option><option value="urgent" data-copy="supportPriorityUrgent"></option></select></label><label><span data-copy="supportAssigneeFilter"></span><select id="support-assignee-filter"><option value="all" data-copy="supportAssigneeAll"></option><option value="mine" data-copy="supportAssigneeMine"></option><option value="unassigned" data-copy="supportUnassigned"></option></select></label></div><p id="support-summary" role="status" aria-live="polite"></p><p role="status" id="support-inbox-status"></p><div id="support-tickets"></div><button type="button" id="support-load-more" class="ghost" data-copy="supportLoadMore" hidden></button></section>
-<section id="provider-tools" data-roles="operator_admin,operator_provider">
-<p class="eyebrow" data-copy="sandbox"></p><h1 data-copy="providers"></h1><p data-copy="adminIntro"></p>
-<form id="provider">
-<label><span data-copy="providerName"></span><input name="name" maxlength="64" autocomplete="off"></label>
-<label><span data-copy="providerKey"></span><input name="key" type="password" maxlength="2048" autocomplete="off"></label>
-<div class="actions"><button type="submit" data-copy="save"></button><button type="submit" value="list" class="ghost" data-copy="list"></button><button type="submit" value="audit" class="ghost" data-copy="audit"></button></div>
-</form>
-<p role="status" id="provider-status"></p><ul id="providers"></ul>
-<section class="catalog-admin"><h2 data-copy="catalogSync"></h2><p data-copy="catalogSyncHelp"></p>
-<div class="sample-catalog-panel"><p data-copy="sampleCatalogHelp"></p><button id="load-sample-catalog" type="button" class="ghost" data-copy="loadSampleCatalog"></button><p id="sample-catalog-status" role="status" aria-live="polite"></p></div>
-<form id="catalog-sync"><label><span data-copy="providerName"></span><input name="name" maxlength="64" required autocomplete="off"></label>
-<label><span data-copy="catalogFile"></span><input id="catalog-file" type="file" accept=".json,application/json"></label>
-<label><span data-copy="catalogJson"></span><textarea name="games" rows="8" required spellcheck="false"></textarea></label><pre class="json-example" data-copy="catalogExample"></pre>
-<p id="catalog-preview" role="status" aria-live="polite"></p><div class="actions"><button id="catalog-review" type="button" data-copy="catalogReview"></button><button type="submit" data-copy="sync"></button></div></form><p role="status" id="catalog-status"></p></section>
-<section class="catalog-admin" id="catalog-management"><div class="overview-heading"><div><h2 data-copy="catalogListings"></h2><p data-copy="catalogListingsHelp"></p></div><button id="catalog-list-refresh" type="button" class="ghost" data-copy="catalogListingsRefresh"></button></div><p id="catalog-list-status" role="status"></p><div id="managed-catalog" class="managed-catalog"></div></section>
-</section></div>
+  <section id="staff-login"><h1 data-copy="staffLogin"></h1><p data-copy="staffLoginHelp"></p>
+  <form id="staff-login-form"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="username"></label>
+  <div class="password-field"><label for="staff-login-password" data-copy="staffPassword"></label><div class="password-control"><input id="staff-login-password" name="password" type="password" minlength="12" required autocomplete="current-password"><button type="button" class="ghost password-toggle" data-staff-password-toggle aria-label="Show password" aria-pressed="false" data-copy="showPassword"></button></div></div>
+  <label><span data-copy="mfaCode"></span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"><small data-copy="mfaLoginHint"></small></label>
+  <button type="submit" data-copy="staffSignIn"></button></form><p role="status" id="staff-login-status"></p></section>
+  <div id="admin-tools" hidden>
+    <div class="admin-titlebar">
+      <h1 data-copy="adminWorkspace"></h1>
+      <div class="admin-session">
+        <span id="staff-identity"></span>
+        <button type="button" id="staff-logout" class="ghost" data-copy="staffSignOut"></button>
+        <p role="status" id="admin-session-status"></p>
+      </div>
+    </div>
+    <div class="admin-layout">
+      <nav class="admin-sidebar" aria-labelledby="admin-sidebar-title">
+        <span id="admin-sidebar-title" class="admin-visually-hidden" data-copy="adminSectionNavigation"></span>
+        <ul>
+          <li><a href="#overview" data-admin-link data-admin-primary data-copy="adminNavDashboard"></a></li>
+          <li><a href="#game-catalog" data-admin-link data-admin-primary data-copy="adminNavCatalogue"></a></li>
+          <li><a href="#coming-soon-saves" data-admin-link data-admin-primary data-copy="adminNavPlayers"></a></li>
+          <li><a href="#support-inbox" data-admin-link data-admin-primary data-copy="supportInbox"></a></li>
+        </ul>
+        <p data-copy="adminSettings"></p>
+        <ul>
+          <li><a href="#casino-settings" data-admin-link data-admin-primary data-copy="adminNavWebsite"></a></li>
+          <li><a href="#staff-management" data-admin-link data-admin-primary data-copy="adminNavStaff"></a></li>
+          <li><a href="#audit-log" data-admin-link data-admin-primary data-copy="adminNavAudit"></a></li>
+          <li><a href="#my-security" data-admin-link data-admin-primary data-copy="adminNavSecurity"></a></li>
+        </ul>
+      </nav>
+      <label class="admin-section-picker">
+        <span data-copy="adminSection"></span>
+        <select id="admin-section-picker"></select>
+      </label>
+      <div class="admin-pages">
+        <section id="overview" class="admin-page" data-admin-view aria-labelledby="overview-title" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="overview-title" data-admin-heading data-copy="adminNavDashboard" tabindex="-1"></h2>
+            </div>
+            <button type="button" id="overview-refresh" class="ghost" data-copy="refreshOverview"></button>
+          </div>
+          <p id="overview-showcase-note" class="overview-showcase-note" data-copy="overviewShowcaseData" hidden></p><p id="overview-showcase-prompt" class="overview-showcase-prompt" data-copy="overviewShowcasePrompt" hidden></p>
+          <dl class="overview-grid admin-kpis">
+            <div><dt data-copy="overviewPlayers"></dt><dd id="overview-players">—</dd></div>
+            <div><dt data-copy="overviewTickets"></dt><dd id="overview-tickets">—</dd><a href="#support-inbox" data-roles="operator_admin,operator_support" data-copy="supportInbox"></a></div>
+            <div><dt data-copy="comingSoonCount"></dt><dd id="overview-coming-soon">—</dd><a href="#coming-soon-admin" data-roles="operator_admin,operator_content,operator_provider" data-copy="adminNavComingSoon"></a></div>
+            <div><dt data-copy="comingSoonSaveCount"></dt><dd id="overview-coming-soon-saves">—</dd><a href="#coming-soon-saves" data-roles="operator_admin,operator_support" data-copy="adminNavPlayers"></a></div>
+          </dl>
+          <div class="admin-readiness"><div class="catalog-readiness"><strong data-copy="overviewBrandingStatus"></strong><span id="overview-branding-readiness">—</span><a class="readiness-link" data-roles="operator_admin,operator_content" href="#casino-settings" data-copy="goToCasinoSettings"></a><small data-copy="overviewBrandingNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewCatalogStatus"></strong><span id="overview-catalog-readiness">—</span><a id="catalog-readiness-link" class="readiness-link" data-roles="operator_admin,operator_provider" href="#catalog-management" data-copy="goToCatalogManagement"></a><small data-copy="overviewCatalogNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewMfaStatus"></strong><span id="overview-mfa-readiness">—</span><a class="readiness-link" href="#mfa-settings" data-copy="goToMfa"></a><small data-copy="overviewMfaNote"></small></div></div>
+          <details class="admin-disclosure admin-metrics">
+            <summary data-copy="adminDemoActivity"></summary>
+            <div class="admin-detail-body">
+              <p data-copy="operatorOverviewHelp"></p>
+              <div class="actions"><label class="overview-period"><span data-copy="overviewPeriodLabel"></span><select id="overview-period"><option value="7" data-copy="overviewPeriod7"></option><option value="30" data-copy="overviewPeriod30" selected></option><option value="90" data-copy="overviewPeriod90"></option></select></label><button type="button" id="overview-export" class="ghost" data-copy="overviewExport" disabled></button></div>
+              <dl class="overview-grid">
+                <div><dt data-copy="overviewVerified"></dt><dd id="overview-verified">—</dd></div>
+                <div><dt data-copy="overviewActivePlayers"></dt><dd id="overview-active-players">—</dd></div>
+                <div><dt data-copy="overviewRounds"></dt><dd id="overview-rounds">—</dd></div>
+                <div><dt data-copy="overviewWagered"></dt><dd id="overview-wagered">—</dd></div>
+                <div><dt data-copy="overviewCatalog"></dt><dd id="overview-catalog">—</dd></div>
+              </dl>
+              <section class="overview-activity"><h3 data-copy="overviewActivityChart"></h3><p data-copy="overviewActivityHelp"></p><div id="overview-activity-chart" class="overview-activity-chart" role="img"></div><p id="overview-activity-summary" class="overview-activity-summary"></p><details><summary data-copy="overviewActivityDetails"></summary><ul id="overview-activity-values"></ul></details></section><section class="overview-game-activity"><h3 id="overview-game-heading" data-copy="overviewGameBreakdown"></h3><div class="audit-table-wrap" role="region" aria-labelledby="overview-game-heading" tabindex="0"><table id="overview-game-table" aria-labelledby="overview-game-heading"><thead><tr><th scope="col" data-copy="overviewGameName"></th><th scope="col" data-copy="overviewGameRounds"></th><th scope="col" data-copy="overviewGameShare"></th><th scope="col" data-copy="overviewGameActivePlayers"></th><th scope="col" data-copy="overviewGameWagered"></th></tr></thead><tbody></tbody></table></div></section>
+            </div>
+          </details>
+          <p id="overview-status" role="status"></p>
+        </section>
+        <section id="game-catalog" class="admin-page" data-admin-view data-roles="operator_admin,operator_content,operator_provider" aria-labelledby="game-catalog-title" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="game-catalog-title" data-admin-heading data-copy="adminNavCatalogue" tabindex="-1"></h2>
+            </div>
+          </div>
+          <nav class="admin-tabs" aria-labelledby="catalogue-navigation">
+            <span id="catalogue-navigation" class="admin-visually-hidden" data-copy="adminSectionNavigation"></span>
+            <a href="#coming-soon-admin" data-admin-link data-copy="adminNavComingSoon"></a>
+            <a href="#catalog-management" data-admin-link data-copy="adminProviderListings"></a>
+            <a href="#catalog-import" data-admin-link data-copy="adminImportCatalogue"></a>
+            <a href="#provider-tools" data-admin-link data-copy="adminProviderKeys"></a>
+          </nav>
+          <section id="coming-soon-admin" class="admin-panel" data-admin-panel aria-labelledby="coming-soon-admin-title" hidden>
+            <div class="admin-page-heading">
+              <div>
+                <h3 id="coming-soon-admin-title" data-admin-heading data-copy="adminNavComingSoon" tabindex="-1"></h3>
+                <p data-copy="comingSoonAdminHelp"></p>
+              </div>
+              <button type="button" id="coming-soon-new" aria-controls="coming-soon-form" aria-expanded="false" data-copy="comingSoonNew"></button>
+            </div>
+            <p id="coming-soon-admin-status" role="status"></p>
+            <form id="coming-soon-form" class="coming-soon-editor admin-editor" aria-labelledby="coming-soon-edit-title" hidden>
+              <h4 id="coming-soon-edit-title"></h4>
+              <label><span data-copy="comingSoonTitleEn"></span><input name="titleEn" maxlength="120" required></label>
+              <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" maxlength="120" required></label>
+              <label><span data-copy="comingSoonCategory"></span><select name="category"><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
+              <label><span data-copy="comingSoonStudio"></span><input name="studio" maxlength="64"></label>
+              <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" rows="3" maxlength="800"></textarea></label>
+              <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" rows="3" maxlength="800"></textarea></label>
+              <label><span data-copy="comingSoonArtwork"></span><input name="artworkFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+              <label><span data-copy="comingSoonRank"></span><input name="featuredRank" type="number" value="0" min="0" max="99" required></label>
+              <label><span data-copy="comingSoonAltEn"></span><input name="altEn" maxlength="200"></label>
+              <label><span data-copy="comingSoonAltFr"></span><input name="altFr" maxlength="200"></label>
+              <div class="actions"><button type="submit" data-copy="saveDraft"></button><button type="button" id="coming-soon-remove-art" class="ghost" data-copy="comingSoonRemoveArt" hidden></button><button type="button" id="coming-soon-close-editor" class="ghost" data-copy="adminCloseEditor"></button></div>
+            </form>
+            <label class="admin-preview-search" hidden><span data-copy="comingSoonFind"></span><input id="coming-soon-admin-search" type="search" autocomplete="off"></label>
+            <p id="coming-soon-admin-empty" hidden></p>
+            <ul id="coming-soon-admin-list" class="coming-soon-admin-list"></ul>
+          </section>
+          <section id="catalog-management" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="catalog-management-title" hidden>
+            <div class="admin-page-heading">
+              <div>
+                <h3 id="catalog-management-title" data-admin-heading data-copy="catalogListings" tabindex="-1"></h3>
+                <p data-copy="catalogListingsHelp"></p>
+              </div>
+              <button id="catalog-list-refresh" type="button" class="ghost" data-copy="catalogListingsRefresh"></button>
+            </div>
+            <p id="catalog-list-status" role="status"></p><div id="managed-catalog" class="managed-catalog"></div>
+          </section>
+          <section id="catalog-import" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="catalog-import-title" hidden>
+            <div class="admin-page-heading">
+              <div>
+                <h3 id="catalog-import-title" data-admin-heading data-copy="catalogSync" tabindex="-1"></h3>
+                <p data-copy="catalogSyncHelp"></p>
+              </div>
+            </div>
+            <div class="sample-catalog-panel"><p data-copy="sampleCatalogHelp"></p><button id="load-sample-catalog" type="button" class="ghost" data-copy="loadSampleCatalog"></button><p id="sample-catalog-status" role="status" aria-live="polite"></p></div>
+            <form id="catalog-sync"><label><span data-copy="providerName"></span><input name="name" maxlength="64" required autocomplete="off"></label>
+            <label><span data-copy="catalogFile"></span><input id="catalog-file" type="file" accept=".json,application/json"></label>
+            <label><span data-copy="catalogJson"></span><textarea name="games" rows="8" required spellcheck="false"></textarea></label><details class="admin-disclosure"><summary data-copy="adminJsonExample"></summary><pre class="json-example" data-copy="catalogExample"></pre></details>
+            <p id="catalog-preview" role="status" aria-live="polite"></p><div class="actions"><button id="catalog-review" type="button" data-copy="catalogReview"></button><button type="submit" data-copy="sync"></button></div></form><p role="status" id="catalog-status"></p>
+          </section>
+          <section id="provider-tools" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="provider-tools-title" hidden>
+            <div class="admin-page-heading">
+              <div>
+                <h3 id="provider-tools-title" data-admin-heading data-copy="adminProviderKeys" tabindex="-1"></h3>
+                <p data-copy="adminIntro"></p>
+              </div>
+            </div>
+            <form id="provider">
+            <label><span data-copy="providerName"></span><input name="name" maxlength="64" autocomplete="off"></label>
+            <label><span data-copy="providerKey"></span><input name="key" type="password" maxlength="2048" autocomplete="off"></label>
+            <div class="actions"><button type="submit" data-copy="save"></button><button type="submit" value="list" class="ghost" data-copy="list"></button><button type="submit" value="audit" class="ghost" data-copy="audit"></button></div>
+            </form>
+            <p role="status" id="provider-status"></p><ul id="providers"></ul>
+          </section>
+        </section>
+        <section id="coming-soon-saves" class="admin-page" data-admin-view data-roles="operator_admin,operator_support" aria-labelledby="coming-soon-saves-heading" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="coming-soon-saves-heading" data-admin-heading data-copy="adminNavPlayers" tabindex="-1"></h2>
+            </div>
+          </div>
+          <form id="coming-soon-save-search" class="coming-soon-save-search">
+              <label><span data-copy="comingSoonSavesSearch"></span><input name="query" type="search" maxlength="254"></label>
+              <button type="submit" class="ghost" data-copy="comingSoonSearch"></button>
+            </form>
+            <p id="coming-soon-saves-status" role="status"></p>
+            <div class="audit-table-wrap" role="region" aria-labelledby="coming-soon-saves-heading" tabindex="0"><table class="coming-soon-saves-table" aria-labelledby="coming-soon-saves-heading">
+              <thead><tr><th scope="col" data-copy="comingSoonSaveRef"></th><th scope="col" data-copy="email"></th><th scope="col" data-copy="comingSoon"></th><th scope="col" data-copy="supportFilter"></th><th scope="col" data-copy="comingSoonDate"></th></tr></thead>
+              <tbody id="coming-soon-saves-body"></tbody>
+            </table></div>
+        </section>
+        <section id="support-inbox" class="admin-page" data-admin-view data-roles="operator_admin,operator_support" aria-labelledby="support-inbox-title" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="support-inbox-title" data-admin-heading data-copy="supportInbox" tabindex="-1"></h2>
+              <p data-copy="supportInboxHelp"></p>
+            </div>
+            <button type="button" id="support-inbox-refresh" class="ghost" data-copy="supportRefresh"></button>
+          </div>
+          <div class="support-controls"><label><span data-copy="supportSearch"></span><input id="support-search" type="search" autocomplete="off"></label><label><span data-copy="supportFilter"></span><select id="support-filter"><option value="all" data-copy="supportFilterAll"></option><option value="open" data-copy="supportStatusOpen"></option><option value="answered" data-copy="supportStatusAnswered"></option><option value="closed" data-copy="supportStatusClosed"></option></select></label><label><span data-copy="supportComplaintFilter"></span><select id="support-complaint-filter"><option value="all" data-copy="supportComplaintAll"></option><option value="complaints" data-copy="supportComplaintOnly"></option><option value="requests" data-copy="supportNonComplaints"></option></select></label><label><span data-copy="supportTopicFilter"></span><select id="support-topic-filter"><option value="all" data-copy="supportTopicAll"></option><option value="account" data-copy="supportCategoryAccount"></option><option value="game" data-copy="supportCategoryGame"></option><option value="responsible_play" data-copy="supportCategoryResponsible"></option><option value="other" data-copy="supportCategoryOther"></option></select></label><label><span data-copy="supportPriority"></span><select id="support-priority-filter"><option value="all" data-copy="supportPriorityAll"></option><option value="low" data-copy="supportPriorityLow"></option><option value="normal" data-copy="supportPriorityNormal"></option><option value="high" data-copy="supportPriorityHigh"></option><option value="urgent" data-copy="supportPriorityUrgent"></option></select></label><label><span data-copy="supportAssigneeFilter"></span><select id="support-assignee-filter"><option value="all" data-copy="supportAssigneeAll"></option><option value="mine" data-copy="supportAssigneeMine"></option><option value="unassigned" data-copy="supportUnassigned"></option></select></label></div><p id="support-summary" role="status" aria-live="polite"></p><p role="status" id="support-inbox-status"></p><div id="support-tickets"></div><button type="button" id="support-load-more" class="ghost" data-copy="supportLoadMore" hidden></button>
+        </section>
+        <section id="casino-settings" class="admin-page" data-admin-view data-roles="operator_admin,operator_content" aria-labelledby="casino-settings-title" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="casino-settings-title" data-admin-heading data-copy="adminNavWebsite" tabindex="-1"></h2>
+              <p data-copy="tenantSettingsHelp"></p>
+            </div>
+          </div>
+          <nav class="admin-tabs" aria-labelledby="website-navigation">
+            <span id="website-navigation" class="admin-visually-hidden" data-copy="adminSectionNavigation"></span>
+            <a href="#website-brand" data-admin-link data-copy="adminWebsiteBrand"></a>
+            <a href="#website-lobby" data-admin-link data-copy="adminWebsiteLobby"></a>
+            <a href="#website-faq" data-admin-link data-copy="faqTitle"></a>
+            <a href="#website-policies" data-admin-link data-copy="adminWebsitePolicies"></a>
+          </nav>
+          <form id="tenant-config">
+            <fieldset id="tenant-config-fields" class="admin-edit-fields" disabled>
+              <legend class="admin-visually-hidden" data-copy="adminNavWebsite"></legend>
+              <section id="website-brand" class="admin-panel" data-admin-panel aria-labelledby="website-brand-title" hidden>
+                <div class="admin-page-heading">
+                  <div>
+                    <h3 id="website-brand-title" data-admin-heading data-copy="adminWebsiteBrand" tabindex="-1"></h3>
+                  </div>
+                </div>
+                <div class="admin-form-grid">
+                  <label><span data-copy="brandName"></span><input name="brandName" maxlength="48" required></label>
+                  <div class="admin-upload"><label><span data-copy="brandLogoLabel"></span><input id="brand-logo-file" type="file" accept="image/png,image/jpeg,image/webp"><small data-copy="brandLogoHelp"></small></label><input name="brandLogo" type="hidden"><button type="button" id="remove-brand-logo" class="ghost" data-copy="removeBrandLogo"></button></div>
+                  <div class="admin-upload"><label><span data-copy="brandFaviconLabel"></span><input id="brand-favicon-file" type="file" accept="image/png,image/webp"><small data-copy="brandFaviconHelp"></small></label><input name="brandFavicon" type="hidden"><button type="button" id="remove-brand-favicon" class="ghost" data-copy="removeBrandFavicon"></button></div>
+                  <label><span data-copy="accentColor"></span><input name="accentColor" type="color" required></label>
+                  <label><span data-copy="supportEmail"></span><input name="supportEmail" type="email" maxlength="254"></label>
+                </div>
+              </section>
+              <section id="website-lobby" class="admin-panel" data-admin-panel aria-labelledby="website-lobby-title" hidden>
+                <div class="admin-page-heading">
+                  <div>
+                    <h3 id="website-lobby-title" data-admin-heading data-copy="adminWebsiteLobby" tabindex="-1"></h3>
+                  </div>
+                </div>
+                <div class="admin-form-grid">
+                  <label><span data-copy="heroTitleEn"></span><input name="heroTitleEn" maxlength="120" required></label>
+                  <label><span data-copy="heroTitleFr"></span><input name="heroTitleFr" maxlength="120" required></label>
+                  <label><span data-copy="heroIntroEn"></span><textarea name="heroIntroEn" rows="3" maxlength="300" required></textarea></label>
+                  <label><span data-copy="heroIntroFr"></span><textarea name="heroIntroFr" rows="3" maxlength="300" required></textarea></label>
+                  <fieldset class="admin-form-wide"><legend data-copy="featuredDemoGames"></legend><p data-copy="featuredDemoGamesHelp"></p><div id="featured-game-options" class="featured-game-options"></div></fieldset>
+                  <label><span data-copy="announcementEnLabel"></span><textarea name="announcementEn" rows="2" maxlength="140"></textarea></label>
+                  <label><span data-copy="announcementFrLabel"></span><textarea name="announcementFr" rows="2" maxlength="140"></textarea><small data-copy="announcementHelp"></small></label>
+                </div>
+              </section>
+              <section id="website-faq" class="admin-panel" data-admin-panel aria-labelledby="website-faq-title" hidden>
+                <div class="admin-page-heading">
+                  <div>
+                    <h3 id="website-faq-title" data-admin-heading data-copy="faqEditorTitle" tabindex="-1"></h3>
+                    <p data-copy="faqEditorHelp"></p>
+                  </div>
+                </div>
+                <fieldset class="admin-form-grid"><legend data-copy="faqOne"></legend><label><span data-copy="faqQuestionEn"></span><input name="faq0QuestionEn" maxlength="140" required></label><label><span data-copy="faqAnswerEn"></span><textarea name="faq0AnswerEn" rows="3" maxlength="500" required></textarea></label><label><span data-copy="faqQuestionFr"></span><input name="faq0QuestionFr" maxlength="140" required></label><label><span data-copy="faqAnswerFr"></span><textarea name="faq0AnswerFr" rows="3" maxlength="500" required></textarea></label></fieldset>
+                <fieldset class="admin-form-grid"><legend data-copy="faqTwo"></legend><label><span data-copy="faqQuestionEn"></span><input name="faq1QuestionEn" maxlength="140" required></label><label><span data-copy="faqAnswerEn"></span><textarea name="faq1AnswerEn" rows="3" maxlength="500" required></textarea></label><label><span data-copy="faqQuestionFr"></span><input name="faq1QuestionFr" maxlength="140" required></label><label><span data-copy="faqAnswerFr"></span><textarea name="faq1AnswerFr" rows="3" maxlength="500" required></textarea></label></fieldset>
+                <fieldset class="admin-form-grid"><legend data-copy="faqThree"></legend><label><span data-copy="faqQuestionEn"></span><input name="faq2QuestionEn" maxlength="140" required></label><label><span data-copy="faqAnswerEn"></span><textarea name="faq2AnswerEn" rows="3" maxlength="500" required></textarea></label><label><span data-copy="faqQuestionFr"></span><input name="faq2QuestionFr" maxlength="140" required></label><label><span data-copy="faqAnswerFr"></span><textarea name="faq2AnswerFr" rows="3" maxlength="500" required></textarea></label></fieldset>
+              </section>
+              <section id="website-policies" class="admin-panel" data-admin-panel aria-labelledby="website-policies-title" hidden>
+                <div class="admin-page-heading">
+                  <div>
+                    <h3 id="website-policies-title" data-admin-heading data-copy="adminWebsitePolicies" tabindex="-1"></h3>
+                    <p data-copy="policyUrlHelp"></p>
+                  </div>
+                </div>
+                <div class="admin-form-grid">
+                  <label><span data-copy="termsUrlEn"></span><input name="termsUrlEn" type="url" maxlength="2048"></label><label><span data-copy="termsUrlFr"></span><input name="termsUrlFr" type="url" maxlength="2048"></label>
+                  <label><span data-copy="privacyUrlEn"></span><input name="privacyUrlEn" type="url" maxlength="2048"></label><label><span data-copy="privacyUrlFr"></span><input name="privacyUrlFr" type="url" maxlength="2048"></label>
+                  <label><span data-copy="footerTextEnLabel"></span><textarea name="footerTextEn" rows="2" maxlength="160" required></textarea></label><label><span data-copy="footerTextFrLabel"></span><textarea name="footerTextFr" rows="2" maxlength="160" required></textarea></label>
+                </div>
+              </section>
+            </fieldset>
+            <div class="actions admin-form-actions">
+              <button type="submit" id="save-config" data-copy="saveDraft" disabled></button>
+              <button type="button" id="publish-config" class="ghost" data-copy="publishConfig" disabled></button>
+              <button type="button" id="load-config" class="ghost" data-copy="loadConfig"></button>
+            </div>
+            <p role="status" id="tenant-config-status"></p>
+          </form>
+          <details class="admin-disclosure">
+            <summary data-copy="tenantPreviewTitle"></summary>
+            <aside class="tenant-preview"><p data-copy="tenantPreviewHelp"></p><div class="tenant-preview-brand"><span id="tenant-preview-swatch" aria-hidden="true"></span><img id="tenant-preview-favicon" class="tenant-preview-favicon" alt=""><strong id="tenant-preview-name"></strong></div><p id="tenant-preview-featured" class="featured-preview" hidden></p><p class="tenant-preview-contact"><span data-copy="supportEmail"></span> · <span id="tenant-preview-email"></span></p><div class="tenant-preview-copy"><article><small data-copy="heroPreviewEn"></small><h3 id="tenant-preview-title-en"></h3><p id="tenant-preview-intro-en"></p></article><article lang="fr-CA"><small data-copy="heroPreviewFr"></small><h3 id="tenant-preview-title-fr"></h3><p id="tenant-preview-intro-fr"></p></article></div><div id="tenant-preview-announcement" class="preview-announcement" hidden><p><small data-copy="announcementEnLabel"></small><span id="tenant-preview-announcement-en"></span></p><p lang="fr-CA"><small data-copy="announcementFrLabel"></small><span id="tenant-preview-announcement-fr"></span></p></div><div class="preview-faq"><h3 data-copy="faqEditorTitle"></h3><article><strong id="tenant-preview-faq-0-question-en"></strong><p id="tenant-preview-faq-0-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-0-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-0-answer-fr"></p></article><article><strong id="tenant-preview-faq-1-question-en"></strong><p id="tenant-preview-faq-1-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-1-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-1-answer-fr"></p></article><article><strong id="tenant-preview-faq-2-question-en"></strong><p id="tenant-preview-faq-2-answer-en"></p><strong lang="fr-CA" id="tenant-preview-faq-2-question-fr"></strong><p lang="fr-CA" id="tenant-preview-faq-2-answer-fr"></p></article></div><div class="preview-announcement"><p><small data-copy="footerTextEnLabel"></small><span id="tenant-preview-footer-en"></span></p><p lang="fr-CA"><small data-copy="footerTextFrLabel"></small><span id="tenant-preview-footer-fr"></span></p></div></aside>
+          </details>
+        </section>
+        <section id="staff-management" class="admin-page" data-admin-view data-roles="operator_admin" aria-labelledby="staff-management-title" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="staff-management-title" data-admin-heading data-copy="adminNavStaff" tabindex="-1"></h2>
+            </div>
+          </div>
+          <details class="admin-disclosure admin-add-staff">
+            <summary data-copy="adminAddStaff"></summary>
+            <div class="admin-detail-body">
+              <form id="staff-create"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="off"></label><label><span data-copy="temporaryPassword"></span><input name="password" type="password" minlength="12" autocomplete="new-password"></label>
+              <label><span data-copy="staffRole"></span><select name="role"><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label><button type="submit" data-copy="staffCreate"></button></form><p id="staff-role-help" class="staff-role-help"></p>
+            </div>
+          </details>
+          <p role="status" id="staff-status"></p><h3 class="admin-visually-hidden" id="staff-list-heading" data-copy="staffAccountsHeading"></h3><div class="staff-filters"><label><span data-copy="staffSearch"></span><input id="staff-search" type="search" autocomplete="off"></label><label><span data-copy="staffFilterRole"></span><select id="staff-filter-role"><option value="all" data-copy="staffFilterAll"></option><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label><label><span data-copy="staffFilterStatus"></span><select id="staff-filter-status"><option value="all" data-copy="staffFilterAll"></option><option value="active" data-copy="active"></option><option value="disabled" data-copy="disabled"></option></select></label><label><span data-copy="staffFilterMfa"></span><select id="staff-filter-mfa"><option value="all" data-copy="staffFilterAll"></option><option value="enabled" data-copy="staffFilterMfaEnabled"></option><option value="disabled" data-copy="staffFilterMfaDisabled"></option></select></label><label><span data-copy="staffFilterActivity"></span><select id="staff-filter-activity"><option value="all" data-copy="staffFilterAll"></option><option value="has" data-copy="staffActivityHas"></option><option value="none" data-copy="staffActivityNone"></option></select></label><label><span data-copy="staffSort"></span><select id="staff-sort"><option value="newest" data-copy="staffSortNewest"></option><option value="oldest" data-copy="staffSortOldest"></option><option value="email" data-copy="staffSortEmail"></option><option value="activity" data-copy="staffSortActivity"></option></select></label></div><p id="staff-count" class="staff-count" role="status" aria-live="polite"></p><button type="button" id="staff-export" class="ghost" data-copy="staffExport" disabled></button><ul id="staff-list" aria-labelledby="staff-list-heading"></ul>
+        </section>
+        <section id="audit-log" class="admin-page" data-admin-view data-roles="operator_admin" aria-labelledby="staff-audit-heading" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="staff-audit-heading" data-admin-heading data-copy="adminNavAudit" tabindex="-1"></h2>
+            </div>
+          </div>
+          <div class="staff-audit-filters"><label><span data-copy="staffAuditSearch"></span><input id="staff-audit-search" type="search" autocomplete="off"></label><label><span data-copy="staffAuditFilter"></span><select id="staff-audit-filter"><option value="all" data-copy="staffFilterAll"></option><option value="staff" data-copy="staffAuditCategoryStaff"></option><option value="auth" data-copy="staffAuditCategoryAuth"></option><option value="mfa" data-copy="staffAuditCategoryMfa"></option><option value="casino" data-copy="staffAuditCategoryCasino"></option><option value="support" data-copy="staffAuditCategorySupport"></option><option value="providers" data-copy="staffAuditCategoryProviders"></option><option value="other" data-copy="staffAuditCategoryOther"></option></select></label></div><div class="staff-audit-dates"><label><span data-copy="staffAuditFrom"></span><input id="staff-audit-from" type="date"></label><label><span data-copy="staffAuditTo"></span><input id="staff-audit-to" type="date"></label></div><p id="staff-audit-range-error" class="form-error" role="alert" hidden></p><p id="staff-audit-summary" class="staff-count" role="status" aria-live="polite"></p><button type="button" id="staff-audit-refresh" class="ghost" data-copy="staffAudit"></button><button type="button" id="staff-audit-export" class="ghost" data-copy="staffAuditExport" disabled></button><div class="audit-table-wrap" role="region" aria-labelledby="staff-audit-heading" tabindex="0"><table id="staff-audit" aria-labelledby="staff-audit-heading"><thead><tr><th scope="col" data-copy="staffAuditTimestamp"></th><th scope="col" data-copy="staffAuditActor"></th><th scope="col" data-copy="staffAuditAction"></th><th scope="col" data-copy="staffAuditTarget"></th><th scope="col" data-copy="staffAuditRequestId"></th></tr></thead><tbody></tbody></table></div><button type="button" id="staff-audit-load-more" class="ghost" data-copy="staffAuditLoadMore" hidden></button>
+        </section>
+        <section id="my-security" class="admin-page" data-admin-view aria-labelledby="my-security-title" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <h2 id="my-security-title" data-admin-heading data-copy="adminNavSecurity" tabindex="-1"></h2>
+            </div>
+          </div>
+          <nav class="admin-tabs" aria-labelledby="security-navigation">
+            <span id="security-navigation" class="admin-visually-hidden" data-copy="adminSectionNavigation"></span>
+            <a href="#staff-password" data-admin-link data-copy="password"></a>
+            <a href="#mfa-settings" data-admin-link data-copy="mfaTitle"></a>
+          </nav>
+          <section id="staff-password" class="admin-panel" data-admin-panel aria-labelledby="staff-password-title" hidden>
+            <div class="admin-page-heading">
+              <div>
+                <h3 id="staff-password-title" data-admin-heading data-copy="staffChangePasswordTitle" tabindex="-1"></h3>
+                <p data-copy="staffChangePasswordHelp"></p>
+              </div>
+            </div>
+            <form id="staff-password-form"><label><span data-copy="currentPassword"></span><input name="currentPassword" type="password" minlength="1" maxlength="128" required autocomplete="current-password"></label><label><span data-copy="staffNewPassword"></span><input name="newPassword" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label><label><span data-copy="staffConfirmPassword"></span><input name="confirmPassword" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label><button type="submit" data-copy="staffChangePasswordSave"></button></form><p role="status" id="staff-password-status"></p>
+          </section>
+          <section id="mfa-settings" class="admin-panel" data-admin-panel aria-labelledby="mfa-settings-title" hidden>
+            <div class="admin-page-heading">
+              <div>
+                <h3 id="mfa-settings-title" data-admin-heading data-copy="mfaTitle" tabindex="-1"></h3>
+                <p data-copy="mfaHelp"></p>
+              </div>
+            </div>
+            <button type="button" id="mfa-setup" data-copy="mfaSetup"></button><pre id="mfa-secret" hidden></pre><button type="button" id="mfa-copy-setup" class="ghost" data-copy="mfaCopySetup" hidden></button>
+            <form id="mfa-verify"><label><span data-copy="mfaCode"></span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"></label><button type="submit" data-copy="mfaEnable"></button><button type="button" id="mfa-disable" class="ghost" data-copy="mfaDisable"></button></form><p role="status" id="mfa-status"></p>
+          </section>
+        </section>
+      </div>
+    </div>
+  </div>
 </main>
 <footer><div class="shell footer-content"><div><span class="brand"><span aria-hidden="true">✧</span> NORTHPLAY</span><p data-copy="disclaimer"></p></div><nav aria-label="Footer"><a href="/#play-safely" data-copy="playSafely"></a><a href="/#faq" data-copy="faqTitle"></a><a id="terms-link" data-copy="termsLink" hidden></a><a id="privacy-link" data-copy="privacyLink" hidden></a><a id="support-link" data-copy="supportContact" hidden></a><a href="/admin" data-copy="admin"></a></nav></div></footer>
 <dialog id="dialog"><button type="button" class="close ghost" id="close" aria-label="Close">×</button><div id="panel"></div><p id="status" role="status"></p></dialog>
