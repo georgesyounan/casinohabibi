@@ -265,7 +265,7 @@ const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex'
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 installPlayerAccess(db, transaction);
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
-const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo });
+const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -376,6 +376,13 @@ function staffContext(req, tenantId, allowedRoles = ['operator_admin']) {
 function publishedTenantConfig(tenantId) {
   const row = db.prepare("SELECT version, config FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1").get(tenantId);
   return { version: row.version, config: { ...defaultBrandOptions, ...JSON.parse(row.config) } };
+}
+
+function catalogueAudience(tenantId, locale) {
+  const row = db.prepare(`SELECT json_extract(config, '$.displayMarket') AS market, json_extract(config, '$.enabledLocales') AS locales,
+    json_extract(config, '$.primaryLocale') AS primaryLocale FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1`).get(tenantId);
+  const locales = row.locales ? JSON.parse(row.locales) : ['en-CA', 'fr-CA'];
+  return { market: row.market || '', locales: locale ? [locales.includes(locale) ? locale : row.primaryLocale || locales[0]] : locales };
 }
 
 function comingSoonEnabled(tenantId) {
@@ -602,13 +609,13 @@ function validPolicyUrl(value) {
   }
 }
 
-function availableFavorites(tenantId) {
+function availableFavorites(tenantId, locale) {
   const available = new Set(games.map(({ id }) => `demo:${id}`));
   for (const { provider, externalId } of db.prepare('SELECT provider, external_id AS externalId FROM game_catalog WHERE tenant_id = ? AND enabled = 1').all(tenantId)) {
     available.add(`provider:${provider}:${externalId}`);
   }
   if (comingSoonEnabled(tenantId)) {
-    for (const key of comingSoon.keys(tenantId)) available.add(key);
+    for (const key of comingSoon.keys(tenantId, catalogueAudience(tenantId, locale))) available.add(key);
   }
   return available;
 }
@@ -660,17 +667,23 @@ async function api(req, res, path, tenantId, requestId) {
     return staff;
   }, work);
   if (req.method !== 'GET' && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
+  const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   if (route === 'GET /api/coming-soon') {
     if (!comingSoonEnabled(tenantId)) return { titles: [], featured: [], discover: [] };
     const seed = req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1] || randomBytes(16).toString('hex');
     res.setHeader('Set-Cookie', `northplay_visit=${seed}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=1800${secureCookie}`);
-    return comingSoon.lobby(tenantId, seed);
+    return comingSoon.lobby(tenantId, seed, catalogueAudience(tenantId, catalogueLocale || 'default'));
   }
   const preview = route.match(/^GET \/api\/coming-soon\/([a-z0-9-]{1,64})$/);
   if (preview) {
-    const title = comingSoonEnabled(tenantId) && comingSoon.published(tenantId, preview[1]);
+    const title = comingSoonEnabled(tenantId) && comingSoon.published(tenantId, preview[1], catalogueAudience(tenantId, catalogueLocale || 'default'));
     if (!title) fail(404, 'comingSoonMissing');
     return title;
+  }
+  const draftPreview = route.match(/^GET \/api\/admin\/coming-soon\/preview\/([a-z0-9-]{1,64})$/);
+  if (draftPreview) {
+    staffContext(req, tenantId, catalogueRoles);
+    return comingSoon.draft(tenantId, draftPreview[1]);
   }
   if (route === 'GET /api/admin/coming-soon') {
     staffContext(req, tenantId, catalogueRoles);
@@ -1774,7 +1787,7 @@ createServer(async (req, res) => {
     }
     const preview = req.method === 'GET' && path.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/);
     if (req.method !== 'GET' || (!preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
-    if (preview && (!comingSoonEnabled(tenantId) || !comingSoon.published(tenantId, preview[1]))) res.statusCode = 404;
+    if (preview && (!comingSoonEnabled(tenantId) || !comingSoon.published(tenantId, preview[1], catalogueAudience(tenantId, requestUrl.searchParams.get('locale'))))) res.statusCode = 404;
     const [file, type] = preview ? assets['/'] : assets[path];
     let content = readFileSync(new URL(`./public/${file}`, import.meta.url));
     if (type === 'text/html' && appBasePath) {

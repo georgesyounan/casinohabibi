@@ -538,3 +538,44 @@ test('player access across devices, recovery delivery, brand isolation and revoc
   await admin(route + '/access', { status: 'active', version: 3, reason: 'Review complete' });
   assert.equal((await desktop('login', newPassword)).data.error, 'excluded');
 });
+
+const cardDraft = (title, extra = {}) => ({
+  action: 'save', version: 0, category: 'table', titleEn: title, titleFr: title + ' FR', studio: '',
+  descriptionEn: '', descriptionFr: '', artwork: '', altEn: '', altFr: '', featuredRank: 0, ...extra
+});
+
+test('protected catalogue previews and published market and language restrictions', async (t) => {
+  const { base, database } = await startSandbox(t, { appBasePath: '/casinohabibi' });
+  const staff = client(base + '/casinohabibi');
+  const guest = client(base + '/casinohabibi');
+  await staff('admin/login', staffCredentials);
+  const art = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lXB8WAAAAABJRU5ErkJggg==';
+  const editor = cardDraft('Orchard', { artwork: art, altEn: 'Apple tree', altFr: 'Pommier', displayMarket: 'CA', locales: ['fr-CA'] });
+  for (const invalid of [{ altFr: '' }, { locales: [] }, { locales: ['es'] }, { displayMarket: '123' }]) {
+    assert.equal((await staff('admin/coming-soon', { ...editor, ...invalid })).status, 400);
+  }
+  const saved = (await staff('admin/coming-soon', editor)).data;
+  assert.ok(saved.auditId);
+  assert.equal(saved.title.revision, 1);
+  assert.equal(saved.title.previewUrl, '/casinohabibi/admin?preview=orchard#coming-soon-admin');
+  const preview = 'admin/coming-soon/preview/orchard';
+  assert.equal((await guest(preview)).status, 401);
+  assert.equal((await staff(preview)).data.altFr, 'Pommier');
+  assert.equal((await guest('coming-soon/orchard?locale=fr-CA')).status, 404);
+  const published = (await staff('admin/coming-soon', { action: 'publish', version: 1, slug: 'orchard' })).data;
+  assert.equal(published.title.revision, 2);
+  assert.equal((await guest('coming-soon?locale=fr-CA')).data.titles.length, 0);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.prepare("UPDATE tenant_config_versions SET config = json_set(config, '$.displayMarket', 'CA-QC') WHERE tenant_id = 'sandbox' AND status = 'published'").run();
+  assert.equal((await guest('coming-soon?locale=fr-CA')).data.titles.length, 1);
+  assert.equal((await guest('coming-soon?locale=en-CA')).data.titles.length, 0);
+  assert.equal((await guest('coming-soon/orchard?locale=en-CA')).status, 404);
+  const live = (await guest('coming-soon/orchard?locale=fr-CA')).data;
+  assert.equal(live.altFr, 'Pommier');
+  const edited = await staff('admin/coming-soon', { ...editor, titleFr: 'Nouveau titre', version: 2, slug: 'orchard' });
+  assert.equal(edited.status, 200);
+  assert.equal((await staff(preview)).data.titleFr, 'Nouveau titre');
+  assert.equal((await guest('coming-soon/orchard?locale=fr-CA')).data.titleFr, live.titleFr);
+  assert.equal((await staff('admin/coming-soon', { action: 'publish', slug: 'orchard', version: 2 })).status, 409);
+});

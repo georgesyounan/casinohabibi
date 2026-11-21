@@ -1,4 +1,11 @@
 export const comingSoonCopy = {
+  comingSoonMarket: ['Display market (blank for all markets)', 'Marché d’affichage (vide pour tous les marchés)'],
+  comingSoonLanguages: ['Show this card in', 'Afficher cette fiche en'],
+  comingSoonBoth: ['English and French', 'Anglais et français'],
+  comingSoonDraftPreview: ['Preview draft', 'Aperçu du brouillon'],
+  comingSoonBackToCatalogue: ['Back to catalogue', 'Retour au catalogue'],
+  comingSoonPreviewLocale: ['Preview language', 'Langue de l’aperçu'],
+  comingSoonRevision: ['Revision', 'Révision'],
   comingSoon: ['Coming soon', 'À venir'],
   comingSoonDiscover: ['Discover', 'À découvrir'],
   comingSoonFeatured: ['Featured previews', 'Aperçus en vedette'],
@@ -85,18 +92,19 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     return link;
   };
 
-  function cover(title) {
+  function cover(title, french = isFrench(), allowSave = true) {
     const art = element('div', '', `art coming-soon-art coming-soon-${title.category}`);
     if (title.artwork) {
       const image = element('img');
       image.src = title.artwork;
-      image.alt = isFrench() ? title.altFr : title.altEn;
+      image.alt = french ? title.altFr : title.altEn;
       art.append(image);
     } else {
       const mark = element('span', { slots: '✦', table: '♢', live: '◈' }[title.category]);
       mark.setAttribute('aria-hidden', 'true');
       art.append(mark);
     }
+    if (!allowSave) return art;
     const saved = isFavorite(title.favoriteKey);
     const favorite = action(saved ? '★' : '☆', () => { void toggleFavorite(title.favoriteKey); }, 'favorite-toggle');
     favorite.disabled = favoritePending();
@@ -148,6 +156,19 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     return { count: normal ? lobby.titles.length : filtered.length, hasFavorites: stars.length > 0 };
   }
 
+  function detailCard(title, french, allowSave) {
+    const body = element('article', '', 'coming-soon-detail-card');
+    body.lang = french ? 'fr-CA' : 'en-CA';
+    const info = element('div', '', 'coming-soon-detail-copy');
+    const category = { slots: ['Slots', 'Machines à sous'], live: ['Live', 'En direct'], table: ['Table games', 'Jeux de table'] }[title.category];
+    info.append(element('p', french ? 'À venir' : 'Coming Soon', 'eyebrow'), element(allowSave ? 'h1' : 'h4', french ? title.titleFr : title.titleEn),
+      element('p', [category[Number(french)], title.studio].filter(Boolean).join(' · ')));
+    const description = french ? title.descriptionFr : title.descriptionEn;
+    if (description) info.append(element('p', description));
+    body.append(cover(title, french, allowSave), info);
+    return body;
+  }
+
   function renderDetail() {
     if (!detailSlug) return;
     const target = $('coming-soon-detail-content');
@@ -156,24 +177,24 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
       target.replaceChildren(element('h1', t('comingSoonMissing')));
       return;
     }
-    const name = titleName(preview);
-    const body = element('article', '', 'coming-soon-detail-card');
-    const info = element('div', '', 'coming-soon-detail-copy');
-    info.append(element('p', t('comingSoon'), 'eyebrow'), element('h1', name),
-      element('p', [t(preview.category), preview.studio].filter(Boolean).join(' · ')));
-    const description = isFrench() ? preview.descriptionFr : preview.descriptionEn;
-    if (description) info.append(element('p', description));
-    body.append(cover(preview), info);
-    target.replaceChildren(body);
-    return name;
+    target.replaceChildren(detailCard(preview, isFrench(), true));
+    return titleName(preview);
   }
 
+  let lobbyRequest = 0;
   async function loadLobby() {
+    const request = ++lobbyRequest;
+    const suffix = '?locale=' + (isFrench() ? 'fr-CA' : 'en-CA');
     if (detailSlug) {
-      try { preview = await api(`coming-soon/${detailSlug}`, undefined, 'GET'); }
-      finally { detailLoaded = true; }
+      preview = undefined;
+      try {
+        const title = await api('coming-soon/' + detailSlug + suffix, undefined, 'GET');
+        if (request === lobbyRequest) preview = title;
+      } finally { if (request === lobbyRequest) detailLoaded = true; }
     } else {
-      lobby = await api('coming-soon', undefined, 'GET');
+      lobby = { titles: [], featured: [], discover: [] };
+      const result = await api('coming-soon' + suffix, undefined, 'GET');
+      if (request === lobbyRequest) lobby = result;
     }
   }
 
@@ -184,6 +205,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     for (const name of fields) {
       if (title) form.elements[name].value = title[name];
     }
+    form.elements.displayMarket.value = title?.displayMarket || '';
+    form.elements.locales.value = title?.locales.length === 1 ? title.locales[0] : 'both';
     $('coming-soon-edit-title').textContent = title ? titleName(title) : t('comingSoonNew');
     $('coming-soon-remove-art').hidden = !artwork;
   }
@@ -204,7 +227,15 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   function renderAdmin() {
     if (canEdit.includes(staffRole)) {
       $('coming-soon-edit-title').textContent = selected ? titleName(selected) : t('comingSoonNew');
-      search.closest('label').hidden = drafts.length === 0;
+      search.closest('label').hidden = drafts.length === 0 || Boolean(draftSlug);
+      newButton.hidden = list.hidden = Boolean(draftSlug);
+      $('catalogue-draft-preview').hidden = !draftSlug;
+      if (draftPreview) {
+        const french = $('draft-preview-language').value === 'fr-CA';
+        $('draft-preview-content').replaceChildren(detailCard(draftPreview, french, false));
+        $('draft-preview-revision').textContent = [t('comingSoonRevision') + ' ' + draftPreview.version, draftPreview.displayMarket,
+          draftPreview.locales.join(' / ')].filter(Boolean).join(' · ');
+      }
       const query = searchable(search.value.trim());
       const matches = drafts.filter((title) => searchable([title.titleEn, title.titleFr, title.studio, title.slug].join(' ')).includes(query));
       const rows = matches.map((title) => {
@@ -215,6 +246,9 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
         name.append(element('strong', titleName(title)), element('small', status));
         const controls = element('div', '', 'actions');
         controls.append(action(t('comingSoonEdit'), () => openEditor(title), 'ghost'));
+        const previewLink = element('a', t('comingSoonDraftPreview'), 'button ghost');
+        previewLink.href = title.previewUrl;
+        controls.append(previewLink);
         if (title.state === 'published') controls.append(linkTo(title, t('comingSoonOpen'), 'button ghost'));
         if (canPublish) {
           if (title.state !== 'published' || title.publishedVersion !== title.version) {
@@ -226,7 +260,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
         return row;
       });
       const empty = $('coming-soon-admin-empty');
-      empty.hidden = !draftsLoaded || matches.length > 0;
+      empty.hidden = Boolean(draftSlug) || !draftsLoaded || matches.length > 0;
       empty.textContent = t(drafts.length ? 'comingSoonNoMatches' : 'comingSoonNoDrafts');
       list.replaceChildren(...rows);
     }
@@ -257,11 +291,18 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     }
   }
 
+  const draftSlug = new URLSearchParams(location.search).get('preview');
+  let draftPreview;
+  $('draft-preview-language').addEventListener('change', renderAdmin);
+
   async function loadDrafts(showLoading = true) {
     if (!canEdit.includes(staffRole)) return;
     if (showLoading) adminStatus.textContent = t('loading');
     try {
-      drafts = await api('admin/coming-soon', undefined, 'GET');
+      if (draftSlug) {
+        draftPreview = await api('admin/coming-soon/preview/' + encodeURIComponent(draftSlug), undefined, 'GET');
+        $('draft-preview-language').value = draftPreview.locales.includes(isFrench() ? 'fr-CA' : 'en-CA') ? (isFrench() ? 'fr-CA' : 'en-CA') : draftPreview.locales[0];
+      } else drafts = await api('admin/coming-soon', undefined, 'GET');
       draftsLoaded = true;
       if (showLoading) adminStatus.textContent = '';
       renderAdmin();
@@ -301,6 +342,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     if (saving) return;
     const file = form.elements.artworkFile.files[0];
     const data = Object.fromEntries(fields.map((name) => [name, form.elements[name].value]));
+    data.displayMarket = form.elements.displayMarket.value.trim().toUpperCase();
+    data.locales = form.elements.locales.value === 'both' ? ['en-CA', 'fr-CA'] : [form.elements.locales.value];
     data.featuredRank = Number(data.featuredRank);
     try {
       if (file?.size > 48 * 1024) throw new Error('invalid');

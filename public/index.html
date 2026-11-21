@@ -150,6 +150,8 @@
               <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" maxlength="120" required></label>
               <label><span data-copy="comingSoonCategory"></span><select name="category"><option value="slots" data-copy="slots"></option><option value="table" data-copy="table"></option><option value="live" data-copy="live"></option></select></label>
               <label><span data-copy="comingSoonStudio"></span><input name="studio" maxlength="64"></label>
+              <label><span data-copy="comingSoonMarket"></span><input name="displayMarket" maxlength="6" pattern="[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?" placeholder="CA-QC"></label>
+              <label><span data-copy="comingSoonLanguages"></span><select name="locales"><option value="both" data-copy="comingSoonBoth"></option><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
               <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" rows="3" maxlength="800"></textarea></label>
               <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" rows="3" maxlength="800"></textarea></label>
               <label><span data-copy="comingSoonArtwork"></span><input name="artworkFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
@@ -158,6 +160,11 @@
               <label><span data-copy="comingSoonAltFr"></span><input name="altFr" maxlength="200"></label>
               <div class="actions"><button type="submit" data-copy="saveDraft"></button><button type="button" id="coming-soon-remove-art" class="ghost" data-copy="comingSoonRemoveArt" hidden></button><button type="button" id="coming-soon-close-editor" class="ghost" data-copy="adminCloseEditor"></button></div>
             </form>
+            <section id="catalogue-draft-preview" class="admin-editor" aria-labelledby="draft-preview-heading" hidden>
+              <div class="admin-page-heading"><h4 id="draft-preview-heading" data-copy="comingSoonDraftPreview" tabindex="-1"></h4><a id="close-draft-preview" class="button ghost" href="/admin#coming-soon-admin" data-copy="comingSoonBackToCatalogue"></a></div>
+              <label><span data-copy="comingSoonPreviewLocale"></span><select id="draft-preview-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
+              <p id="draft-preview-revision"></p><div id="draft-preview-content"></div>
+            </section>
             <label class="admin-preview-search" hidden><span data-copy="comingSoonFind"></span><input id="coming-soon-admin-search" type="search" autocomplete="off"></label>
             <p id="coming-soon-admin-empty" hidden></p>
             <ul id="coming-soon-admin-list" class="coming-soon-admin-list"></ul>

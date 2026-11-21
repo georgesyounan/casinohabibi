@@ -1580,6 +1580,7 @@ const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => 
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
+  if (languageChanged && !isAdminPage) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
   updateDocumentTitle();
   updateTenantPreview();
