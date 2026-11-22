@@ -1,4 +1,4 @@
-import { catalogueCategories, games, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
+import { catalogueCategories, games, roundPreview, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
@@ -383,8 +383,41 @@ let favoriteStatusKey;
 let favoriteActivityId;
 let screen = 'signin';
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
+let selectedPreview;
 let result;
 let dialogError;
+function clearPendingDemo() {
+  sessionStorage.removeItem('northplay-pending-game');
+  sessionStorage.removeItem('northplay-pending-preview');
+}
+function selectDemo(gameId, preview) {
+  selectedGame = games.find(game => game.id === gameId);
+  selectedPreview = preview;
+}
+function startDemo(gameId, preview) {
+  selectDemo(gameId, preview);
+  if (!selectedGame) return;
+  clearPendingDemo();
+  afterSignIn = undefined;
+  result = undefined;
+  if (!player) {
+    sessionStorage.setItem('northplay-pending-game', gameId);
+    if (preview) sessionStorage.setItem('northplay-pending-preview', preview.slug);
+  }
+  openPanel(player ? 'play' : 'signin');
+}
+function clearDemoSelection() {
+  selectedGame = undefined;
+  selectedPreview = undefined;
+  afterSignIn = undefined;
+  clearPendingDemo();
+}
+function roundTitle(entry) {
+  const source = roundPreview(entry.outcome);
+  if (source) return language ? source.titleFr : source.titleEn;
+  const game = games.find(game => game.id === entry.game);
+  return game ? gameName(game) : entry.game;
+}
 let tenantCopy = { headline: copy.headline, intro: copy.intro, announcement: ['', ''] };
 let tenantFaqItems = [];
 let tenantFeaturedGameIds = ['gold', 'roulette'];
@@ -766,7 +799,6 @@ function supportThreadEntries(ticket) {
 }
 
 function historyEntryElement(entry) {
-  const game = games.find(({ id }) => id === entry.game);
   if (!entry.game) {
     const reset = demoBalanceResetDetails(entry.outcome);
     if (reset) {
@@ -779,7 +811,7 @@ function historyEntryElement(entry) {
   const change = `${entry.amount > 0 ? '+' : ''}${money(entry.amount)}`;
   const summary = describeOutcome(entry.game, entry.outcome);
   const outcome = summary ? ` · ${t('roundResult')}: ${summary}` : '';
-  return element('li', `${game ? gameName(game) : entry.game}${date} · ${t('wager')}: ${money(entry.wager)} · ${t('balanceChange')}: ${change}${outcome}`);
+  return element('li', `${roundTitle(entry)}${date} · ${t('wager')}: ${money(entry.wager)} · ${t('balanceChange')}: ${change}${outcome}`);
 }
 
 function csvCell(value) {
@@ -829,6 +861,7 @@ function submitForm(fields, caption, callback, busyCaption) {
   form.append(...fields, submit);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (submit.disabled) return;
     submit.disabled = true;
     if (busyCaption) {
       form.setAttribute('aria-busy', 'true');
@@ -902,13 +935,14 @@ function renderDialog() {
   const panel = $('#panel');
   panel.replaceChildren();
   $('#status').textContent = dialogError ? t(dialogError) : '';
-  const title = element('h2', screen === 'play' ? gameName(selectedGame) : screen === 'support' ? t('supportTitle') : screen === 'passwordReset' ? t('passwordResetTitle') : screen === 'emailVerification' ? t('emailVerification') : screen === 'emailChange' ? t('emailChangeTitle') : t(screen));
+  const title = element('h2', screen === 'play' ? (selectedPreview ? (language ? selectedPreview.titleFr : selectedPreview.titleEn) : gameName(selectedGame)) : screen === 'support' ? t('supportTitle') : screen === 'passwordReset' ? t('passwordResetTitle') : screen === 'emailVerification' ? t('emailVerification') : screen === 'emailChange' ? t('emailChangeTitle') : t(screen));
   title.id = 'dialog-title';
   title.tabIndex = -1;
   $('#dialog').setAttribute('aria-labelledby', title.id);
   panel.append(title);
   if ($('#dialog').open) title.focus();
   if (screen === 'signin' || screen === 'signup') {
+    if (selectedPreview && !afterSignIn) panel.append(element('p', language ? selectedPreview.titleFr : selectedPreview.titleEn, 'demo-signin-title'));
     const signup = screen === 'signup';
     const signupFields=[];
     if(signup){
@@ -930,12 +964,26 @@ function renderDialog() {
       const favoritesSynced = await adoptAccountFavorites(auth);
       if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
       playerSessionStartedAt = auth.sessionStartedAt;
-      sessionStorage.removeItem('northplay-pending-game');
-      language = publicLanguage(auth.preferredLocale);
+      const pendingSlug = sessionStorage.getItem('northplay-pending-preview');
+      if (!pendingSlug) language = publicLanguage(auth.preferredLocale);
       if (publicLocales.includes(auth.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
-      openPanel(afterSignIn || (selectedGame ? 'play' : 'account'));
-      afterSignIn=undefined;
+      const target = afterSignIn || (selectedGame ? 'play' : 'account');
+      if (target === 'play' && pendingSlug) {
+        try {
+          const fresh = await api('coming-soon/' + encodeURIComponent(pendingSlug) + '?locale=' + siteContentLocale(), undefined, 'GET');
+          if (fresh.demoGame !== selectedGame.id) throw new Error('demoUnavailable');
+          selectDemo(fresh.demoGame, fresh);
+        } catch {
+          clearDemoSelection();
+          openPanel('account');
+          $('#panel').prepend(element('p', t('demoUnavailable')));
+          return;
+        }
+      }
+      clearPendingDemo();
+      afterSignIn = undefined;
+      openPanel(target);
     }), action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
     if (!signup) {
       panel.append(action(t('passwordReset'), () => openPanel('passwordReset'), 'ghost'));
@@ -1101,6 +1149,12 @@ function renderDialog() {
       }
       return;
     }
+    if (selectedPreview?.artwork) {
+      const cover = element('img', '', 'demo-round-cover');
+      cover.src = selectedPreview.artwork;
+      cover.alt = '';
+      panel.append(cover);
+    }
     panel.append(element('p', t('simulation')));
     const gameRules = { gold: 'slotRules', aurora: 'slotRules', blackjack: 'blackjackRules', roulette: 'rouletteRules' };
     panel.append(element('p', t(gameRules[selectedGame.id]), 'game-rule'));
@@ -1140,19 +1194,33 @@ function renderDialog() {
       panel.append(resultAnnouncement);
     }
     let pending;
+    const roundError = element('p', '', 'demo-round-error');
+    roundError.setAttribute('role','alert');
     const fields = colorSelect ? [label, colorSelect.parentElement] : [label];
     panel.append(submitForm(fields, t('play'), async ({ wager, choice }) => {
       if (!pending || pending.wager !== Number(wager) || pending.choice !== choice) {
         const bytes = crypto.getRandomValues(new Uint8Array(18));
         const requestId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-        pending = { game: selectedGame.id, wager: Number(wager), requestId, ...(choice ? { choice } : {}) };
+        pending = { game: selectedGame.id, wager: Number(wager), requestId, ...(choice ? { choice } : {}),
+          ...(selectedPreview && {previewSlug: selectedPreview.slug, locale: siteContentLocale()}) };
       }
-      player = await api('play', pending);
-      result = { amount: player.amount, outcome: player.outcome };
-      dialogError = undefined;
+      const playingAccount = player.id;
+      let response;
+      try {
+        response = await api('play', pending);
+      } catch (error) {
+        roundError.textContent = t(error.message);
+        throw error;
+      }
+      if (player?.id !== playingAccount) return;
+      player = response;
       updateAccount();
+      if (!$('#dialog').open || screen !== 'play' || selectedGame?.id !== pending.game ||
+          selectedPreview?.slug !== pending.previewSlug || !roundError.isConnected) return;
+      result = { amount: response.amount, outcome: response.outcome };
+      dialogError = undefined;
       renderDialog();
-    }, t('roundInProgress')), action(t('history'), () => openPanel('account'), 'ghost'));
+    }, t('roundInProgress')), roundError, action(t('history'), () => openPanel('account'), 'ghost'));
     return;
   }
   if (screen === 'support') {
@@ -1319,7 +1387,7 @@ function renderDialog() {
     player = null;
     restoreGuestFavorites();
     playerSessionStartedAt = undefined;
-    selectedGame = undefined;
+    clearDemoSelection();
     updateAccount();
     updateSessionReminder();
     $('#dialog').close();
@@ -1348,11 +1416,10 @@ function renderDialog() {
         ? ['Date (UTC)', 'Activité', 'Résultat de la partie', 'Mise (CAD)', 'Variation du solde (CAD)', 'Devise']
         : ['Date (UTC)', 'Activity', 'Round result', 'Wager (CAD)', 'Balance change (CAD)', 'Currency'];
       const rows = data.activity.map((entry) => {
-        const game = games.find(({ id }) => id === entry.game);
         const reset = demoBalanceResetDetails(entry.outcome);
         return [
           entry.createdAt ? new Date(entry.createdAt).toISOString() : '',
-          reset ? t('demoBalanceResetCsv') : (game ? gameName(game) : entry.game) || (language ? 'Crédit de départ' : 'Starting credit'),
+          reset ? t('demoBalanceResetCsv') : roundTitle(entry) || (language ? 'Crédit de départ' : 'Starting credit'),
           reset ? t('demoBalanceResetCsvDetail').replace('{balance}', money(reset.newBalance)) : describeOutcome(entry.game, entry.outcome),
           (entry.wager / 100).toFixed(2),
           (entry.amount / 100).toFixed(2),
@@ -1564,7 +1631,15 @@ function announceFavorite(message, activityId) {
 }
 
 function renderCatalog() {
-  const editorial = comingSoonUi.renderLobby(filter, searchQuery, selectedCollection);
+  const recentGameOrder = new Map(), recentPreviews = new Map();
+  for (const entry of player?.history || []) {
+    if (!entry.game) continue;
+    const preview = roundPreview(entry.outcome);
+    const order = preview ? recentPreviews : recentGameOrder;
+    const key = preview ? preview.slug : entry.game;
+    if (!order.has(key)) order.set(key, order.size);
+  }
+  const editorial = comingSoonUi.renderLobby(filter, searchQuery, selectedCollection, recentPreviews);
   const previewTitle = comingSoonUi.renderDetail();
   if (previewTitle && !document.querySelector('link[rel="canonical"]')) document.title = `${previewTitle} · ${tenantBrandName}`;
   const catalog = $('#catalog');
@@ -1583,10 +1658,6 @@ function renderCatalog() {
     button.setAttribute('aria-label', t(isFavorite ? 'removeFavorite' : 'addFavorite').replace('{game}', name));
     art.append(button);
   };
-  const recentGameOrder = new Map();
-  for (const entry of player?.history || []) {
-    if (entry.game && !recentGameOrder.has(entry.game)) recentGameOrder.set(entry.game, recentGameOrder.size);
-  }
   const demoGames = games.filter((game) => {
     const key = `demo:${game.id}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
@@ -1612,14 +1683,14 @@ function renderCatalog() {
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
   $('#catalog-summary').textContent = t('catalogResultSummary')
-    .replace('{games}', countFormat.format(demoGames.length))
-    .replace('{previews}', countFormat.format(visibleGames.length + editorial.count));
+    .replace('{games}', countFormat.format(demoGames.length + editorial.playable))
+    .replace('{previews}', countFormat.format(visibleGames.length + editorial.count - editorial.playable));
   $('#catalog-summary').hidden = !hasCatalogue && !selectedCollection;
   $('#catalog-empty').hidden = hasListings;
   const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
   const noFavorites = filter === 'favorites' && !hasAvailableFavorite;
-  const noRecentGames = filter === 'recent' && recentGameOrder.size === 0;
+  const noRecentGames = filter === 'recent' && recentGameOrder.size === 0 && recentPreviews.size === 0;
   $('#browse-all-games').hidden = hasListings || (filter === 'all' && !selectedCollection);
   $('#clear-game-search').hidden = hasListings || !searchQuery.trim() || noFavorites || noRecentGames;
   $('[data-copy="catalogEmptyTitle"]').textContent = noFavorites ? t('noFavoriteGamesTitle') : noRecentGames ? t('noRecentGamesTitle') : (hasCatalogue || selectedCollection) ? t('catalogNoMatchesTitle') : t('catalogEmptyTitle');
@@ -1631,12 +1702,7 @@ function renderCatalog() {
     const info = element('span', '', 'card-info');
     if (tenantFeaturedGameIds.includes(game.id)) info.append(element('small', t('featuredBadge'), 'featured-label'));
     info.append(element('small', t('demoGameLabel'), 'catalog-label'), element('strong', gameName(game)), element('small', `${t(game.type)} · ${demoProviderName()}`));
-    const play = action(t('playNow'), () => {
-      selectedGame = game;
-      sessionStorage.setItem('northplay-pending-game', game.id);
-      result = undefined;
-      openPanel(player ? 'play' : 'signin');
-    }, 'ghost demo-play');
+    const play = action(t('playNow'), () => startDemo(game.id), 'ghost demo-play');
     info.append(play);
     card.append(art, info);
     catalog.append(card);
@@ -1680,7 +1746,7 @@ const comingSoonUi = createComingSoonUi({
   isFrench: () => Boolean(language),
   getFavorites: () => favorites,
   favoritePending: () => favoriteSavePending,
-  toggleFavorite
+  startDemo, toggleFavorite
 });
 
 const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
@@ -1832,21 +1898,18 @@ $('#open-discovery').addEventListener('click',()=>{
   openPanel(player?'discovery':'signin');
 });
 $('#account').addEventListener('click', () => {
-  selectedGame = undefined;
-  sessionStorage.removeItem('northplay-pending-game');
+  clearDemoSelection();
   openPanel(player ? 'account' : 'signin');
 });
 $('#safety-controls').addEventListener('click', () => openPanel(player ? 'account' : 'signin'));
 $('#dialog').addEventListener('cancel', () => {
   if (!player) {
-    selectedGame = undefined;
-    sessionStorage.removeItem('northplay-pending-game');
+    clearDemoSelection();
   }
 });
 $('#close').addEventListener('click', () => {
   if (!player) {
-    selectedGame = undefined;
-    sessionStorage.removeItem('northplay-pending-game');
+    clearDemoSelection();
   }
   $('#dialog').close();
 });

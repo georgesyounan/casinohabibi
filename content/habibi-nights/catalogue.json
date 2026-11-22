@@ -7,6 +7,7 @@
     {
       "slug": "lanterns-of-the-souk-demo",
       "category": "slots",
+      "demoGame": "gold",
       "titleFr": "Les lanternes du souk · Démo",
       "titleEn": "Lanterns of the Souk · Demo",
       "descriptionFr": "La nuit tombe sur le souk. Une lanterne turquoise éclaire les arches, les autres brillent en ambre. Ces couleurs ont inspiré les symboles de cette machine à sous imaginaire.",
@@ -18,6 +19,7 @@
     {
       "slug": "midnight-in-beirut-demo",
       "category": "table",
+      "demoGame": "blackjack",
       "titleFr": "Minuit à Beyrouth · Démo",
       "titleEn": "Midnight in Beirut · Demo",
       "descriptionFr": "Un as de pique et un roi de cœur reposent sur le tapis vert. Derrière la table, les lumières de la corniche dessinent la baie de Beyrouth. C’est le décor imaginé pour cette démo de blackjack.",
@@ -29,6 +31,7 @@
     {
       "slug": "dune-roulette-demo",
       "category": "table",
+      "demoGame": "roulette",
       "titleFr": "La roulette des dunes · Démo",
       "titleEn": "Dune Roulette · Demo",
       "descriptionFr": "Une bille ivoire repose au bord d’une roue de cuivre. Au loin, la dernière lumière découpe les dunes. Le rouge et le bleu des cases reprennent les couleurs du ciel dans ce concept de roulette.",

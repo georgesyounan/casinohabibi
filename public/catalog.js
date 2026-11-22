@@ -5,6 +5,16 @@ export const games = [
   { id: 'aurora', name: ['Aurora Spins', 'Tours boréaux'], type: 'slots', icon: '❈' }
 ];
 
+export function roundPreview(outcome) {
+  if (!outcome) return null;
+  try {
+    const preview = JSON.parse(outcome).preview;
+    return preview && typeof preview.slug === 'string' && typeof preview.titleEn === 'string' && typeof preview.titleFr === 'string' ? preview : null;
+  } catch {
+    return null;
+  }
+}
+
 export const catalogueCategories = {
   slots: ['Slots', 'Machines à sous'],
   table: ['Table games', 'Jeux de table'],

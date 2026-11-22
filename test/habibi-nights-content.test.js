@@ -115,8 +115,21 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
   }
   const second = JSON.parse(run());
   assert.deepEqual([second.insertedPreviews, second.insertedGuides, second.auditIds.length], [0, 0, 0]);
-  db.prepare('UPDATE coming_soon_titles SET version=version+1 WHERE slug=?').run(input.previews[0].slug);
+  const ids = () => db.prepare('SELECT id,slug FROM coming_soon_titles ORDER BY id').all();
+  const originalIds = ids();
+  // The previous edition had the same illustrations and saves but no playable game.
+  db.prepare("UPDATE coming_soon_titles SET draft=json_remove(draft,'$.demoGame'),published=json_remove(published,'$.demoGame')").run();
+  const upgraded = JSON.parse(run());
+  assert.deepEqual([upgraded.insertedPreviews, upgraded.updatedPreviews, upgraded.insertedGuides, new Set(upgraded.auditIds).size], [0, 3, 0, 6]);
+  assert.deepEqual(ids(), originalIds);
+  for (const card of input.previews) {
+    const row = db.prepare("SELECT version,published_version,json_extract(published,'$.demoGame') AS game FROM coming_soon_titles WHERE slug=?").get(card.slug);
+    assert.deepEqual(Object.values(row), [4, 4, card.demoGame]);
+  }
+  assert.deepEqual(JSON.parse(run()).auditIds, []);
+  // A later editor deliberately removing a game must retain that choice.
+  db.prepare("UPDATE coming_soon_titles SET draft=json_remove(draft,'$.demoGame'),published=json_remove(published,'$.demoGame') WHERE slug=?").run(input.previews[0].slug);
   assert.throws(run, /Editorial changes/);
-  assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 8]);
+  assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 14]);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });

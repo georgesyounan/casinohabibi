@@ -92,15 +92,20 @@ function publish() {
   const existingGuide = db.prepare(
     "SELECT r.live_rev,r.draft_rev,r.archived,v.data FROM website_content_records r LEFT JOIN website_content_revisions v ON v.tenant_id=r.tenant_id AND v.kind=r.kind AND v.slug=r.slug AND v.revision=r.live_rev WHERE r.tenant_id=? AND r.kind='help' AND r.slug=?"
   );
-  const missing = cards.filter(({ slug, content }) => {
+  const changes = cards.flatMap(({ slug, content }) => {
     const row = existingCard.get(tenant, slug);
-    if (!row) return true;
+    if (!row) return [{ slug, content, version: 0 }];
     assert.ok(
       row.state === 'published' && row.version === row.published_version,
       'Editorial changes at ' + slug
     );
-    assertMatches(slug, JSON.parse(row.published), content);
-    return false;
+    const prior = JSON.parse(row.published);
+    const { demoGame, ...original } = content;
+    assertMatches(slug, prior, original);
+    if (prior.demoGame === demoGame) return [];
+    // Only the original published edition can receive an automatic upgrade.
+    assert.ok(row.version === 2 && !Object.hasOwn(prior, 'demoGame'), 'Editorial changes at ' + slug);
+    return [{ slug, content, version: row.version }];
   });
   const currentGuide = existingGuide.get(tenant, guideSlug);
   if (currentGuide) {
@@ -111,7 +116,14 @@ function publish() {
     assertMatches(guideSlug, JSON.parse(currentGuide.data), guide);
   }
   const auditIds = [];
-  if (!missing.length && currentGuide) return { host, insertedPreviews: 0, insertedGuides: 0, auditIds };
+  const receipt = {
+    host,
+    insertedPreviews: changes.filter(({ version }) => version === 0).length,
+    updatedPreviews: changes.filter(({ version }) => version > 0).length,
+    insertedGuides: Number(!currentGuide),
+    auditIds
+  };
+  if (!changes.length && currentGuide) return receipt;
 
   // Attribute this server-side publication independently from human staff. This identity has no membership or login credential.
   const email = 'catalogue-demo@casinohabibi.invalid';
@@ -145,12 +157,12 @@ function publish() {
         })
       )
   });
-  for (const { slug, content } of missing) {
+  for (const { slug, content, version } of changes) {
     const draft = catalogue.mutate(tenant, actor, randomUUID(), {
       ...content,
       slug,
       action: 'save',
-      version: 0
+      version
     });
     const live = catalogue.mutate(tenant, actor, randomUUID(), {
       slug,
@@ -185,7 +197,7 @@ function publish() {
       'Missing preview in the published collection for ' + locale
     );
   }
-  return { host, insertedPreviews: missing.length, insertedGuides: Number(!currentGuide), auditIds };
+  return receipt;
 }
 
 try {

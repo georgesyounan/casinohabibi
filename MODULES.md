@@ -26,7 +26,7 @@ Le catalogue de démonstration compte 13 modules techniques et 12 modules d’in
 | --- | --- | --- |
 | B01 | Hall et compte bilingues adaptés au téléphone | Hall → Mon compte |
 | B02 | Fiches à venir, sélection de découverte et favoris privés | Hall → À venir |
-| B03 | Fiche publique, recherche et filtres du catalogue | Catalogue → fiche |
+| B03 | Fiche publique, recherche, filtres et lien facultatif vers un jeu de démonstration | Catalogue → fiche |
 | B04 | Pages d’aide, bannières, traductions, métadonnées et plan du site | Contenu du site |
 | B05 | Offres gratuites, conditions, dates locales et réclamation groupée | Découverte et récompenses → Récompenses |
 | B06 | Éditeur de quêtes, étapes et progression sur plusieurs appareils | Quêtes et récompenses |
@@ -60,7 +60,7 @@ Les onze parcours ci-dessous relient les 25 modules du catalogue. Les essais uti
 | Parcours | Modules concernés | Résultat vérifié |
 | --- | --- | --- |
 | H01 · Marque et accès | A01, A02, A10, B01 | Deux sessions retrouvent le même compte. La marque, le rôle et le droit de publication déterminent les dossiers et les commandes accessibles. |
-| H02 · Publication | A01, A03, A10, B03, B04 | Un éditeur prépare un brouillon, un opérateur autorisé le publie. Fiche, guide, liens bilingues et plan du site suivent la version publiée. Une ancienne adresse renvoie à la nouvelle. |
+| H02 · Publication | A01, A03, A10, B03, B04 | Un éditeur prépare un brouillon, un opérateur autorisé le publie. Fiche, jeu de démonstration associé, guide, liens bilingues et plan du site suivent la version publiée. Une ancienne adresse renvoie à la nouvelle. |
 | H03 · Hall et catalogue | A03, A04, B01, B02, B03 | Avec huit fiches admissibles, le hall en retient six distinctes et garde leur ordre au rechargement. Les filtres respectent la langue et la disponibilité. Le hall reste utilisable quand aucune fiche n’est publiée. |
 | H04 · Favoris et activité | A05, A06, A10, B02, B03 | Un favori ajouté sur un appareil apparaît sur l’autre et dans le dossier joueur avec la même référence. Répéter l’action conserve la référence. Une fiche archivée quitte les favoris publics. |
 | H05 · Administration et rapports | A01, A10, A11, A12 | Le compteur de publications concorde avec la liste détaillée. L’éditeur retrouve ses propres quêtes, publicités et sondages dans le journal. Les dossiers d’un collègue et ceux d’une autre marque gardent leur portée. |
