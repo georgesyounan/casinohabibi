@@ -1,3 +1,4 @@
+import { createSupportQueue } from './support-queue.js';
 import { catalogueCategories, games, roundPreview, demoTitle, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
@@ -159,6 +160,14 @@ const copy = {
   supportEmail: ['Support email', 'Courriel du soutien'], supportContact: ['Contact support', 'Contacter le soutien'],
   tenantPreviewTitle: ['Brand preview', 'Aperçu de la marque'], tenantPreviewHelp: ['Live preview of the settings in this form. Save the draft, then publish it for players to see.', 'Aperçu en direct des paramètres de ce formulaire. Enregistrez le brouillon, puis publiez-le pour que les joueurs le voient.'],
   previewBrandPlaceholder: ['Your casino name', 'Le nom de votre casino'], previewEmailPlaceholder: ['No support email set', 'Aucun courriel de soutien défini'],
+  supportStatusTotals: ['All requests · {open} open · {answered} answered · {closed} closed','Toutes les demandes · {open} ouvertes · {answered} répondues · {closed} fermées'],
+  supportMoreFilters: ['More filters', 'Autres filtres'],
+  supportResultRange: ['Requests {start}–{end} of {total}', 'Demandes {start} à {end} sur {total}'],
+  supportAllCases: ['View all requests', 'Voir toutes les demandes'],
+  supportPlayerFile: ['Open player record', 'Ouvrir la fiche du joueur'],
+  supportPlayerCases: ['Support requests', 'Demandes de soutien'],
+  supportNewCase: ['New request', 'Nouvelle demande'],
+  supportUnreadCase: ['Unread reply', 'Réponse non lue'],
   supportTitle: ['Support centre', 'Centre de soutien'], supportIntro: ['Send a message to the casino support team and check replies here.', 'Écrivez à l’équipe de soutien du casino et consultez les réponses ici.'],
   supportCategory: ['What can we help with?', 'Quel est le sujet de votre demande?'],
   supportMessage: ['Message (10 to 3,000 characters)', 'Message (de 10 à 3 000 caractères)'], supportSend: ['Send support request', 'Envoyer la demande'], supportSent: ['Your request was sent to casino support.', 'Votre demande a été envoyée au soutien du casino.'],
@@ -174,7 +183,7 @@ const copy = {
   supportStatusOpen: ['Open', 'Ouverte'], supportStatusAnswered: ['Answered', 'Répondue'], supportStatusClosed: ['Closed', 'Fermée'], supportCategoryAccount: ['Account', 'Compte'], supportCategoryGame: ['Game listing', 'Jeu'], supportCategoryResponsible: ['Safer play', 'Jeu responsable'], supportCategoryOther: ['Other', 'Autre'], supportCategoryComplaint: ['Complaint', 'Plainte'], supportTopicFilter: ['Request topic', 'Sujet de la demande'], supportTopicAll: ['All topics', 'Tous les sujets'], supportComplaintBadge: ['Formal complaint', 'Plainte officielle'], supportComplaintFilter: ['Case type', 'Type de dossier'], supportComplaintAll: ['All cases', 'Tous les dossiers'], supportComplaintOnly: ['Complaints only', 'Plaintes seulement'], supportNonComplaints: ['Other requests', 'Autres demandes'],
   supportStatusLabel: ['Ticket status', 'État de la demande'],
   supportPriority: ['Priority', 'Priorité'], supportPriorityAll: ['All priorities', 'Toutes les priorités'], supportPriorityLow: ['Low', 'Faible'], supportPriorityNormal: ['Normal', 'Normale'], supportPriorityHigh: ['High', 'Élevée'], supportPriorityUrgent: ['Urgent', 'Urgente'],
-  supportSearch: ['Search email or ticket text', 'Rechercher un courriel ou le texte de la demande'], supportFilter: ['Filter by status', 'Filtrer par état'], supportFilterAll: ['All statuses', 'Tous les états'], supportNoMatches: ['No tickets match these filters.', 'Aucune demande ne correspond à ces filtres.'], supportClearFilters: ['Clear filters', 'Effacer les filtres'], supportQueueSummary: ['Showing {matching} matching of {loaded} loaded · {total} total · Open: {open} · Answered: {answered} · Closed: {closed}', '{matching} correspondantes sur {loaded} chargées · {total} au total · Ouvertes : {open} · Répondues : {answered} · Fermées : {closed}'], supportLoadMore: ['Load more requests', 'Charger plus de demandes'], supportLoadingMore: ['Loading…', 'Chargement…'],
+  supportSearch: ['Search by player, case, reference or text', 'Rechercher un joueur, un billet, une référence ou du texte'], supportFilter: ['Filter by status', 'Filtrer par état'], supportFilterAll: ['All statuses', 'Tous les états'], supportNoMatches: ['No tickets match these filters.', 'Aucune demande ne correspond à ces filtres.'], supportClearFilters: ['Clear filters', 'Effacer les filtres'],
   loadConfig: ['Load draft', 'Charger le brouillon'],
   saveDraft: ['Save draft', 'Enregistrer le brouillon'], publishConfig: ['Publish version', 'Publier la version'],
   draftSaved: ['Draft saved.', 'Brouillon enregistré.'], configPublished: ['Configuration published.', 'Configuration publiée.'],
@@ -791,7 +800,7 @@ function supportMessageElement(author, message, createdAt, kind) {
 function supportThreadEntries(ticket) {
   const entries = ticket.messages || [];
   const initialIndex = entries.findIndex((entry) => entry.authorType === 'player' && entry.createdAt === ticket.createdAt && entry.message === ticket.message);
-  if (initialIndex >= 0) return entries.filter((_, index) => index !== initialIndex);
+  if (initialIndex >= 0) return entries;
   return [{ authorType: 'player', message: ticket.message, createdAt: ticket.createdAt }, ...entries];
 }
 
@@ -894,18 +903,66 @@ const supportStatusCopy = { open: 'supportStatusOpen', answered: 'supportStatusA
 const supportPriorityCopy = { low: 'supportPriorityLow', normal: 'supportPriorityNormal', high: 'supportPriorityHigh', urgent: 'supportPriorityUrgent' };
 
 let supportReference='';
+let supportView='list';
+let loadingPlayerCases=false;
+let supportList;
+let supportTicket;
+let supportRequest=0;
 let afterSignIn;
-async function openSupportCenter(reference) {
-  supportReference=typeof reference==='string'?reference:'';
+
+function supportCurrent(request,owner) {
+  return request===supportRequest && player?.id===owner && screen==='support' && $('#dialog').open;
+}
+async function loadPlayerCases(page=1) {
+  const request=++supportRequest,owner=player?.id;
+  supportView='list';
+  loadingPlayerCases=true;
+  supportList=undefined;
+  supportTicket=undefined;
+  renderDialog();
   try {
-    player.supportTickets = await api('support', undefined, 'GET');
-    player.supportReplies = 0;
+    const list=await api('support/inbox?page='+page,undefined,'GET');
+    if (!supportCurrent(request,owner)) return;
+    loadingPlayerCases=false;
+    supportList=list;
+    player.supportReplies=list.unread;
     updateAccount();
-    openPanel('support');
-  } catch (error) {
-    dialogError = error.message;
-    $('#status').textContent = t(dialogError);
+    renderDialog();
+  } catch(error) {
+    if (supportCurrent(request,owner)) { loadingPlayerCases=false; renderDialog(); $('#status').textContent=t(error.message); }
   }
+}
+async function readPlayerCase(id,notice) {
+  const request=++supportRequest,owner=player?.id;
+  supportView='case';
+  supportTicket=undefined;
+  renderDialog();
+  try {
+    const result=await api('support/read',{ticketId:id});
+    if (!supportCurrent(request,owner)) return;
+    supportTicket=result.ticket;
+    player.supportReplies=result.unread;
+    updateAccount();
+    renderDialog();
+    if (notice) $('#status').textContent=t(notice);
+  } catch(error) {
+    if (supportCurrent(request,owner)) $('#status').textContent=t(error.message);
+  }
+}
+function composeSupport(reference='') {
+  ++supportRequest;
+  supportReference=reference;
+  supportView='new';
+  renderDialog();
+}
+function openSupportCenter(reference) {
+  ++supportRequest;
+  supportReference=typeof reference==='string'?reference:'';
+  supportView=supportReference?'new':'list';
+  supportTicket=undefined;
+  supportList=undefined;
+  openPanel('support');
+  if (supportView==='list') void loadPlayerCases();
 }
 
 let breakControls;
@@ -1230,35 +1287,56 @@ function renderDialog() {
     return;
   }
   if (screen === 'support') {
-    panel.append(element('p', t('supportIntro')));
-    const categoryLabel = element('label', t('supportCategory'));
-    const category = element('select');
-    category.name = 'category';
-    for (const [value, key] of Object.entries(supportCategoryCopy)) {
-      const option = element('option', t(key));
-      option.value = value;
-      category.append(option);
+    const back=()=>action(t('supportTickets'),()=>loadPlayerCases(supportList?.page || 1),'ghost');
+    if (supportView==='list') {
+      panel.append(action(t('supportNewCase'),()=>composeSupport()),action(t('account'),()=>openPanel('account'),'ghost'));
+      panel.append(element('h3',t('supportTickets')));
+      if (!supportList) { panel.append(loadingPlayerCases?element('p',t('loading')):action(t('supportRefresh'),()=>loadPlayerCases(),'ghost'));return; }
+      if (!supportList.total) panel.append(element('p',t('supportNoTickets')));
+      for (const ticket of supportList.tickets) {
+        const row=action('',()=>readPlayerCase(ticket.id),'ghost case-inbox-row');
+        row.append(element('strong','#'+ticket.id+' · '+ticket.subject),
+          element('small',[ticket.unread?t('supportUnreadCase'):'',t(supportStatusCopy[ticket.status]),ticket.reference,
+            new Date(ticket.updatedAt).toLocaleDateString(language?'fr-CA':'en-CA')].filter(Boolean).join(' · ')));
+        panel.append(row);
+      }
+      if (supportList.pages>1) {
+        const nav=element('div','','case-pager');
+        const prev=action(t('playerPrevious'),()=>loadPlayerCases(supportList.page-1),'ghost');
+        const next=action(t('playerNext'),()=>loadPlayerCases(supportList.page+1),'ghost');
+        prev.disabled=supportList.page===1;next.disabled=supportList.page===supportList.pages;
+        nav.append(prev,element('span',supportList.page+' / '+supportList.pages),next);panel.append(nav);
+      }
+      return;
     }
-    if (supportReference.startsWith('round-')) category.value = 'game';
-    categoryLabel.append(category);
-    const messageLabel = element('label', t('supportMessage'));
-    const message = element('textarea');
-    Object.assign(message, { name: 'message', required: true, minLength: 10, maxLength: 3000, rows: 5 });
-    messageLabel.append(message);
-    const ref=field('reference','text',t('supportLinkedRef'),'off');
-    const refInput=ref.querySelector('input');refInput.required=false;refInput.value=supportReference;refInput.placeholder='round-…, claim-…, save-…, activity-…';
-    panel.append(submitForm([categoryLabel, messageLabel, ref], t('supportSend'), async ({ category: ticketCategory, message: ticketMessage,reference }) => {
-      await api('support', { category: ticketCategory, message: ticketMessage,reference:reference.trim() });
-      supportReference='';
-      player.supportTickets = await api('support', undefined, 'GET');
-      dialogError = undefined;
-      renderDialog();
-      $('#status').textContent = t('supportSent');
-    }));
-    panel.append(action(t('account'), () => openPanel('account'), 'ghost'), element('h3', t('supportTickets')));
-    const tickets = player.supportTickets || [];
-    if (!tickets.length) panel.append(element('p', t('supportNoTickets')));
-    for (const ticket of tickets) {
+    panel.append(back());
+    if (supportView==='new') {
+      panel.append(element('p', t('supportIntro')));
+      const categoryLabel = element('label', t('supportCategory'));
+      const category = element('select');
+      category.name = 'category';
+      for (const [value, key] of Object.entries(supportCategoryCopy)) {
+        const option = element('option', t(key));
+        option.value = value;
+        category.append(option);
+      }
+      if (supportReference.startsWith('round-')) category.value = 'game';
+      categoryLabel.append(category);
+      const messageLabel = element('label', t('supportMessage'));
+      const message = element('textarea');
+      Object.assign(message, { name: 'message', required: true, minLength: 10, maxLength: 3000, rows: 5 });
+      messageLabel.append(message);
+      const ref=field('reference','text',t('supportLinkedRef'),'off');
+      const refInput=ref.querySelector('input');refInput.required=false;refInput.value=supportReference;refInput.placeholder='round-…, claim-…, save-…, activity-…';
+      panel.append(submitForm([categoryLabel, messageLabel, ref], t('supportSend'), async ({ category: ticketCategory, message: ticketMessage,reference }) => {
+        const request=supportRequest, owner=player.id;
+        const opened=await api('support', { category: ticketCategory, message: ticketMessage,reference:reference.trim() });
+        if (supportCurrent(request,owner)) await readPlayerCase(opened.id,'supportSent');
+      }));
+      return;
+    }
+    if (supportTicket) {
+      const ticket=supportTicket;
       const article = element('article', '', 'support-ticket');
       article.append(element('strong', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])}`));
       article.append(element('small', `${t('supportReference')} #${ticket.id}`));
@@ -1274,12 +1352,9 @@ function renderDialog() {
       Object.assign(followup, { name: 'message', required: true, maxLength: 3000, rows: 3 });
       followupLabel.append(followup);
       article.append(submitForm([followupLabel], t('supportFollowupSend'), async ({ message }) => {
+        const request=supportRequest, owner=player.id;
         await api('support/reply', { ticketId: ticket.id, message });
-        player.supportTickets = await api('support', undefined, 'GET');
-        player.supportReplies = 0;
-        updateAccount();
-        renderDialog();
-        $('#status').textContent = t('supportFollowupSent');
+        if (supportCurrent(request,owner)) await readPlayerCase(ticket.id,'supportFollowupSent');
       }));
       panel.append(article);
     }
@@ -1547,6 +1622,7 @@ function renderDialog() {
 }
 
 function openPanel(next) {
+  if (next!=='support') ++supportRequest;
   screen = next;
   dialogError = undefined;
   renderDialog();
@@ -1567,7 +1643,7 @@ function openPanel(next) {
     breakTimer = setInterval(refreshOpenBreak, 15_000);
   }
 }
-$('#dialog').addEventListener('close', () => { clearInterval(breakTimer); ++breakRefresh; });
+$('#dialog').addEventListener('close', () => { ++supportRequest; clearInterval(breakTimer); ++breakRefresh; });
 window.addEventListener('focus', refreshOpenBreak);
 document.addEventListener('visibilitychange', refreshOpenBreak);
 
@@ -1737,15 +1813,13 @@ let currentStaffMfaEnabled = false;
 let currentMfaSetupUri;
 let providerGames = [];
 let catalogReview;
-let supportInboxEntries;
-let supportInboxTeam = [];
-let supportInboxCursor = null;
-let supportInboxPageCount = 0;
-let supportInboxTotal = 0;
-let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
-let supportInboxHasMore = false;
+function supportHref(key,id) {
+  return appPath('/admin?'+new URLSearchParams({lang:language?'fr':'en',[key]:String(id)})+'#support-inbox');
+}
+const supportQueue=createSupportQueue({api,t,element,action,renderCase:renderStaffCase,
+  formatDate:at=>new Date(at).toLocaleString(language?'fr-CA':'en-CA')});
 let latestOverview = null;
-const playerAccessUi = createPlayerAccessUi({ api, t, element, action,
+const playerAccessUi = createPlayerAccessUi({ api, t, element, action, supportHref,
   renderRound: entry => historyEntryElement(entry, false),
   canManage: () => currentStaffPermissions.managePlayerAccess, locale: () => language ? 'fr-CA' : 'en-CA' });
 const comingSoonUi = createComingSoonUi({
@@ -1766,7 +1840,7 @@ const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, lo
 const growthPlayer=createGrowthPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter});
 const growthAdmin=createGrowthAdmin({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,publish:()=>currentStaffPermissions.publishWebsite});
 const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter,extensions:growthPlayer});
-const discoveryAdmin=createDiscoveryAdmin({api,t,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
+const discoveryAdmin=createDiscoveryAdmin({api,t,supportHref,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
   openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
 const adminLoaders = {
   ...Object.fromEntries(['partners','placements','report','review','experiments','polls','credits'].map(key=>['growth-'+key,()=>growthAdmin.load(key)])),
@@ -1778,7 +1852,7 @@ const adminLoaders = {
   'coming-soon-admin': comingSoonUi.loadDrafts,
   'coming-soon-saves': comingSoonUi.loadSaves,
   'catalog-management': refreshManagedCatalog,
-  'support-inbox': () => { if (!supportInboxEntries) void refreshSupportInbox(); },
+  'support-inbox': supportQueue.refresh,
   'casino-settings': () => { if (savedTenantDraftSignature === undefined) void requestTenantDraft(); },
   'staff-management': () => refreshStaffList().catch((error) => { $('#staff-status').textContent = t(error.message); }),
   'audit-log': () => refreshStaffAudit().catch((error) => { $('#staff-audit-summary').textContent = t(error.message); })
@@ -1845,7 +1919,7 @@ function render() {
     if(current)void adminLoaders[current.id]?.();
   }
   updateCatalogPreview();
-  if (supportInboxEntries) renderSupportInbox();
+  if (languageChanged && adminWorkspace.isOpen('support-inbox')) supportQueue.render();
   if ($('#dialog').open) renderDialog();
   updateSessionReminder();
   if (latestOverview) renderOperatorOverview(latestOverview);
@@ -2580,293 +2654,169 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
 function supportPlayerIdentity(ticket) {
   return ticket.displayName ? `${ticket.displayName} (${ticket.email})` : ticket.email;
 }
-function renderSupportInbox() {
-  if (!supportInboxEntries) return;
-  const container = $('#support-tickets');
-  const openTicket = container.querySelector('details[data-ticket-id][open]')?.dataset.ticketId;
-  const status = $('#support-inbox-status');
-  const summary = $('#support-summary');
-  const query = $('#support-search').value.trim().toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  const selectedStatus = $('#support-filter').value;
-  const selectedComplaint = $('#support-complaint-filter').value;
-  const selectedTopic = $('#support-topic-filter').value;
-  const selectedPriority = $('#support-priority-filter').value;
-  const selectedAssignee = $('#support-assignee-filter').value;
-  const number = (value) => new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(value);
-  const loadMore = $('#support-load-more');
-  loadMore.hidden = !supportInboxHasMore;
-  loadMore.disabled = false;
-  loadMore.textContent = t('supportLoadMore');
-  const priorityRank = { urgent: 0, high: 1, normal: 2, low: 3 };
-  const statusRank = { open: 0, answered: 1, closed: 2 };
-  const tickets = supportInboxEntries.slice().sort((a, b) => (priorityRank[a.priority] - priorityRank[b.priority]) || (statusRank[a.status] - statusRank[b.status]) || (b.updatedAt - a.updatedAt) || (b.id - a.id)).filter((ticket) => {
-    if ((selectedStatus !== 'all' && ticket.status !== selectedStatus) || (selectedPriority !== 'all' && ticket.priority !== selectedPriority)) return false;
-    if (selectedComplaint === 'complaints' && !ticket.isComplaint) return false;
-    if (selectedComplaint === 'requests' && ticket.isComplaint) return false;
-    if (selectedTopic !== 'all' && (ticket.isComplaint || ticket.category !== selectedTopic)) return false;
-    if (selectedAssignee === 'mine' && ticket.assignedTo !== currentStaffId) return false;
-    if (selectedAssignee === 'unassigned' && ticket.assignedTo) return false;
-    const searchable = `${supportPlayerIdentity(ticket)} ${ticket.email} ${ticket.assignedEmail || ''} ${ticket.message} ${(ticket.messages || []).map((message) => message.message).join(' ')} ${(ticket.notes || []).map((note) => note.note).join(' ')}`.toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
-    return searchable.includes(query);
+function renderStaffCase(article,ticket,supportInboxTeam,status) {
+  const playerIdentity=supportPlayerIdentity(ticket);
+  if (ticket.isComplaint) article.append(element('strong', t('supportComplaintBadge'), 'complaint-badge'));
+  if (!ticket.isComplaint && ticket.category === 'responsible_play') {
+    const locale = language ? 'fr-CA' : 'en-CA';
+    const now = Date.now();
+    const context = element('aside', '', 'support-safety-context');
+    context.append(element('strong', t('supportPlayerProtectionContext')));
+    if (ticket.playerExcludedAt) context.append(element('p', t('supportPlayerExcluded')));
+    if (ticket.accountBreak && ticket.accountBreak.endsAt > now) {
+      const dates = element('div');
+      showBreakPeriod(dates, ticket.accountBreak, t, locale);
+      context.append(dates);
+    } else if (!ticket.playerExcludedAt) context.append(element('p', t('supportPlayerNoActiveRestriction')));
+    article.append(context);
+  }
+  article.append(action(t('supportPlayerFile'),()=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(ticket.playerId);},'ghost'));
+  if(ticket.reference)article.append(action(ticket.reference,()=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(ticket.playerId, ticket.reference);},'ghost'));
+  article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
+  article.append(element('h4', t('supportThread')));
+  for (const message of supportThreadEntries(ticket)) {
+    const author = message.authorType === 'staff' ? message.author || t('supportStaffAuthor') : playerIdentity;
+    article.append(supportMessageElement(author, message.message, message.createdAt, message.authorType === 'staff' ? 'from-staff' : 'from-player'));
+  }
+  const assignmentForm = element('form');
+  const assignmentLabel = element('label', t('supportAssignedTo'));
+  const assignment = element('select');
+  assignment.name = 'staffId';
+  const unassigned = element('option', t('supportUnassigned'));
+  unassigned.value = '';
+  unassigned.selected = !ticket.assignedTo;
+  assignment.append(unassigned);
+  if (ticket.assignedTo && !supportInboxTeam.some((member) => member.id === ticket.assignedTo)) {
+    const inactiveOwner = element('option', `${ticket.assignedEmail || ticket.assignedTo} · ${t('disabled')}`);
+    inactiveOwner.value = 'inactive';
+    inactiveOwner.selected = true;
+    assignment.append(inactiveOwner);
+  }
+  for (const member of supportInboxTeam) {
+    const option = element('option', member.email);
+    option.value = String(member.id);
+    option.selected = ticket.assignedTo === member.id;
+    assignment.append(option);
+  }
+  assignmentLabel.append(assignment);
+  const assignButton = element('button', t('supportAssign'), 'ghost');
+  assignButton.disabled = assignment.value === 'inactive';
+  assignment.addEventListener('change', () => { assignButton.disabled = assignment.value === 'inactive'; });
+  assignmentForm.append(assignmentLabel, assignButton);
+  assignmentForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    assignButton.disabled = true;
+    try {
+      const staffId = assignment.value && assignment.value !== 'inactive' ? Number(assignment.value) : null;
+      await api('admin/support/assign', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, staffId });
+      if (await supportQueue.refresh()) status.textContent = t('supportAssignmentSaved');
+    } catch (error) {
+      if (error.message === 'supportConflict') {
+        if (await supportQueue.refresh()) status.textContent = t('supportConflict');
+      } else status.textContent = t(error.message);
+    } finally {
+      assignButton.disabled = false;
+    }
   });
-  summary.textContent = t('supportQueueSummary').replace('{matching}', number(tickets.length)).replace('{loaded}', number(supportInboxEntries.length)).replace('{total}', number(supportInboxTotal)).replace('{open}', number(supportInboxCounts.open)).replace('{answered}', number(supportInboxCounts.answered)).replace('{closed}', number(supportInboxCounts.closed));
-  if (!tickets.length) {
-    const emptyMessage = element('p', supportInboxTotal ? t('supportNoMatches') : t('supportNoInbox'));
-    if (supportInboxTotal) {
-      const clearFilters = element('button', t('supportClearFilters'), 'ghost');
-      clearFilters.type = 'button';
-      clearFilters.addEventListener('click', () => {
-        $('#support-search').value = '';
-        $('#support-filter').value = 'all';
-        $('#support-complaint-filter').value = 'all';
-        $('#support-topic-filter').value = 'all';
-        $('#support-priority-filter').value = 'all';
-        $('#support-assignee-filter').value = 'all';
-        renderSupportInbox();
-      });
-      container.replaceChildren(emptyMessage, clearFilters);
-      return;
+  article.append(assignmentForm);
+  const notes = ticket.notes || [];
+  const notesPanel = element('details');
+  notesPanel.append(element('summary', `${t('supportInternalNotes')} · ${notes.length}`));
+  if (notes.length) {
+    for (const note of notes) {
+      const noteEntry = element('div', '', 'support-note');
+      noteEntry.append(element('small', `${note.author} · ${new Date(note.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`), element('p', note.note));
+      notesPanel.append(noteEntry);
     }
-    container.replaceChildren(emptyMessage);
-    return;
+  } else notesPanel.append(element('p', t('supportNoNotes')));
+  const noteForm = element('form');
+  const noteLabel = element('label', t('supportInternalNotes'));
+  const noteText = element('textarea');
+  Object.assign(noteText, { name: 'note', required: true, maxLength: 2000, rows: 2, placeholder: t('supportNotePlaceholder') });
+  noteLabel.append(noteText);
+  const noteSubmit = element('button', t('supportAddNote'), 'ghost');
+  noteForm.append(noteLabel, noteSubmit);
+  noteForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    noteSubmit.disabled = true;
+    try {
+      const data = Object.fromEntries(new FormData(noteForm));
+      await api('admin/support/note', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, ...data });
+      noteText.value = '';
+      if (await supportQueue.refresh()) status.textContent = t('supportNoteSaved');
+    } catch (error) {
+      if (error.message === 'supportConflict') {
+        if (await supportQueue.refresh()) status.textContent = t('supportConflict');
+      } else status.textContent = t(error.message);
+    } finally {
+      noteSubmit.disabled = false;
+    }
+  });
+  notesPanel.append(noteForm);
+  article.append(notesPanel);
+  const form = element('form');
+  const replyLabel = element('label', t('supportReplyLabel'));
+  const reply = element('textarea');
+  Object.assign(reply, { name: 'reply', required: true, maxLength: 3000, rows: 3, placeholder: t('supportReplyPlaceholder') });
+  replyLabel.append(reply);
+  const stateLabel = element('label', t('supportStatusLabel'));
+  const state = element('select');
+  state.name = 'status';
+  for (const value of ['answered', 'closed']) {
+    const option = element('option', t(supportStatusCopy[value]));
+    option.value = value;
+    option.selected = ticket.status === value;
+    state.append(option);
   }
-  container.replaceChildren(...tickets.map((ticket) => {
-    const details = element('details', '', 'support-ticket');
-    details.dataset.ticketId = String(ticket.id);
-    details.name = 'admin-support-ticket';
-    details.open = details.dataset.ticketId === openTicket;
-    const playerIdentity = supportPlayerIdentity(ticket);
-    const summary = element('summary');
-    const brief = element('span', '', 'support-ticket-summary');
-    brief.append(element('strong', `#${ticket.id} · ${playerIdentity}`));
-    brief.append(element('small', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])} · ${t(supportPriorityCopy[ticket.priority])} · ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
-    summary.append(brief);
-    const article = element('div', '', 'support-ticket-body');
-    details.append(summary, article);
-    if (ticket.isComplaint) article.append(element('strong', t('supportComplaintBadge'), 'complaint-badge'));
-    if (!ticket.isComplaint && ticket.category === 'responsible_play') {
-      const locale = language ? 'fr-CA' : 'en-CA';
-      const now = Date.now();
-      const context = element('aside', '', 'support-safety-context');
-      context.append(element('strong', t('supportPlayerProtectionContext')));
-      if (ticket.playerExcludedAt) context.append(element('p', t('supportPlayerExcluded')));
-      if (ticket.accountBreak && ticket.accountBreak.endsAt > now) {
-        const dates = element('div');
-        showBreakPeriod(dates, ticket.accountBreak, t, locale);
-        context.append(dates);
-      } else if (!ticket.playerExcludedAt) context.append(element('p', t('supportPlayerNoActiveRestriction')));
-      article.append(context);
+  stateLabel.append(state);
+  const priorityLabel = element('label', t('supportPriority'));
+  const priority = element('select');
+  priority.name = 'priority';
+  for (const value of Object.keys(supportPriorityCopy)) {
+    const option = element('option', t(supportPriorityCopy[value]));
+    option.value = value;
+    option.selected = ticket.priority === value;
+    priority.append(option);
+  }
+  priorityLabel.append(priority);
+  const submit = element('button', t('supportReply'));
+  form.append(replyLabel, stateLabel, priorityLabel, submit);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    try {
+      const data = Object.fromEntries(new FormData(form));
+      await api('admin/support/reply', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, ...data });
+      reply.value = '';
+      if (await supportQueue.refresh()) status.textContent = t('supportSaved');
+    } catch (error) {
+      if (error.message === 'supportConflict') {
+        if (await supportQueue.refresh()) status.textContent = t('supportConflict');
+      } else status.textContent = t(error.message);
+    } finally {
+      submit.disabled = false;
     }
-    if(ticket.reference)article.append(action(ticket.reference,()=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(ticket.playerId, ticket.reference);},'ghost'));
-    article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
-    article.append(element('h4', t('supportThread')));
-    for (const message of supportThreadEntries(ticket)) {
-      const author = message.authorType === 'staff' ? message.author || t('supportStaffAuthor') : playerIdentity;
-      article.append(supportMessageElement(author, message.message, message.createdAt, message.authorType === 'staff' ? 'from-staff' : 'from-player'));
-    }
-    const assignmentForm = element('form');
-    const assignmentLabel = element('label', t('supportAssignedTo'));
-    const assignment = element('select');
-    assignment.name = 'staffId';
-    const unassigned = element('option', t('supportUnassigned'));
-    unassigned.value = '';
-    unassigned.selected = !ticket.assignedTo;
-    assignment.append(unassigned);
-    if (ticket.assignedTo && !supportInboxTeam.some((member) => member.id === ticket.assignedTo)) {
-      const inactiveOwner = element('option', `${ticket.assignedEmail || ticket.assignedTo} · ${t('disabled')}`);
-      inactiveOwner.value = 'inactive';
-      inactiveOwner.selected = true;
-      assignment.append(inactiveOwner);
-    }
-    for (const member of supportInboxTeam) {
-      const option = element('option', member.email);
-      option.value = String(member.id);
-      option.selected = ticket.assignedTo === member.id;
-      assignment.append(option);
-    }
-    assignmentLabel.append(assignment);
-    const assignButton = element('button', t('supportAssign'), 'ghost');
-    assignButton.disabled = assignment.value === 'inactive';
-    assignment.addEventListener('change', () => { assignButton.disabled = assignment.value === 'inactive'; });
-    assignmentForm.append(assignmentLabel, assignButton);
-    assignmentForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      assignButton.disabled = true;
+  });
+  article.append(form);
+  if (ticket.status !== 'closed') {
+    const closeWithoutReply = action(t('supportCloseNoReply'), async () => {
+      if (!window.confirm(t('supportConfirmClose'))) return;
+      closeWithoutReply.disabled = true;
       try {
-        const staffId = assignment.value && assignment.value !== 'inactive' ? Number(assignment.value) : null;
-        await api('admin/support/assign', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, staffId });
-        if (await refreshSupportInbox()) status.textContent = t('supportAssignmentSaved');
+        await api('admin/support/reply', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, status: 'closed', priority: priority.value });
+        if (await supportQueue.refresh()) status.textContent = t('supportClosedNoReply');
       } catch (error) {
         if (error.message === 'supportConflict') {
-          if (await refreshSupportInbox()) status.textContent = t('supportConflict');
+          if (await supportQueue.refresh()) status.textContent = t('supportConflict');
         } else status.textContent = t(error.message);
       } finally {
-        assignButton.disabled = false;
+        closeWithoutReply.disabled = false;
       }
-    });
-    article.append(assignmentForm);
-    const notes = ticket.notes || [];
-    const notesPanel = element('details');
-    notesPanel.append(element('summary', `${t('supportInternalNotes')} · ${notes.length}`));
-    if (notes.length) {
-      for (const note of notes) {
-        const noteEntry = element('div', '', 'support-note');
-        noteEntry.append(element('small', `${note.author} · ${new Date(note.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`), element('p', note.note));
-        notesPanel.append(noteEntry);
-      }
-    } else notesPanel.append(element('p', t('supportNoNotes')));
-    const noteForm = element('form');
-    const noteLabel = element('label', t('supportInternalNotes'));
-    const noteText = element('textarea');
-    Object.assign(noteText, { name: 'note', required: true, maxLength: 2000, rows: 2, placeholder: t('supportNotePlaceholder') });
-    noteLabel.append(noteText);
-    const noteSubmit = element('button', t('supportAddNote'), 'ghost');
-    noteForm.append(noteLabel, noteSubmit);
-    noteForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      noteSubmit.disabled = true;
-      try {
-        const data = Object.fromEntries(new FormData(noteForm));
-        await api('admin/support/note', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, ...data });
-        if (await refreshSupportInbox()) status.textContent = t('supportNoteSaved');
-      } catch (error) {
-        if (error.message === 'supportConflict') {
-          if (await refreshSupportInbox()) status.textContent = t('supportConflict');
-        } else status.textContent = t(error.message);
-      } finally {
-        noteSubmit.disabled = false;
-      }
-    });
-    notesPanel.append(noteForm);
-    article.append(notesPanel);
-    const form = element('form');
-    const replyLabel = element('label', t('supportReplyLabel'));
-    const reply = element('textarea');
-    Object.assign(reply, { name: 'reply', required: true, maxLength: 3000, rows: 3, placeholder: t('supportReplyPlaceholder') });
-    replyLabel.append(reply);
-    const stateLabel = element('label', t('supportStatusLabel'));
-    const state = element('select');
-    state.name = 'status';
-    for (const value of ['answered', 'closed']) {
-      const option = element('option', t(supportStatusCopy[value]));
-      option.value = value;
-      option.selected = ticket.status === value;
-      state.append(option);
-    }
-    stateLabel.append(state);
-    const priorityLabel = element('label', t('supportPriority'));
-    const priority = element('select');
-    priority.name = 'priority';
-    for (const value of Object.keys(supportPriorityCopy)) {
-      const option = element('option', t(supportPriorityCopy[value]));
-      option.value = value;
-      option.selected = ticket.priority === value;
-      priority.append(option);
-    }
-    priorityLabel.append(priority);
-    const submit = element('button', t('supportReply'));
-    form.append(replyLabel, stateLabel, priorityLabel, submit);
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      submit.disabled = true;
-      try {
-        const data = Object.fromEntries(new FormData(form));
-        await api('admin/support/reply', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, ...data });
-        if (await refreshSupportInbox()) status.textContent = t('supportSaved');
-      } catch (error) {
-        if (error.message === 'supportConflict') {
-          if (await refreshSupportInbox()) status.textContent = t('supportConflict');
-        } else status.textContent = t(error.message);
-      } finally {
-        submit.disabled = false;
-      }
-    });
-    article.append(form);
-    if (ticket.status !== 'closed') {
-      const closeWithoutReply = action(t('supportCloseNoReply'), async () => {
-        if (!window.confirm(t('supportConfirmClose'))) return;
-        closeWithoutReply.disabled = true;
-        try {
-          await api('admin/support/reply', { ticketId: ticket.id, expectedUpdatedAt: ticket.updatedAt, status: 'closed', priority: priority.value });
-          if (await refreshSupportInbox()) status.textContent = t('supportClosedNoReply');
-        } catch (error) {
-          if (error.message === 'supportConflict') {
-            if (await refreshSupportInbox()) status.textContent = t('supportConflict');
-          } else status.textContent = t(error.message);
-        } finally {
-          closeWithoutReply.disabled = false;
-        }
-      }, 'ghost');
-      article.append(closeWithoutReply);
-    }
-    return details;
-  }));
-}
-
-async function refreshSupportInbox(restart = false) {
-  const status = $('#support-inbox-status');
-  status.textContent = t('loading');
-  try {
-    const targetPageCount = restart ? 1 : Math.max(supportInboxPageCount, 1);
-    supportInboxTeam = await api('admin/support/team', undefined, 'GET');
-    let cursor = null;
-    let page;
-    const loaded = [];
-    let pagesLoaded = 0;
-    while (pagesLoaded < targetPageCount) {
-      const path = cursor === null ? 'admin/support' : `admin/support?beforeUpdatedAt=${cursor.updatedAt}&beforeId=${cursor.id}`;
-      page = await api(path, undefined, 'GET');
-      loaded.push(...page.tickets);
-      pagesLoaded += 1;
-      cursor = page.nextCursor;
-      if (cursor === null) break;
-    }
-    supportInboxEntries = loaded;
-    supportInboxTotal = page.total;
-    supportInboxCounts = page.counts;
-    supportInboxCursor = cursor;
-    supportInboxPageCount = pagesLoaded;
-    supportInboxHasMore = cursor !== null;
-    renderSupportInbox();
-    status.textContent = '';
-    return true;
-  } catch (error) {
-    status.textContent = t(error.message);
-    return false;
+    }, 'ghost');
+    article.append(closeWithoutReply);
   }
 }
 
-async function loadMoreSupportInbox() {
-  const button = $('#support-load-more');
-  if (!supportInboxHasMore || button.disabled) return;
-  button.disabled = true;
-  button.textContent = t('supportLoadingMore');
-  $('#support-inbox-status').textContent = '';
-  try {
-    const path = supportInboxCursor === null ? 'admin/support' : `admin/support?beforeUpdatedAt=${supportInboxCursor.updatedAt}&beforeId=${supportInboxCursor.id}`;
-    const page = await api(path, undefined, 'GET');
-    const existingIds = new Set(supportInboxEntries.map((ticket) => ticket.id));
-    supportInboxEntries.push(...page.tickets.filter((ticket) => !existingIds.has(ticket.id)));
-    supportInboxTotal = page.total;
-    supportInboxCounts = page.counts;
-    supportInboxCursor = page.nextCursor;
-    supportInboxPageCount += 1;
-    supportInboxHasMore = page.nextCursor !== null;
-    renderSupportInbox();
-  } catch (error) {
-    $('#support-inbox-status').textContent = t(error.message);
-    button.disabled = false;
-  }
-}
-
-$('#support-inbox-refresh').addEventListener('click', () => refreshSupportInbox(true));
-$('#support-load-more').addEventListener('click', loadMoreSupportInbox);
-$('#support-search').addEventListener('input', renderSupportInbox);
-$('#support-filter').addEventListener('change', renderSupportInbox);
-$('#support-complaint-filter').addEventListener('change', renderSupportInbox);
-$('#support-topic-filter').addEventListener('change', renderSupportInbox);
-$('#support-priority-filter').addEventListener('change', renderSupportInbox);
-$('#support-assignee-filter').addEventListener('change', renderSupportInbox);
 let overviewRequest = 0;
 function resetOverview(message) {
   ++overviewRequest;
@@ -3047,6 +2997,7 @@ $('#overview-export').addEventListener('click', exportOperatorOverview);
 
 function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
+  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)) supportQueue.clear();
   currentStaffId = session.id;
   currentStaffRole = session.role;
   currentStaffPermissions = {...session.permissions,testCredits:Boolean(session.testCredits)};

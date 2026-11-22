@@ -43,7 +43,7 @@ export const playerAccessCopy = {
   recoveryDeliveryUnavailable: ['Email delivery is unavailable. Try again later.', 'L’envoi de courriels est indisponible. Réessayez plus tard.']
 };
 
-export function createPlayerAccessUi({ api, t, element, action, canManage, locale, renderRound }) {
+export function createPlayerAccessUi({ api, t, element, action, canManage, locale, renderRound, supportHref }) {
   const byId = (id) => document.getElementById(id);
   const form = byId('coming-soon-save-search');
   const record = byId('player-record');
@@ -102,6 +102,19 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-record-summary').textContent = ['player-' + player.id, t(suspended ? 'playerSuspendedState' : 'playerActive'),
       t(player.emailVerified ? 'playerVerified' : 'playerUnverified'), t('playerSessions') + ' · ' + player.activeSessions].join('　|　');
     renderBreak();
+    const cases=player.supportCases;
+    byId('player-case-count').textContent=t('supportPlayerCases')+' · '+cases.total;
+    byId('player-case-list').replaceChildren(...cases.tickets.map(ticket=>{
+      const row=element('li');
+      const link=element('a','case-'+ticket.id);
+      link.href=supportHref('case',ticket.id);
+      const state={open:'supportStatusOpen',answered:'supportStatusAnswered',closed:'supportStatusClosed'};
+      row.append(link,element('small',[t(state[ticket.status]),ticket.reference].filter(Boolean).join(' · ')));
+      return row;
+    }));
+    byId('player-case-all').href=supportHref('supportPlayer',player.id);
+    byId('player-case-all').hidden=!cases.total;
+    if (!cases.total) byId('player-case-list').append(element('li',t('supportNoInbox')));
     const earned=player.discovery||[];
     const list=byId('player-reward-list');
     list.replaceChildren(...earned.map(i=>{
@@ -156,6 +169,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     roundCursors = [null];
     byId('player-round-status').textContent = '';
     byId('player-round-details').open = false;
+    byId('player-case-details').open = false;
     byId('player-reward-details').open = false;
     byId('player-event-details').open = false;
     byId('player-activity-details').open = false;
