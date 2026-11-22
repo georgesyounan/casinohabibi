@@ -2,6 +2,12 @@
 
 Le catalogue de démonstration compte 13 modules techniques et 12 modules d’interface. Dans l’administration, le menu principal ouvre une rubrique et les onglets affichent un seul outil à la fois. Les liens directs conservent la rubrique après connexion. Les possibilités de modification dépendent du rôle et de la marque.
 
+## Navigation de l’administration
+
+Le menu répartit les outils entre **Opérations**, **Jeux et contenu**, **Fidélisation** et **Administration**. Depuis **Rechercher un outil** (⌘ K ou Ctrl K), une recherche comme « retrait » ouvre directement la caisse ou les contrôles. Les résultats suivent les accès du membre connecté. Sur téléphone, le menu en haut change de rubrique et la liste **Outil** change de sous-section.
+
+Le **Tableau de bord** ouvre l’aperçu de la période, les indicateurs et les accès rapides. **Rapports détaillés** donne accès aux parties par titre, au suivi des publications disponible pour le rôle et à la configuration du casino.
+
 ## Espace opérateur
 
 | Outil | Parcours disponible |

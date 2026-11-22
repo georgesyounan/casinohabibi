@@ -152,12 +152,14 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
     id = '',
     intentId = '',
     subjectTab = 'identity',
+    openCreate = false,
     page = 1,
     cashPage = 1,
     q = '',
     filter = '';
   function clear() {
     ++generation;
+    openCreate = false;
     id = '';
     intentId = '';
     subjectTab = 'identity';
@@ -259,13 +261,27 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
     }
   }
   async function directory(v, tab) {
+    const data = await get('subjects', { page, q, state: filter });
+    const toolbar = el('div', '', 'desk-toolbar');
+    v.append(toolbar);
     if (tab === 'subjects' && role() === 'operator_admin') {
-      const f = form(section(v, l('Open a demo file', 'Créer un dossier fictif')));
+      const body = section(toolbar, l('Open a demo file', 'Créer un dossier fictif'));
+      const createBox = body.parentElement;
+      createBox.classList.add('desk-create');
+      if (openCreate) {
+        createBox.open = true;
+        openCreate = false;
+      }
+      const f = form(body);
       const alias = field(f, 'alias', l('Fictitious name', 'Nom fictif'), {
         required: true,
         maxLength: 64,
         placeholder: l('Test account A', 'Compte test A'),
       });
+      if (createBox.open)
+        requestAnimationFrame(() => {
+          if (alias.isConnected) alias.focus();
+        });
       const market = choose(
         f,
         'market',
@@ -288,6 +304,16 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
         });
         return () => select(res.id, tab);
       });
+      f.append(
+        button(
+          l('Cancel', 'Annuler'),
+          () => {
+            createBox.open = false;
+            createBox.querySelector('summary').focus();
+          },
+          true,
+        ),
+      );
     }
     const f = form(v),
       search = field(f, 'search', l('Name or reference', 'Nom ou référence'), {
@@ -295,6 +321,7 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
         maxLength: 80,
         value: q,
       });
+    f.classList.add('desk-filters');
     const state = field(f, 'state', l('Verification status', 'État de la vérification'), {
       items: [
         ['', l('All statuses', 'Tous les états')],
@@ -308,21 +335,65 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
       page = 1;
       return load(tab);
     });
-    const data = await get('subjects', { page, q, state: filter });
-    if (!data.items.length)
-      v.append(el('p', l('No matching demo files.', 'Aucun dossier fictif correspondant.')));
-    for (const s of data.items) {
-      const c = el('article', '', 'contact-card');
-      c.append(
-        el('h4', s.label),
-        el('p', names(s.market) + ' · ' + names(s.state)),
-        button(
+    const reset = () => {
+      q = '';
+      filter = '';
+      page = 1;
+      void load(tab);
+    };
+    if (q || filter) f.append(button(l('Clear filters', 'Effacer les filtres'), reset, true));
+    if (!data.items.length) {
+      const blank = el('div', '', 'desk-empty');
+      const mark = el('i', '', 'ui-icon ico-file');
+      mark.setAttribute('aria-hidden', 'true');
+      const title =
+        q || filter
+          ? l('No matching demo files.', 'Aucun dossier fictif correspondant.')
+          : l('No demo files yet.', 'Aucun dossier fictif pour le moment.');
+      blank.append(mark, el('strong', title));
+      if (q || filter)
+        blank.append(
+          el(
+            'p',
+            l(
+              'Change the name or verification status to find a file.',
+              'Modifiez le nom ou l’état de la vérification pour retrouver un dossier.',
+            ),
+          ),
+        );
+      else if (role() === 'operator_admin' && tab === 'cashier') {
+        blank.append(
+          button(
+            l('Create a file', 'Créer un dossier fictif'),
+            () => {
+              openCreate = true;
+              open('subjects');
+            },
+            true,
+          ),
+        );
+      }
+      v.append(blank);
+    } else {
+      const list = el('div', '', 'desk-directory-list');
+      const ref = el('p', l('Files', 'Dossiers') + ' · ' + data.total, 'desk-count');
+      toolbar.prepend(ref);
+      for (const row of data.items) {
+        const card = el('article', '', 'desk-directory-row');
+        const lead = el('div', '', 'desk-row-name');
+        lead.append(el('h4', row.label), el('small', names(row.market)));
+        const status = el('span', names(row.state), 'desk-state');
+        status.dataset.state = row.state;
+        const action = button(
           tab === 'cashier' ? l('Open wallet', 'Ouvrir la caisse') : l('Open file', 'Ouvrir le dossier'),
-          () => select(s.id, tab),
+          () => select(row.id, tab),
           true,
-        ),
-      );
-      v.append(c);
+        );
+        action.classList.add('desk-row-open');
+        card.append(lead, status, action);
+        list.append(card);
+      }
+      v.append(list);
     }
     pager(v, data.page, data.total, (n) => {
       page = n;
@@ -595,28 +666,42 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
   }
   async function wallet(v) {
     const w = await get('cashier', { id, page: cashPage });
-    v.append(
+    const header = el('div', '', 'desk-wallet-heading'),
+      links = el('div', '', 'desk-wallet-links');
+    links.append(
       button(l('Choose another file', 'Choisir un autre dossier'), () => select('', 'cashier'), true),
-      el('h4', w.label),
-      el(
-        'p',
-        l('Available', 'Disponible') +
-          ' · ' +
-          currency(w.balance.available) +
-          '     ' +
-          l('Reserved', 'Réservé') +
-          ' · ' +
-          currency(w.balance.held),
-      ),
-      el('p', l('Withdrawal eligibility', 'Admissibilité au retrait') + ' · ' + names(w.gate.reason)),
       button(
         l('Open verification file', 'Ouvrir le dossier de vérification'),
         () => open('subjects'),
         true,
       ),
     );
-    const f = form(v),
-      direction = choose(f, 'direction', l('Operation', 'Opération'), ['deposit', 'withdrawal']),
+    header.append(el('h4', w.label), links);
+    v.append(header);
+    const balances = el('div', '', 'desk-balances');
+    for (const [title, minorUnits] of [
+      [l('Available', 'Disponible'), w.balance.available],
+      [l('Reserved', 'Réservé'), w.balance.held],
+    ]) {
+      const card = el('p', '', 'desk-balance');
+      card.append(
+        el('span', title),
+        el('span', ' · ', 'admin-visually-hidden'),
+        el('strong', currency(minorUnits)),
+      );
+      balances.append(card);
+    }
+    const gate = el(
+      'p',
+      l('Withdrawal eligibility', 'Admissibilité au retrait') + ' · ' + names(w.gate.reason),
+      'desk-gate',
+    );
+    gate.dataset.allowed = String(w.gate.allowed);
+    v.append(balances, gate);
+    const f = form(v);
+    f.classList.add('desk-cash-form');
+    f.append(el('h4', l('New test transaction', 'Nouvelle transaction fictive')));
+    const direction = choose(f, 'direction', l('Operation', 'Opération'), ['deposit', 'withdrawal']),
       amount = moneyField(f, 'amount', l('Test amount (TST)', 'Montant fictif (TST)'), '20.00');
     const choice = field(f, 'route', l('Eligible method', 'Moyen admissible'), { items: [] }),
       explanation = el('p', '', 'muted');
@@ -624,6 +709,8 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
     let serial = 0;
     async function refresh() {
       const pending = ++serial;
+      const confirm = f.querySelector('button[type=submit]');
+      if (confirm) confirm.disabled = true;
       choice.replaceChildren();
       choice.disabled = true;
       try {
@@ -636,18 +723,21 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
         if (serial !== pending) return;
         for (const r of data.routes)
           if (r.reason === 'eligible') choice.append(new Option(names(r.key), r.key));
-        choice.disabled = !data.eligible.length;
-        explanation.textContent = data.routes
-          .filter((r) => r.reason !== 'eligible')
-          .map((r) => names(r.key) + ' · ' + names(r.reason))
-          .join(' / ');
+        const blocked = direction.value === 'withdrawal' && !w.gate.allowed;
+        choice.disabled = !data.eligible.length || blocked;
+        if (confirm) confirm.disabled = choice.disabled;
+        explanation.textContent = blocked
+          ? names(w.gate.reason)
+          : data.routes
+              .filter((r) => r.reason !== 'eligible')
+              .map((r) => names(r.key) + ' · ' + names(r.reason))
+              .join(' / ');
       } catch (e) {
         if (serial === pending) explanation.textContent = t(e.message);
       }
     }
     direction.onchange = refresh;
     amount.oninput = refresh;
-    await refresh();
     let requestKey = crypto.randomUUID(),
       lastIntent = '';
     submit(f, l('Create test transaction', 'Créer la transaction fictive'), async () => {
@@ -674,7 +764,12 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
         return load('cashier');
       };
     });
-    if (w.items.length) v.append(el('h4', l('Transactions', 'Transactions')));
+    await refresh();
+    const ledger = el('div', '', 'desk-transactions');
+    if (w.items.length) {
+      ledger.append(el('h4', l('Transactions', 'Transactions')));
+      v.append(ledger);
+    }
     for (const i of w.items) {
       const b = button(
         [names(i.direction), currency(i.minor), names(i.status)].join(' · '),
@@ -684,7 +779,8 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
         },
         true,
       );
-      v.append(b);
+      b.classList.add('transaction-row');
+      ledger.append(b);
     }
     pager(v, w.page, w.total, (n) => {
       cashPage = n;
@@ -707,13 +803,15 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
       el('p', names(i.route) + ' · v' + i.routeVersion),
       el('p', i.processorRef, 'op-reference'),
     );
+    const actions = el('div', '', 'desk-payment-actions');
+    v.append(actions);
     const simple = (a) =>
-      act(v, names(a), async () => {
+      act(actions, names(a), async () => {
         await post('cashier', { action: a, id: i.id, version: i.version });
         return () => load('cashier');
       });
     const simulate = (outcome) =>
-      act(v, names(outcome), async () => {
+      act(actions, names(outcome), async () => {
         await post('cashier', {
           action: 'event',
           id: i.id,

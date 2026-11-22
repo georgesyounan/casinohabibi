@@ -195,7 +195,7 @@ const copy = {
   saveDraft: ['Save draft', 'Enregistrer le brouillon'], publishConfig: ['Publish version', 'Publier la version'],
   draftSaved: ['Draft saved.', 'Brouillon enregistré.'], configPublished: ['Configuration published.', 'Configuration publiée.'],
   staffLogin: ['Staff sign in', 'Connexion du personnel'],
-  staffLoginHelp: ['Use your staff account. On the Windows demo’s first run, the launcher asks you to create the operator email and password.', 'Utilisez votre compte du personnel. Au premier démarrage de la démo Windows, le lanceur vous demandera de créer l’adresse courriel et le mot de passe du compte opérateur.'],
+  staffLoginHelp: ['Sign in to your workspace with your staff email.', 'Accédez à votre espace avec votre courriel professionnel.'],
   staffEmail: ['Staff email', 'Courriel du membre du personnel'], staffPassword: ['Password', 'Mot de passe'],
   staffChangePasswordTitle: ['Change my staff password', 'Changer mon mot de passe du personnel'],
   staffChangePasswordHelp: ['Enter your current password and choose a new one. Other staff sessions will be signed out.', 'Saisissez votre mot de passe actuel et choisissez-en un nouveau. Les autres sessions du personnel seront fermées.'],
@@ -1902,7 +1902,7 @@ const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => 
   for (const selector of ['#tenant-config','#tenant-config-preview','#tenant-settings-help']) $(selector).hidden = editorial;
   const load = adminLoaders[panel] || adminLoaders[view];
   if (load) void load();
-});
+}, t);
 
 const reportUi = createReportUi({ api, t, element, action, appPath, role: () => currentStaffRole, locale: () => language ? 'fr-CA' : 'en-CA',
   refresh: refreshOperatorOverview, datesChanged: () => resetOverview('reportApplyHint'), openPlayer(reference) {
@@ -2662,6 +2662,13 @@ function resetOverview(message) {
   $('#overview-title-search').value = '';
   $('#overview-export').disabled = true;
   reportUi.loading();
+  $('#activity-total').textContent = '—';
+  $('#activity-empty').hidden = true;
+  $('#activity-axis').replaceChildren();
+  $('#overview-activity-chart').replaceChildren();
+  $('#overview-activity-chart').removeAttribute('aria-label');
+  $('#overview-activity-summary').textContent = '';
+  $('#overview-activity-values').replaceChildren();
   $('#overview .admin-metrics').hidden = true;
   $('#overview-round-report').hidden = true;
   $('#overview-status').textContent = t(message);
@@ -2724,7 +2731,12 @@ function renderOverviewActivity(overview) {
   const peakDate = peak.day ? new Date(`${peak.day}T00:00:00Z`).toLocaleDateString(locale, { timeZone: 'UTC', dateStyle: 'medium' }) : '—';
   const summary = !total ? t('reportNoRounds') : t('overviewActivitySummary').replace('{total}', number.format(total)).replace('{days}', number.format(overview.periodDays)).replace('{date}', peakDate).replace('{rounds}', number.format(peak.rounds));
   const chart = $('#overview-activity-chart');
-  chart.style.setProperty('--bar-count', data.length);
+  $('#activity-total').textContent = number.format(total);
+  $('#activity-empty').hidden = total !== 0;
+  const dayLabel = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const dates = [...new Set([data[0]?.day, data[Math.floor((data.length - 1) / 2)]?.day, data.at(-1)?.day].filter(Boolean))];
+  $('#activity-axis').replaceChildren(...dates.map(day => element('span', dayLabel.format(new Date(day + 'T12:00:00Z')))));
+  chart.style.setProperty('--bar-count', Math.max(1,data.length));
   chart.setAttribute('aria-label', `${t('overviewActivityChart')}. ${summary}`);
   const maxRounds = Math.max(0, ...data.map(({ rounds }) => rounds));
   chart.replaceChildren(...data.map(({ day, rounds }) => {
@@ -2845,6 +2857,10 @@ function showStaffSession(session, focus = false) {
   $('#mfa-status').textContent = '';
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
+  $('#admin-language-slot').append($('#language'));
+  $('#admin-lobby-slot').append($('#admin-view-lobby'));
+  const names=session.email.split('@')[0].split(/[._+\s-]+/).filter(Boolean);
+  $('#admin-avatar').textContent=(names.length>1?names[0][0]+names.at(-1)[0]:names[0]?.slice(0,2)||'').toUpperCase();
   $('#staff-identity').textContent = `${session.email} · ${staffRoleLabel(session.role)}`;
   $('#staff-brand').textContent = session.brandName;
   $('#publish-config').hidden = !currentStaffPermissions.publishWebsite;

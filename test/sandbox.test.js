@@ -450,6 +450,12 @@ test('published routes work under a directory and behind a prefix-stripping prox
   assert.match(await css.text(), /url\('hero\.webp'\)/);
   assert.equal((await fetch(published + '/hero.webp')).status, 200);
   assert.equal((await fetch(published + '/admin-workspace.js')).status, 200);
+  for (const name of ['admin-inter.woff2', 'admin-icons.woff2']) {
+    const asset = await fetch(published + '/' + name);
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('content-type'), /font\/woff2/);
+    assert.equal(Buffer.from(await asset.arrayBuffer()).subarray(0, 4).toString(), 'wOF2');
+  }
   const cookieHasMount = (cookie) => cookie.includes(`; Path=${mount};`);
   const guestLobby = await fetch(published + '/api/coming-soon');
   assert.equal(guestLobby.status, 200);
