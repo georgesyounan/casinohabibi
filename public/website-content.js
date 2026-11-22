@@ -1,16 +1,44 @@
+import { guideAddress, guidePath, searchSnippet } from './guide-metadata.js';
+
 export const websiteContentCopy = {
-  siteContentTab: ['Banner and help pages', 'Bannière et pages d’aide'],
+  siteContentTab: ['Banner and guides', 'Bannière et guides'],
   siteBanner: ['Lobby banner', 'Bannière du hall'],
-  siteHelpPage: ['Help page', 'Page d’aide'],
-  siteNewPage: ['New help page', 'Nouvelle page d’aide'],
+  siteHelpPage: ['Guide or help page', 'Guide ou page d’aide'],
+  siteNewPage: ['New guide', 'Nouveau guide'],
   siteSearch: ['Search content', 'Rechercher un contenu'],
   siteBackList: ['Back to content', 'Retour aux contenus'],
   siteEditor: ['Content editor', 'Éditeur de contenu'],
   siteEditLanguage: ['Translation to edit', 'Traduction à modifier'],
-  siteSlug: ['Page address', 'Adresse de la page'],
+  siteSlug: ['Initial page address', 'Adresse initiale de la page'],
+  siteSearchSettings: ['Page address and search preview', 'Adresse et aperçu de recherche'],
+  siteOpenLive: ['Open published guide', 'Ouvrir le guide publié'],
+  sitePublicAddress: ['Address for this translation', 'Adresse de cette traduction'],
+  siteRedirectHint: [
+    'After publication, previous addresses open the updated guide.',
+    'Après publication, les anciennes adresses ouvrent le guide mis à jour.'
+  ],
+  siteSearchTitle: ['Search title', 'Titre du résultat de recherche'],
+  siteSearchDescription: ['Search description', 'Description du résultat de recherche'],
+  siteSearchPreview: ['Search preview', 'Aperçu du résultat de recherche'],
+  siteAllowIndex: [
+    'Include this guide in search engines in all languages',
+    'Autoriser le référencement de ce guide dans toutes ses langues'
+  ],
+  siteCollection: ['Catalogue collection', 'Collection du catalogue'],
+  siteNoCollection: ['No collection', 'Aucune collection'],
+  siteCollectionHeading: ['Previews in this collection', 'Fiches de cette collection'],
+  siteAddressTaken: [
+    'This address belongs to another guide. Choose another address.',
+    'Cette adresse appartient à un autre guide. Choisissez une autre adresse.'
+  ],
+  siteCollectionMissing: [
+    'Choose an available catalogue collection.',
+    'Choisissez une collection disponible dans le catalogue.'
+  ],
   siteTitle: ['Title', 'Titre'],
   siteBody: ['Text', 'Texte'],
   siteImageAndLink: ['Image and link', 'Image et lien'],
+  siteGuideOptions: ['Image, link and collection', 'Image, lien et collection'],
   siteRemoveImage: ['Remove image', 'Retirer l’image'],
   siteImageDescription: ['Image description', 'Description de l’image'],
   siteDestination: ['Link destination', 'Destination du lien'],
@@ -101,10 +129,11 @@ function contentCard(element, data, preview = false) {
 
 export function createPublicWebsiteContent({ api, element, t, currentRoute, locale, brand }) {
   const helpSlug = currentRoute.match(/^\/help\/([a-z0-9-]{1,64})$/)?.[1];
+  const renderedGuide = helpSlug && el('site-help-content').querySelector('.site-content-card');
   let generation = 0,
     pageTitle = '';
   async function load() {
-    if (currentRoute !== '/' && !helpSlug) return;
+    if (renderedGuide || (currentRoute !== '/' && !helpSlug)) return;
     const request = ++generation;
     const lang = locale(),
       query = '?locale=' + lang;
@@ -112,9 +141,24 @@ export function createPublicWebsiteContent({ api, element, t, currentRoute, loca
       const data = await api((helpSlug ? 'help/' + helpSlug : 'website-content') + query, undefined, 'GET');
       if (request !== generation) return;
       if (helpSlug) {
-        pageTitle = data.title;
+        pageTitle = data.search?.title || data.title;
         document.title = pageTitle + ' · ' + brand();
-        el('site-help-content').replaceChildren(contentCard(element, data));
+        if (data.search) document.querySelector('meta[name="description"]').content = data.search.description;
+        const container = el('site-help-content');
+        container.replaceChildren(contentCard(element, data));
+        if (data.collection?.length) {
+          const section = element('section', '', 'guide-collection'),
+            list = element('ul');
+          for (const item of data.collection) {
+            const li = element('li'),
+              link = element('a', item.title);
+            link.href = item.href;
+            li.append(link);
+            list.append(li);
+          }
+          section.append(element('h2', t('siteCollectionHeading')), list);
+          container.append(section);
+        }
       } else {
         el('default-lobby-hero').hidden = Boolean(data.banner);
         const banner = el('site-public-banner');
@@ -147,7 +191,7 @@ export function createPublicWebsiteContent({ api, element, t, currentRoute, loca
   return { load, isHelp: Boolean(helpSlug), title: () => pageTitle };
 }
 
-export function createWebsiteEditor({ api, element, action, t, appPath, locale, canPublish }) {
+export function createWebsiteEditor({ api, element, action, t, appPath, locale, brand, canPublish }) {
   const form = el('site-editor'),
     field = (name) => form.elements.namedItem(name);
   const library = el('site-library'),
@@ -192,6 +236,18 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     el('site-url').textContent = appPath('/help/') + slug;
     return record.kind === 'banner' ? 'lobby' : slug;
   }
+  function searchPreview() {
+    if (record.kind !== 'help' || !el('site-search-settings').open) return;
+    const lang = langSelect.value,
+      slug = address(),
+      info = searchSnippet(data, lang);
+    field('publicAddress').placeholder = slug;
+    field('seoTitle').placeholder = data['title' + suffix(lang)] || '';
+    const href = guidePath(appPath(''), guideAddress(data, slug, lang), lang);
+    el('guide-snippet-url').textContent = location.host + href;
+    el('guide-snippet-title').textContent = [info.title, brand()].filter(Boolean).join(' · ');
+    el('guide-snippet-description').textContent = info.description;
+  }
   function libraryView() {
     el('site-new-page').disabled = !index || busy;
     if (!index) return;
@@ -201,7 +257,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       ...index.items.filter((i) => i.kind === 'help')
     ];
     const rows = entries.filter((i) =>
-      [i.slug, i.titleEn, i.titleFr, t(i.kind === 'banner' ? 'siteBanner' : 'siteHelpPage')]
+      [i.slug, i.addressEn, i.addressFr, i.titleEn, i.titleFr, t(i.kind === 'banner' ? 'siteBanner' : 'siteHelpPage')]
         .join(' ')
         .toLocaleLowerCase()
         .includes(query)
@@ -225,7 +281,10 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
           button,
           element(
             'small',
-            [item.kind === 'help' ? appPath('/help/' + item.slug) : '', t(stateKeys[item.status] || 'siteNotCreated')]
+            [
+              item.kind === 'help' ? guidePath(appPath(''), guideAddress(item, item.slug, locale()), locale()) : '',
+              t(stateKeys[item.status] || 'siteNotCreated')
+            ]
               .filter(Boolean)
               .join(' · ')
           )
@@ -274,6 +333,15 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       opts.push(new Option(t('siteUnavailableTarget') + ' · ' + data.target, data.target));
     target.replaceChildren(...opts);
     target.value = data.target;
+    const choices = [new Option(t('siteNoCollection'), '')];
+    for (const item of index?.collections || []) {
+      choices.push(new Option(item['title' + suffix(langSelect.value)] || item.titleEn || item.titleFr, item.key));
+    }
+    if (data.collection && !choices.some((option) => option.value === data.collection))
+      choices.push(new Option(data.collection + ' · ' + t('siteUnavailableTarget'), data.collection));
+    field('collection').replaceChildren(...choices);
+    field('collection').value = data.collection || '';
+    el('site-collection-field').hidden = record.kind !== 'help' || choices.length < 2;
   }
   function preview() {
     if (!record || !el('site-preview').open) return;
@@ -326,6 +394,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       .join(' · ');
     address();
     preview();
+    searchPreview();
   }
   function translation() {
     const s = suffix(langSelect.value);
@@ -333,7 +402,17 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     field('body').value = data['body' + s];
     field('alt').value = data['alt' + s];
     field('link').value = data['link' + s];
-    for (const key of ['heading', 'body', 'alt', 'link']) field(key).lang = langSelect.value;
+    field('publicAddress').value = data['address' + s] || '';
+    field('seoTitle').value = data['seoTitle' + s] || '';
+    field('seoDescription').value = data['seoDescription' + s] || '';
+    field('indexable').checked = data.indexable !== false;
+    const published = record.publishedLinks?.find((item) => item.locale === langSelect.value);
+    const liveLink = el('site-open-live');
+    liveLink.hidden = !published;
+    if (published) liveLink.href = published.href;
+    else liveLink.removeAttribute('href');
+    for (const key of ['heading', 'body', 'alt', 'link', 'publicAddress', 'seoTitle', 'seoDescription'])
+      field(key).lang = langSelect.value;
     destinations();
     controls();
   }
@@ -352,7 +431,20 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
   }
   function display(result) {
     record = result;
-    data = { ...(result.content || empty()) };
+    data = {
+      ...empty(),
+      ...(result.kind === 'help' && {
+        addressEn: '',
+        addressFr: '',
+        seoTitleEn: '',
+        seoTitleFr: '',
+        seoDescriptionEn: '',
+        seoDescriptionFr: '',
+        collection: '',
+        indexable: true
+      }),
+      ...result.content
+    };
     original = JSON.stringify(data);
     conflict = false;
     readingImage = false;
@@ -363,7 +455,11 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     field('slug').value = result.kind === 'help' ? result.slug || '' : '';
     field('slug').readOnly = Boolean(result.version);
     field('body').maxLength = result.kind === 'banner' ? 500 : 6000;
-    el('site-slug-field').hidden = result.kind === 'banner';
+    el('site-slug-field').hidden = result.kind === 'banner' || Boolean(result.version);
+    el('site-search-settings').hidden = result.kind === 'banner';
+    const optionsHeading = el('site-options').querySelector('summary');
+    optionsHeading.dataset.copy = result.kind === 'help' ? 'siteGuideOptions' : 'siteImageAndLink';
+    optionsHeading.textContent = t(optionsHeading.dataset.copy);
     el('site-editor-heading').textContent = t(result.kind === 'banner' ? 'siteBanner' : 'siteHelpPage');
     translation();
     history();
@@ -375,13 +471,18 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     say('loading');
     libraryView();
     try {
-      const result = existing || refresh
-        ? await api('admin/website-content/' + item.kind + '/' + item.slug, undefined, 'GET')
-        : { kind: item.kind, slug: item.slug || '', version: 0 };
+      const result =
+        existing || refresh
+          ? await api('admin/website-content/' + item.kind + '/' + item.slug, undefined, 'GET')
+          : { kind: item.kind, slug: item.slug || '', version: 0 };
       if (id !== editRequest) return;
       if (!refresh) {
         langSelect.value = locale();
-        el('site-preview').open = el('site-options').open = el('site-history').open = false;
+        el('site-preview').open =
+          el('site-options').open =
+          el('site-history').open =
+          el('site-search-settings').open =
+            false;
       }
       display(result);
       say('');
@@ -420,6 +521,19 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       say('siteContentSlugNeeded');
       field('slug').focus();
       return;
+    }
+    if (verb === 'save' && record.kind === 'help') {
+      for (const lang of ['en-CA', 'fr-CA']) {
+        const value = data['address' + suffix(lang)].trim();
+        if (value && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) {
+          langSelect.value = lang;
+          el('site-search-settings').open = true;
+          translation();
+          say('siteContentSlugNeeded');
+          field('publicAddress').focus();
+          return;
+        }
+      }
     }
     if (verb === 'publish') {
       if (isDirty() || !canPublish()) return;
@@ -504,13 +618,32 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
   });
   el('site-close').addEventListener('click', close);
   langSelect.addEventListener('change', translation);
-  for (const [name, key] of Object.entries({ heading: 'title', body: 'body', alt: 'alt', link: 'link' })) {
+  for (const [name, key] of Object.entries({
+    heading: 'title',
+    body: 'body',
+    alt: 'alt',
+    link: 'link',
+    publicAddress: 'address',
+    seoTitle: 'seoTitle',
+    seoDescription: 'seoDescription'
+  })) {
     field(name).addEventListener('input', () => {
       data[key + suffix(langSelect.value)] = field(name).value;
       controls();
     });
   }
   field('slug').addEventListener('input', controls);
+  field('collection').addEventListener('change', () => {
+    data.collection = field('collection').value;
+    controls();
+  });
+  field('indexable').addEventListener('change', () => {
+    data.indexable = field('indexable').checked;
+    controls();
+  });
+  el('site-search-settings').addEventListener('toggle', () => {
+    if (record) searchPreview();
+  });
   field('target').addEventListener('change', () => {
     data.target = field('target').value;
     controls();

@@ -299,6 +299,8 @@ dialog::backdrop{background:#090e0bd9}
 .site-content-card > img { flex: 0 1 40%; width: 40%; min-width: 0; max-height: 26rem; object-fit: contain; align-self: center; }
 #site-public-banner, .site-public-help { margin-block: 2rem; }
 .site-public-help > a { display: inline-block; margin-bottom: 1rem; color: var(--green); }
+.guide-collection ul { display: grid; gap: .6rem; padding-inline-start: 1.4rem; }
+.guide-collection a { color: var(--green); overflow-wrap: anywhere; }
 .site-help-links { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; list-style: none; padding: 0; margin-block: 1.25rem 0; }
 .site-help-links a { color: var(--green); }
 @media (max-width: 640px) {

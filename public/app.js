@@ -520,7 +520,9 @@ function applyTenant(config) {
   const publicFaq = config.enabledSections?.faq ?? true;
   $('#faq').hidden = !publicFaq;
   for (const link of document.querySelectorAll('a[href$="#faq"]')) link.hidden = !publicFaq;
-  $('#language').hidden = !isAdminPage && publicLocales.length < 2;
+  const onlyGuideTranslation = publicWebsite.isHelp && document.querySelector('link[rel="canonical"]') &&
+    document.querySelectorAll('link[rel="alternate"][hreflang]').length < 2;
+  $('#language').hidden = !isAdminPage && (publicLocales.length < 2 || onlyGuideTranslation);
   if (!isAdminPage) {
     const preferred = localStorage.getItem('northplay-language');
     language = publicLanguage(preferred ? (preferred === 'fr' ? 'fr-CA' : 'en-CA') : primaryPublicLocale);
@@ -705,6 +707,7 @@ function readTenantConfig() {
 }
 
 function updateDocumentTitle() {
+  if (publicWebsite.isHelp && document.querySelector('link[rel="canonical"]')) return;
   document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
     : publicWebsite.isHelp && publicWebsite.title() ? publicWebsite.title() + ' · ' + tenantBrandName
     : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
@@ -1619,7 +1622,7 @@ const comingSoonUi = createComingSoonUi({
 const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
 const followupUi = createPublicationFollowup({ api, t, element, appPath, locale: siteContentLocale });
 const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
-const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale,
+const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale, brand: () => tenantBrandName,
   canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
 
 const adminLoaders = {
@@ -1703,6 +1706,18 @@ $('#skip-link').addEventListener('click', (event) => {
 
 $('#language').addEventListener('click', async () => {
   const previousLanguage = language;
+  const nextLocale = language ? 'en-CA' : 'fr-CA';
+  const alternative = publicWebsite.isHelp && document.querySelector(`link[rel="alternate"][hreflang="${nextLocale}"]`);
+  if (alternative) {
+    if (player) {
+      try { await api('account/preferences', { locale: nextLocale }); }
+      catch { return; }
+    }
+    localStorage.setItem('northplay-language', nextLocale.slice(0, 2));
+    const url = new URL(alternative.href);
+    location.assign(url.pathname + url.search);
+    return;
+  }
   language = 1 - language;
   localStorage.setItem('northplay-language', language ? 'fr' : 'en');
   render();

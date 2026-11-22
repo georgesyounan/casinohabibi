@@ -9,6 +9,7 @@ import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 import { configureTransactionalEmail } from './lib/transactional-email.js';
 import { createDashboard } from './lib/dashboard.js';
 import { createWebsiteContent } from './lib/website-content.js';
+import { createPublicPages, guideBody, pageHead, sitemapXml } from './lib/public-pages.js';
 import { createPublicationFollowup } from './lib/publication-followup.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
@@ -273,6 +274,7 @@ const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, 
 const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath,
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
+const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -698,7 +700,7 @@ async function api(req, res, path, tenantId, requestId) {
   }
   const helpPage = route.match(/^GET \/api\/help\/([a-z0-9-]{1,64})$/);
   if (helpPage) {
-    const page = websiteContent.publicRecord(tenantId, publishedTenantConfig(tenantId).config, 'help', helpPage[1], catalogueLocale);
+    const page = websiteContent.resolveGuide(tenantId, publishedTenantConfig(tenantId).config, helpPage[1], catalogueLocale);
     if (!page) fail(404, 'siteContentMissing');
     return page;
   }
@@ -709,7 +711,7 @@ async function api(req, res, path, tenantId, requestId) {
   const contentDraft = route.match(/^GET \/api\/admin\/website-content\/(banner|help)\/([a-z0-9-]{1,64})$/);
   if (contentDraft) {
     const staff = staffContext(req, tenantId, websiteRoles);
-    return websiteContent.get(tenantId, contentDraft[1], contentDraft[2], staff);
+    return websiteContent.get(tenantId, contentDraft[1], contentDraft[2], staff, publishedTenantConfig(tenantId).config);
   }
   if (route === 'POST /api/admin/website-content') {
     staffContext(req, tenantId, websiteRoles);
@@ -1809,6 +1811,7 @@ const assets = {
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
   '/website-content.js': ['website-content.js', 'text/javascript'],
+  '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
@@ -1856,23 +1859,45 @@ createServer(async (req, res) => {
     }
     tenantId = resolveTenant(req);
     if (path.startsWith('/api/')) {
+      res.setHeader('X-Robots-Tag', 'noindex');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.end(JSON.stringify(await api(req, res, path, tenantId, requestId)));
     }
-    const preview = req.method === 'GET' && path.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/);
-    const help = req.method === 'GET' && path.match(/^\/help\/([a-z0-9-]{1,64})$/);
-    if (help) {
-      const locale = { fr: 'fr-CA', en: 'en-CA' }[requestUrl.searchParams.get('lang')];
-      if (!websiteContent.publicRecord(tenantId, publishedTenantConfig(tenantId).config, 'help', help[1], locale)) res.statusCode = 404;
+    const publicRead = req.method === 'GET' || req.method === 'HEAD';
+    const preview = publicRead && path.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/);
+    const help = publicRead && path.match(/^\/help\/([a-z0-9-]{1,64})$/);
+    const sitemap = publicRead && path.match(/^\/sitemap(?:-([1-9]\d{0,7}))?\.xml$/);
+    if (sitemap) {
+      const origin = new URL(playerLinkBase(req, tenantId)).origin;
+      const groups = transaction(() => websiteContent.sitemap(tenantId, publishedTenantConfig(tenantId).config), { readOnly: true });
+      const xml = sitemapXml(groups, origin,
+        appBasePath, sitemap[1] ? Number(sitemap[1]) : undefined);
+      if (!xml) fail(404, 'invalid');
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      return res.end(xml);
     }
-    if (req.method !== 'GET' || (!help && !preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
-    if (preview && (!comingSoonEnabled(tenantId) || !comingSoon.published(tenantId, preview[1], catalogueAudience(tenantId, requestUrl.searchParams.get('locale'))))) res.statusCode = 404;
+    if (!publicRead || (!help && !preview && !Object.hasOwn(assets, path))) fail(404, 'invalid');
     const [file, type] = preview || help ? assets['/'] : assets[path];
     let content = readFileSync(new URL(`./public/${file}`, import.meta.url));
     if (type === 'text/html' && appBasePath) {
       content = content.toString('utf8')
         .replace('data-app-base-path=""', `data-app-base-path="${appBasePath}"`)
         .replace(/\b(href|src)="\/(?!\/)/g, (_match, attribute) => `${attribute}="${appBasePath}/`);
+    }
+    if (type === 'text/html') {
+      const view = transaction(() => describePublicPage(tenantId, publishedTenantConfig(tenantId).config, {
+        path, params: requestUrl.searchParams, helpSlug: help?.[1], previewSlug: preview?.[1]
+      }), { readOnly: true });
+      if (view.destination) {
+        res.writeHead(view.status, { Location: view.destination });
+        return res.end();
+      }
+      if (view.status) res.statusCode = view.status;
+      if (view.page) content = guideBody(content.toString(), view.page);
+      if (view.meta) content = pageHead(content.toString(), view.meta, new URL(playerLinkBase(req, tenantId)).origin);
+      if (view.noindex || view.status === 404 || ['reset','verify','email-change','preview','editContent','editCard'].some((key) => requestUrl.searchParams.has(key))) {
+        res.setHeader('X-Robots-Tag', 'noindex');
+      }
     }
     res.setHeader('Content-Type', type.startsWith('text/') ? `${type}; charset=utf-8` : type);
     res.end(content);
