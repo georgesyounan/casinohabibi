@@ -46,7 +46,7 @@ Expected result: the account and wallet records are local demo data with no cash
 2. Change the overview period among 7, 30, and 90 days; point out the daily chart and per-game activity, including each game's share of demo rounds.
 3. Export the overview CSV and confirm it contains aggregate demo metrics without player-level data.
 4. Open casino settings and show the English/French content fields and draft preview. Do not publish unless the partner specifically wants to see that action.
-5. Open catalog management and prepare the local sample catalog. Explain that its placeholder key does not contact a provider.
+5. Open catalog management and prepare the local sample catalog. Show the listing changes, publish the sample, and open its import receipt.
 6. If a support request exists, find it in the support inbox and demonstrate assignment or a reply.
 
 Expected result: operator actions are local to the demonstration. Imported listings remain non-playable previews.

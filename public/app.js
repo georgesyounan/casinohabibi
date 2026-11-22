@@ -1,3 +1,4 @@
+import { providerCatalogCopy, createProviderCatalogUi } from './provider-catalog.js';
 import { createSupportQueue } from './support-queue.js';
 import { catalogueCategories, games, roundPreview, demoTitle, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
@@ -18,7 +19,7 @@ const currentRoute = location.pathname.startsWith(appPath('/'))
   ? location.pathname.slice(appBasePath.length) : location.pathname;
 const isAdminPage = currentRoute === '/admin';
 const copy = {
-  ...comingSoonCopy,
+  ...comingSoonCopy,...providerCatalogCopy,
   ...playerAccessCopy,
   ...accountBreakCopy,
   ...discoveryCopy,...growthCopy,
@@ -253,17 +254,18 @@ const copy = {
   demoGameLabel: ['Playable demo game', 'Jeu de démonstration jouable'],
   playNow: ['Play demo', 'Jouer à la démo'],
   catalogSync: ['Catalog data', 'Données du catalogue'],
-  catalogSyncHelp: ['Paste catalog JSON or load a JSON file. Sync replaces the provider’s full listing set, disabling entries omitted from the file. It does not connect to a provider or launch games.', 'Collez le catalogue JSON ou chargez un fichier JSON. La synchronisation remplace l’ensemble des fiches du fournisseur et désactive celles qui manquent au fichier. Elle ne connecte pas de fournisseur et ne lance aucun jeu.'],
-  catalogListings: ['Catalog listing management', 'Gestion des fiches du catalogue'],
-  catalogListingsHelp: ['Show or hide individual imported listings. These cards are preview-only and cannot launch games.', 'Affichez ou masquez des fiches importées individuellement. Ces cartes servent uniquement d’aperçu et ne lancent aucun jeu.'],
+  catalogSyncHelp: ['Choose the provider and review the full file before publishing. Omitted titles leave the lobby.', 'Choisissez le fournisseur et vérifiez le fichier complet avant de publier. Les titres absents du fichier quittent le hall.'],
+  catalogListings: ['Catalog listings', 'Fiches du catalogue'],
+  catalogListingsHelp: ['Search imported titles and choose which cards appear in the lobby.', 'Recherchez les titres importés et choisissez les fiches qui apparaissent dans le hall.'],
   catalogListingsRefresh: ['Refresh listings', 'Actualiser les fiches'],
   catalogListingEnabled: ['Visible in lobby preview', 'Visible dans l’aperçu du hall'],
   catalogListingDisabled: ['Hidden from lobby preview', 'Masquée de l’aperçu du hall'],
   catalogListingHide: ['Hide listing', 'Masquer la fiche'], catalogListingShow: ['Show listing', 'Afficher la fiche'],
   catalogListingsEmpty: ['No imported catalog listings yet.', 'Aucune fiche de catalogue importée pour le moment.'],
   catalogListingUpdated: ['Catalog listing updated.', 'Fiche de catalogue modifiée.'],
-  sampleCatalogHelp: ['Use local sample data to try the operator workflow. It saves a clearly marked placeholder key and bilingual sample listings; no provider is contacted and the listings cannot be played.', 'Utilisez des données fictives locales pour essayer les outils de gestion. Un code fictif clairement indiqué et des fiches bilingues seront enregistrés; aucun fournisseur n’est contacté et les jeux ne sont pas accessibles.'],
-  loadSampleCatalog: ['Prepare sample catalog', 'Préparer le catalogue fictif'], sampleProviderReady: ['Local sample provider saved with a placeholder key. No external provider was contacted.', 'Fournisseur fictif local enregistré avec un code provisoire. Aucun fournisseur externe n’a été contacté.'], sampleCatalogPrepared: ['Sample catalog is ready. Review the preview, then sync it to show the preview-only listings in the lobby.', 'Le catalogue fictif est prêt. Vérifiez l’aperçu, puis synchronisez-le pour afficher les fiches non jouables dans le hall.'],
+  sampleCatalogHelp: ['Preview four bilingual sample listings and their effect on the lobby.', 'Prévisualisez quatre fiches fictives bilingues et leur effet sur le hall.'],
+  loadSampleCatalog: ['Prepare sample catalog', 'Préparer le catalogue fictif'],
+  sampleCatalogPrepared: ['Sample preview ready. Sync to publish these listings.', 'L’aperçu fictif est prêt. Synchronisez le catalogue pour publier ces fiches.'],
   catalogJson: ['Game entries (JSON array)', 'Fiches de jeux (tableau JSON)'],
   catalogFile: ['Load a catalog JSON file (optional)', 'Charger un fichier JSON de catalogue (facultatif)'],
   catalogNeedReview: ['{count} valid listings. Preview changes before syncing this full catalog.', '{count} fiches valides. Prévisualisez les changements avant de synchroniser ce catalogue complet.'],
@@ -379,6 +381,7 @@ function rememberCatalogue() {
   }
   history.replaceState(history.state, '', url);
 }
+let providerPage=1,providerPageFilters='',linkedProviderId=Number(/^#provider-game-([1-9][0-9]{0,14})$/.exec(location.hash)?.[1]);
 let providerSort = localStorage.getItem('northplay-provider-sort') === 'alpha' ? 'alpha' : 'recent';
 let guestFavorites;
 try {
@@ -1756,7 +1759,7 @@ function renderCatalog() {
     const key = `provider:${game.provider}:${game.externalId}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
     if (filter !== 'all' && filter !== 'favorites' && filter !== game.category) return false;
-    return !selectedCollection && matchesCatalogue(searchQuery, [game.titleEn, game.titleFr, game.provider], game.category);
+    return !selectedCollection && matchesCatalogue(searchQuery, [game.titleEn, game.titleFr, game.provider, game.externalId], game.category);
   }).sort((a, b) => providerSort === 'recent'
     ? b.id - a.id
     : providerTitleCollator.compare(language ? a.titleFr : a.titleEn, language ? b.titleFr : b.titleEn));
@@ -1791,16 +1794,31 @@ function renderCatalog() {
     card.append(art, info);
     catalog.append(card);
   }
-  for (const game of visibleGames) {
+  const perPage=8,pages=Math.max(1,Math.ceil(visibleGames.length/perPage));
+  const key=JSON.stringify([filter,searchQuery,selectedCollection,providerSort,language]);
+  if(providerPageFilters!==key){providerPage=1;providerPageFilters=key;}
+  const linkedIndex=linkedProviderId?visibleGames.findIndex(g=>g.id===linkedProviderId):-1;
+  if(linkedIndex>=0)providerPage=1+Math.floor(linkedIndex/perPage);
+  providerPage=Math.min(providerPage,pages);
+  $('#provider-pages').hidden=pages===1;
+  $('#provider-pages').setAttribute('aria-label',t('providerPages'));
+  $('#provider-page-label').textContent=language?'Fiches fournisseurs · Page '+providerPage+' sur '+pages:'Provider listings · Page '+providerPage+' of '+pages;
+  $('#provider-prev').disabled=providerPage<=1;$('#provider-next').disabled=providerPage>=pages;
+  for (const game of visibleGames.slice((providerPage-1)*perPage,providerPage*perPage)) {
     const artClass = game.category === 'slots' ? 'gold' : game.category === 'live' ? 'aurora' : 'blackjack';
     const icon = game.category === 'slots' ? '✦' : game.category === 'live' ? '◉' : '♠';
     const card = element('article', '', 'card provider-card');
+    card.id='provider-game-'+game.id;card.tabIndex=-1;
     const art = createArt(icon, artClass);
     addFavoriteButton(art, `provider:${game.provider}:${game.externalId}`, language ? game.titleFr : game.titleEn);
     const info = element('span', '', 'card-info');
     info.append(element('small', t('catalogListing'), 'catalog-label'), element('strong', language ? game.titleFr : game.titleEn), element('small', `${t(game.category)} · ${game.provider}`));
     card.append(art, info);
     catalog.append(card);
+  }
+  if(linkedIndex>=0){
+    const link=document.getElementById('provider-game-'+linkedProviderId);linkedProviderId=0;
+    link?.focus({preventScroll:true});link?.scrollIntoView({block:'nearest'});
   }
 }
 
@@ -1813,7 +1831,7 @@ let renderedLanguage = language;
 let currentStaffMfaEnabled = false;
 let currentMfaSetupUri;
 let providerGames = [];
-let catalogReview;
+
 function supportHref(key,id) {
   return appPath('/admin?'+new URLSearchParams({lang:language?'fr':'en',[key]:String(id)})+'#support-inbox');
 }
@@ -1843,6 +1861,8 @@ const growthAdmin=createGrowthAdmin({api,t,french:()=>Boolean(language),role:()=
 const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter,extensions:growthPlayer});
 const discoveryAdmin=createDiscoveryAdmin({api,t,supportHref,appPath,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
   openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
+const providerCatalogUi=createProviderCatalogUi({api,t,appPath,french:()=>Boolean(language),canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue),
+  openPanel:id=>adminWorkspace.open(id)});
 const adminLoaders = {
   ...Object.fromEntries(['partners','placements','report','review','experiments','polls','credits'].map(key=>['growth-'+key,()=>growthAdmin.load(key)])),
   'engagement-programs':()=>discoveryAdmin.load('programs'),
@@ -1852,7 +1872,7 @@ const adminLoaders = {
   overview: () => refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); }),
   'coming-soon-admin': comingSoonUi.loadDrafts,
   'coming-soon-saves': comingSoonUi.loadSaves,
-  'catalog-management': refreshManagedCatalog,
+  'catalog-management':providerCatalogUi.directory, 'catalog-import':providerCatalogUi.openImport, 'catalog-history':providerCatalogUi.history,
   'support-inbox': supportQueue.refresh,
   'casino-settings': () => { if (savedTenantDraftSignature === undefined) void requestTenantDraft(); },
   'staff-management': () => refreshStaffList().catch((error) => { $('#staff-status').textContent = t(error.message); }),
@@ -1919,12 +1939,14 @@ function render() {
     const current=document.querySelector('#engagement:not([hidden]) [data-admin-panel]:not([hidden])');
     if(current)void adminLoaders[current.id]?.();
   }
-  updateCatalogPreview();
+  providerCatalogUi.renderImport();
   if (languageChanged && adminWorkspace.isOpen('support-inbox')) supportQueue.render();
   if ($('#dialog').open) renderDialog();
   updateSessionReminder();
   if (latestOverview) renderOperatorOverview(latestOverview);
-  if (languageChanged && adminWorkspace.isOpen('catalog-management')) void refreshManagedCatalog();
+  if(languageChanged&&adminWorkspace.isOpen('catalog-management'))providerCatalogUi.directory();
+  if(languageChanged&&adminWorkspace.isOpen('catalog-history'))void providerCatalogUi.history();
+  if(languageChanged&&adminWorkspace.isOpen('catalog-import'))providerCatalogUi.showSaved();
 }
 
 $('#skip-link').addEventListener('click', (event) => {
@@ -2032,6 +2054,12 @@ $('#game-search').addEventListener('input', (event) => {
   rememberCatalogue();
   renderCatalog();
 });
+for(const [id,offset] of [['provider-prev',-1],['provider-next',1]]){
+  document.getElementById(id).addEventListener('click',()=>{
+    providerPage+=offset;renderCatalog();
+    $('#catalog .provider-card')?.focus();
+  });
+}
 $('#provider-sort').addEventListener('change', (event) => {
   providerSort = event.currentTarget.value === 'alpha' ? 'alpha' : 'recent';
   localStorage.setItem('northplay-provider-sort', providerSort);
@@ -2060,224 +2088,6 @@ $('#provider').addEventListener('submit', async (event) => {
   }
 });
 
-
-function parseCatalogInput(raw) {
-  if (new TextEncoder().encode(raw).length > 256 * 1024) throw new Error('invalid');
-  const imported = JSON.parse(raw);
-  if (!Array.isArray(imported) || imported.length < 1 || imported.length > 500) throw new Error('invalid');
-  const ids = new Set();
-  for (const game of imported) {
-    if (!game || typeof game.externalId !== 'string' || !/^[\w.-]{1,128}$/.test(game.externalId) || ids.has(game.externalId) ||
-        typeof game.titleEn !== 'string' || !game.titleEn.trim() || game.titleEn.length > 120 ||
-        typeof game.titleFr !== 'string' || !game.titleFr.trim() || game.titleFr.length > 120 ||
-        !['slots', 'table', 'live'].includes(game.category)) throw new Error('invalid');
-    ids.add(game.externalId);
-  }
-  return imported;
-}
-
-function updateCatalogPreview() {
-  const form = $('#catalog-sync');
-  const raw = form.elements.games.value;
-  const button = form.querySelector('button[type=submit]');
-  const reviewButton = $('#catalog-review');
-  try {
-    const imported = parseCatalogInput(raw);
-    const name = form.elements.name.value.trim();
-    const signature = JSON.stringify({ name, games: imported });
-    reviewButton.disabled = !name;
-    if (catalogReview?.signature === signature) {
-      const count = (value) => new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(value);
-      const result = catalogReview.result;
-      const hasChanges = result.added + result.updated + result.removed > 0;
-      let message = hasChanges
-        ? t('catalogDiff').replace('{added}', count(result.added)).replace('{updated}', count(result.updated)).replace('{unchanged}', count(result.unchanged)).replace('{removed}', count(result.removed))
-        : t('catalogNoChanges').replace('{count}', count(result.unchanged));
-      if (hasChanges && result.removed) message += ` ${t('catalogRemovedWarning')}`;
-      $('#catalog-preview').textContent = message;
-      button.disabled = !hasChanges || !currentStaffPermissions.publishCatalogue;
-    } else {
-      catalogReview = undefined;
-      $('#catalog-preview').textContent = t('catalogNeedReview').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(imported.length));
-      button.disabled = true;
-    }
-  } catch {
-    catalogReview = undefined;
-    $('#catalog-preview').textContent = raw.trim() ? t('invalid') : '';
-    button.disabled = true;
-    reviewButton.disabled = true;
-  }
-}
-
-async function refreshManagedCatalog() {
-  const status = $('#catalog-list-status');
-  const container = $('#managed-catalog');
-  status.textContent = t('loading');
-  try {
-    const listings = await api('providers/catalog/list', {});
-    status.textContent = '';
-    if (!listings.length) {
-      container.replaceChildren(element('p', t('catalogListingsEmpty')));
-      return;
-    }
-    container.replaceChildren(...listings.map((listing) => {
-      const row = element('article', '', 'managed-catalog-item');
-      const details = element('div');
-      details.append(element('strong', language ? listing.titleFr : listing.titleEn));
-      details.append(element('p', `${listing.name} · ${t(listing.category)} · ${t(listing.enabled ? 'catalogListingEnabled' : 'catalogListingDisabled')}`));
-      const button = action(t(listing.enabled ? 'catalogListingHide' : 'catalogListingShow'), async () => {
-        button.disabled = true;
-        try {
-          await api('providers/catalog/status', { name: listing.name, externalId: listing.externalId, enabled: !listing.enabled });
-          await refreshManagedCatalog();
-          status.textContent = t('catalogListingUpdated');
-        } catch (error) {
-          status.textContent = t(error.message);
-          button.disabled = false;
-        }
-      }, 'ghost');
-      row.append(details);
-      if (currentStaffPermissions.publishCatalogue) row.append(button);
-      return row;
-    }));
-  } catch (error) {
-    status.textContent = t(error.message);
-  }
-}
-
-$('#catalog-list-refresh').addEventListener('click', () => { void refreshManagedCatalog(); });
-
-$('#catalog-review').addEventListener('click', async () => {
-  const form = $('#catalog-sync');
-  const reviewButton = $('#catalog-review');
-  const syncButton = form.querySelector('button[type=submit]');
-  const name = form.elements.name.value.trim();
-  $('#catalog-status').textContent = '';
-  let imported;
-  try {
-    imported = parseCatalogInput(form.elements.games.value);
-  } catch {
-    updateCatalogPreview();
-    return;
-  }
-  const signature = JSON.stringify({ name, games: imported });
-  reviewButton.disabled = true;
-  syncButton.disabled = true;
-  $('#catalog-preview').textContent = t('loading');
-  try {
-    const result = await api('providers/catalog/preview', { name, games: imported });
-    if (signature !== JSON.stringify({ name: form.elements.name.value.trim(), games: parseCatalogInput(form.elements.games.value) })) {
-      updateCatalogPreview();
-      return;
-    }
-    catalogReview = { signature, result };
-    updateCatalogPreview();
-  } catch (error) {
-    $('#catalog-status').textContent = t(error.message);
-  } finally {
-    updateCatalogPreview();
-  }
-});
-
-$('#load-sample-catalog').addEventListener('click', async () => {
-  const button = $('#load-sample-catalog');
-  const name = `${tenantBrandName} Demo Sample`;
-  const sampleKey = 'LOCAL-ONLY-NO-PROVIDER-CONNECTION';
-  const sampleGames = [
-    { externalId: 'northplay-sample-slots', titleEn: 'Northern Lights', titleFr: 'Aurores boréales', category: 'slots' },
-    { externalId: 'northplay-sample-blackjack', titleEn: 'Maple Blackjack', titleFr: 'Blackjack à l’érable', category: 'table' },
-    { externalId: 'northplay-sample-roulette', titleEn: 'Roulette Studio', titleFr: 'Studio de roulette', category: 'live' },
-    { externalId: 'northplay-sample-aurora', titleEn: 'Aurora Spins', titleFr: 'Tours boréaux', category: 'slots' }
-  ];
-  const form = $('#catalog-sync');
-  const providerForm = $('#provider');
-  const signature = JSON.stringify({ name, games: sampleGames });
-  form.elements.name.value = name;
-  form.elements.games.value = JSON.stringify(sampleGames, null, 2);
-  providerForm.elements.name.value = name;
-  catalogReview = undefined;
-  updateCatalogPreview();
-  $('#catalog-status').textContent = '';
-  $('#sample-catalog-status').textContent = t('loading');
-  button.disabled = true;
-  $('#catalog-review').disabled = true;
-  try {
-    await api('providers', { name, key: sampleKey });
-    const preview = await api('providers/catalog/preview', { name, games: sampleGames });
-    const currentSignature = JSON.stringify({ name: form.elements.name.value.trim(), games: parseCatalogInput(form.elements.games.value) });
-    if (signature !== currentSignature) {
-      updateCatalogPreview();
-      return;
-    }
-    catalogReview = { signature, result: preview };
-    const providers = await api('providers/list', {});
-    $('#providers').replaceChildren(...providers.map((provider) => element('li', provider.name + ' · ••••••••')));
-    providerStatus = 'sampleProviderReady';
-    $('#provider-status').textContent = t(providerStatus);
-    $('#sample-catalog-status').textContent = t('sampleCatalogPrepared');
-  } catch (error) {
-    $('#sample-catalog-status').textContent = t(error.message);
-  } finally {
-    button.disabled = false;
-    updateCatalogPreview();
-  }
-});
-
-function catalogEdited() {
-  $('#catalog-status').textContent = '';
-  updateCatalogPreview();
-}
-$('#catalog-sync').elements.name.addEventListener('input', catalogEdited);
-
-$('#catalog-file').addEventListener('change', async (event) => {
-  const file = event.currentTarget.files[0];
-  if (!file) return;
-  if (file.size > 256 * 1024) {
-    catalogReview = undefined;
-    $('#catalog-status').textContent = '';
-    $('#catalog-preview').textContent = t('invalid');
-    $('#catalog-sync').elements.games.value = '';
-    $('#catalog-sync').querySelector('button[type=submit]').disabled = true;
-    $('#catalog-review').disabled = true;
-    event.currentTarget.value = '';
-    return;
-  }
-  $('#catalog-sync').elements.games.value = await file.text();
-  catalogEdited();
-});
-$('#catalog-sync').elements.games.addEventListener('input', catalogEdited);
-
-$('#catalog-sync').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const button = form.querySelector('button[type=submit]');
-  const { name, games: rawGames } = Object.fromEntries(new FormData(form));
-  let imported;
-  try {
-    imported = parseCatalogInput(rawGames);
-  } catch {
-    updateCatalogPreview();
-    return;
-  }
-  const signature = JSON.stringify({ name: name.trim(), games: imported });
-  if (!catalogReview || catalogReview.signature !== signature) {
-    updateCatalogPreview();
-    return;
-  }
-  const expectedRevision = catalogReview.result.revision;
-  button.disabled = true;
-  try {
-    const response = await api('providers/catalog', { name: name.trim(), games: imported, expectedRevision });
-    $('#catalog-status').textContent = t('synced') + ' · ' + response.imported;
-    catalogReview = undefined;
-    updateCatalogPreview();
-  } catch (error) {
-    catalogReview = undefined;
-    $('#catalog-preview').textContent = t(error.message);
-  } finally {
-    if (catalogReview) updateCatalogPreview();
-  }
-});
 
 async function loadTenantDraft() {
   const form = $('#tenant-config');
@@ -2998,7 +2808,7 @@ $('#overview-export').addEventListener('click', exportOperatorOverview);
 
 function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
-  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)) supportQueue.clear();
+  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)){supportQueue.clear();providerCatalogUi.clear();}
   currentStaffId = session.id;
   currentStaffRole = session.role;
   currentStaffPermissions = {...session.permissions,testCredits:Boolean(session.testCredits)};

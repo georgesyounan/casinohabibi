@@ -1,3 +1,4 @@
+import { createProviderCatalog } from './lib/provider-catalog.js';
 import { createServer } from 'node:http';
 import { resolveTxt } from 'node:dns/promises';
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
@@ -285,6 +286,7 @@ const savedTitles = createSavedTitles(db, { fail, transaction, onSave(tenant,pla
 } });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
+const providerCatalog=transaction(()=>createProviderCatalog(db,{fail,audit:staffAudit.record,encryptKey:encryptProviderKey}));
 installPlayerAccess(db, transaction);
 const dashboard = createDashboard(db, { transaction, fail });
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
@@ -533,23 +535,12 @@ function fail(status, code) {
   throw Object.assign(new Error(code), { status });
 }
 
-function validateCatalogGames(importedGames) {
-  if (!Array.isArray(importedGames) || importedGames.length < 1 || importedGames.length > 500) fail(400, 'invalid');
-  const externalIds = new Set();
-  for (const game of importedGames) {
-    if (!game || typeof game.externalId !== 'string' || !/^[\w.-]{1,128}$/.test(game.externalId) ||
-        externalIds.has(game.externalId) || typeof game.titleEn !== 'string' || !game.titleEn.trim() || game.titleEn.length > 120 ||
-        typeof game.titleFr !== 'string' || !game.titleFr.trim() || game.titleFr.length > 120 ||
-        !['slots', 'table', 'live'].includes(game.category)) fail(400, 'invalid');
-    externalIds.add(game.externalId);
-  }
-  return externalIds;
-}
-
-function providerCatalogSnapshot(providerId, tenantId) {
-  const rows = db.prepare('SELECT external_id, title_en, title_fr, category, enabled FROM game_catalog WHERE provider_id = ? AND tenant_id = ? ORDER BY external_id').all(providerId, tenantId);
-  const revision = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
-  return { rows, revision };
+function encryptProviderKey(name,key) {
+  const iv=randomBytes(12);
+  const cipher=createCipheriv('aes-256-gcm',encryptionKey,iv);
+  cipher.setAAD(Buffer.from(name));
+  const encrypted=Buffer.concat([cipher.update(key,'utf8'),cipher.final()]);
+  return Buffer.concat([iv,cipher.getAuthTag(),encrypted]).toString('base64');
 }
 
 function limitAuthAttempts(req, route) {
@@ -2009,19 +2000,27 @@ async function api(req, res, path, tenantId, requestId) {
       return { ...account(player, tenantId), amount, outcome: receipt };
     });
   }
+  const catalogRead=path.match(/^\/api\/providers\/catalog\/(listings|imports|sample|imports\/[1-9]\d{0,14})$/);
+  const providerRoles = ['operator_admin', 'operator_provider'];
+  if(req.method==='GET'&&catalogRead){
+    if(!adminEnabled)fail(503,'adminDisabled');
+    const staff=staffContext(req,tenantId,providerRoles);
+    return transaction(()=>{
+      const view=catalogRead[1];
+      if(view==='listings')return providerCatalog.listings(tenantId,params);
+      if(view==='imports')return providerCatalog.imports(tenantId,staff,params);
+      if(view==='sample')return providerCatalog.sample(tenantId,publishedTenantConfig(tenantId).config.brandName);
+      return providerCatalog.receipt(tenantId,staff,Number(view.split('/')[1]));
+    },{readOnly:true});
+  }
   if (route === 'POST /api/providers' || route === 'POST /api/providers/list' || route === 'POST /api/providers/audit' || route === 'POST /api/providers/catalog' || route === 'POST /api/providers/catalog/preview' || route === 'POST /api/providers/catalog/list' || route === 'POST /api/providers/catalog/status') {
     if (!adminEnabled) fail(503, 'adminDisabled');
-    const providerRoles = ['operator_admin', 'operator_provider'];
     staffContext(req, tenantId, providerRoles);
     if (route === 'POST /api/providers') {
       const { name, key } = await body(req);
       if (typeof name !== 'string' || !/^[\p{L}\p{N} ._-]{1,64}$/u.test(name) ||
           typeof key !== 'string' || !key.trim() || key.length > 2048) fail(400, 'invalid');
-      const iv = randomBytes(12);
-      const cipher = createCipheriv('aes-256-gcm', encryptionKey, iv);
-      cipher.setAAD(Buffer.from(name));
-      const encrypted = Buffer.concat([cipher.update(key, 'utf8'), cipher.final()]);
-      const value = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64');
+      const value = encryptProviderKey(name,key);
       const now = new Date().toISOString();
       transaction(() => {
         const staff = staffContext(req, tenantId, providerRoles);
@@ -2035,58 +2034,19 @@ async function api(req, res, path, tenantId, requestId) {
       return db.prepare('SELECT name, action, created FROM provider_events WHERE tenant_id = ? ORDER BY id DESC LIMIT 100').all(tenantId);
     }
     if (route === 'POST /api/providers/catalog') {
-      const input = await body(req, 256 * 1024);
-      const { name, games: importedGames, expectedRevision } = input ?? {};
-      const providerRow = typeof name === 'string' && db.prepare('SELECT id FROM providers WHERE name = ? AND tenant_id = ?').get(name, tenantId);
-      if (typeof name !== 'string' || !providerRow || typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision)) fail(400, 'invalid');
-      validateCatalogGames(importedGames);
-      const now = new Date().toISOString();
-      return auditedChange(providerRoles, input, (staff) => {
-        if (providerCatalogSnapshot(providerRow.id, tenantId).revision !== expectedRevision) fail(409, 'catalogChanged');
-        db.prepare('UPDATE game_catalog SET enabled = 0 WHERE provider_id = ? AND tenant_id = ?').run(providerRow.id, tenantId);
-        const upsert = db.prepare('INSERT INTO game_catalog(provider_id, provider, tenant_id, external_id, title_en, title_fr, category, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1) ON CONFLICT(tenant_id, provider_id, external_id) DO UPDATE SET title_en = excluded.title_en, title_fr = excluded.title_fr, category = excluded.category, enabled = 1');
-        for (const game of importedGames) upsert.run(providerRow.id, name, tenantId, game.externalId, game.titleEn.trim(), game.titleFr.trim(), game.category);
-        db.prepare('INSERT INTO provider_events(name, action, created, tenant_id) VALUES (?, ?, ?, ?)').run(name, `catalog_synced:${importedGames.length}`, now, tenantId);
-        const auditId = staffAudit.record(tenantId, staff.id, 'provider_catalog_synced', name, requestId, { recordId: providerRow.id, fields: ['listings'] });
-        return { imported: importedGames.length, auditId };
-      }, 'publishCatalogue');
+      const input=await body(req,256*1024);
+      return auditedChange(providerRoles,input,staff=>providerCatalog.sync(tenantId,publishedTenantConfig(tenantId).config.brandName,staff.id,requestId,input),'publishCatalogue');
     }
     if (route === 'POST /api/providers/catalog/list') {
       return db.prepare('SELECT gc.provider AS name, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category, gc.enabled FROM game_catalog gc WHERE gc.tenant_id = ? ORDER BY gc.provider, gc.title_en LIMIT 2000').all(tenantId);
     }
     if (route === 'POST /api/providers/catalog/status') {
-      const input = await body(req);
-      const { name, externalId, enabled } = input ?? {};
-      if (typeof name !== 'string' || !/^[\p{L}\p{N} ._-]{1,64}$/u.test(name) || typeof externalId !== 'string' || !/^[\w.-]{1,128}$/.test(externalId) || typeof enabled !== 'boolean') fail(400, 'invalid');
-      return auditedChange(providerRoles, input, (staff) => {
-        const listing = db.prepare('SELECT id, enabled FROM game_catalog WHERE tenant_id = ? AND provider = ? AND external_id = ?').get(tenantId, name, externalId);
-        if (!listing) fail(404, 'invalid');
-        if (Boolean(listing.enabled) === enabled) return { name, externalId, enabled };
-        db.prepare('UPDATE game_catalog SET enabled = ? WHERE id = ? AND tenant_id = ?').run(Number(enabled), listing.id, tenantId);
-        const auditId = staffAudit.record(tenantId, staff.id, enabled ? 'catalog_listing_enabled' : 'catalog_listing_disabled', `${name}:${externalId}`, requestId, {
-          recordId: listing.id, fields: ['enabled']
-        });
-        return { name, externalId, enabled, auditId };
-      }, 'publishCatalogue');
+      const input=await body(req);
+      return auditedChange(providerRoles,input,staff=>providerCatalog.visibility(tenantId,staff.id,requestId,input||{}),'publishCatalogue');
     }
     if (route === 'POST /api/providers/catalog/preview') {
-      const { name, games: importedGames } = await body(req, 256 * 1024);
-      const providerRow = typeof name === 'string' && db.prepare('SELECT id FROM providers WHERE name = ? AND tenant_id = ?').get(name, tenantId);
-      if (typeof name !== 'string' || !providerRow) fail(400, 'invalid');
-      const externalIds = validateCatalogGames(importedGames);
-      const { rows, revision } = providerCatalogSnapshot(providerRow.id, tenantId);
-      const current = new Map(rows.map((row) => [row.external_id, row]));
-      let added = 0;
-      let updated = 0;
-      let unchanged = 0;
-      for (const game of importedGames) {
-        const row = current.get(game.externalId);
-        if (!row || !row.enabled) added += 1;
-        else if (row.title_en !== game.titleEn.trim() || row.title_fr !== game.titleFr.trim() || row.category !== game.category) updated += 1;
-        else unchanged += 1;
-      }
-      const removed = rows.filter((row) => row.enabled && !externalIds.has(row.external_id)).length;
-      return { added, updated, unchanged, removed, revision };
+      const input=await body(req,256*1024);
+      return transaction(()=>providerCatalog.preview(tenantId,publishedTenantConfig(tenantId).config.brandName,input),{readOnly:true});
     }
     return db.prepare('SELECT name, updated FROM providers WHERE tenant_id = ? ORDER BY name').all(tenantId);
   }
@@ -2107,6 +2067,7 @@ const assets = {
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/growth-player.js':['growth-player.js','text/javascript'],
+  '/provider-catalog.js':['provider-catalog.js','text/javascript'],
   '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/contact-views.js': ['contact-views.js','text/javascript'],

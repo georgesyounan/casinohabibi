@@ -8,7 +8,7 @@ Le catalogue de démonstration compte 13 modules techniques et 12 modules d’in
 | --- | --- | --- |
 | A01 | Marque, rôles, droits de publication et journal des changements | Équipe et accès, Journal d’audit |
 | A02 | Compte joueur, vérification du courriel, récupération, suspension et pauses chronométrées | Mon compte, Joueurs |
-| A03 | Révisions du catalogue et du contenu, publication et archivage | Catalogue de jeux, Contenu du site |
+| A03 | Révisions du catalogue et du contenu, publication et archivage. Aperçu par fiche et historique des imports fournisseurs | Catalogue de jeux, Contenu du site |
 | A04 | Sélection de fiches vedettes et découverte distincte par visite | Hall, section À venir |
 | A05 | Favoris synchronisés et historique daté des ajouts et retraits | Favoris, Joueurs |
 | A06 | Inscription aux quêtes et progression selon les actions réelles | Découverte et récompenses → Quêtes |
@@ -26,7 +26,7 @@ Le catalogue de démonstration compte 13 modules techniques et 12 modules d’in
 | --- | --- | --- |
 | B01 | Hall et compte bilingues adaptés au téléphone | Hall → Mon compte |
 | B02 | Fiches à venir, sélection de découverte et favoris privés | Hall → À venir |
-| B03 | Fiche publique, recherche, filtres et lien facultatif vers un jeu de démonstration | Catalogue → fiche |
+| B03 | Fiche publique, recherche par titre ou identifiant, filtres, fiches fournisseurs paginées et lien facultatif vers un jeu de démonstration | Catalogue → fiche |
 | B04 | Pages d’aide, bannières, traductions, métadonnées et plan du site | Contenu du site |
 | B05 | Offres gratuites, conditions, dates locales et réclamation groupée | Découverte et récompenses → Récompenses |
 | B06 | Éditeur de quêtes, étapes et progression sur plusieurs appareils | Quêtes et récompenses |

@@ -37,7 +37,7 @@
 <div class="filters" id="filters"><button data-filter="all" data-copy="all" aria-pressed="true"></button><button data-filter="slots" data-copy="slots" aria-pressed="false"></button><button data-filter="table" data-copy="table" aria-pressed="false"></button><button data-filter="live" data-copy="live" aria-pressed="false"></button><button data-filter="favorites" data-copy="favorites" aria-pressed="false"></button><button data-filter="recent" data-copy="recentGames" aria-pressed="false"></button></div></div>
 <p id="catalog-summary" class="catalog-summary" role="status" aria-live="polite" hidden></p>
 <p id="favorites-status" role="status" aria-live="polite"></p>
-<div id="catalog-empty" class="empty-state" hidden><span aria-hidden="true">✧</span><div><h3 data-copy="catalogEmptyTitle"></h3><p data-copy="catalogEmpty"></p><button id="browse-all-games" type="button" class="ghost" data-copy="browseAllGames" hidden></button><button id="clear-game-search" type="button" class="ghost" data-copy="clearGameSearch" hidden></button></div></div><div id="catalog" class="cards"></div>
+<div id="catalog-empty" class="empty-state" hidden><span aria-hidden="true">✧</span><div><h3 data-copy="catalogEmptyTitle"></h3><p data-copy="catalogEmpty"></p><button id="browse-all-games" type="button" class="ghost" data-copy="browseAllGames" hidden></button><button id="clear-game-search" type="button" class="ghost" data-copy="clearGameSearch" hidden></button></div></div><div id="catalog" class="cards"></div><nav id="provider-pages" class="case-pager" hidden><button type="button" id="provider-prev" class="ghost" data-copy="playerPrevious"></button><span id="provider-page-label" role="status"></span><button type="button" id="provider-next" class="ghost" data-copy="playerNext"></button></nav>
 <section id="coming-soon" class="coming-soon" hidden aria-labelledby="coming-soon-heading">
   <h2 id="coming-soon-heading" data-copy="comingSoon"></h2>
   <p id="coming-soon-empty" data-copy="comingSoonEmpty" hidden></p>
@@ -196,6 +196,7 @@
             <a href="#coming-soon-admin" data-admin-link data-copy="adminNavComingSoon"></a>
             <a href="#catalog-management" data-admin-link data-copy="adminProviderListings"></a>
             <a href="#catalog-import" data-admin-link data-copy="adminImportCatalogue"></a>
+            <a href="#catalog-history" data-admin-link data-copy="catalogHistory"></a>
             <a href="#provider-tools" data-admin-link data-copy="adminProviderKeys"></a>
           </nav>
           <section id="coming-soon-admin" class="admin-panel" data-admin-panel aria-labelledby="coming-soon-admin-title" hidden>
@@ -264,7 +265,7 @@
               </div>
               <button id="catalog-list-refresh" type="button" class="ghost" data-copy="catalogListingsRefresh"></button>
             </div>
-            <p id="catalog-list-status" role="status"></p><div id="managed-catalog" class="managed-catalog"></div>
+            <div id="managed-catalog" class="managed-catalog"></div>
           </section>
           <section id="catalog-import" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="catalog-import-title" hidden>
             <div class="admin-page-heading">
@@ -274,10 +275,14 @@
               </div>
             </div>
             <div class="sample-catalog-panel"><p data-copy="sampleCatalogHelp"></p><button id="load-sample-catalog" type="button" class="ghost" data-copy="loadSampleCatalog"></button><p id="sample-catalog-status" role="status" aria-live="polite"></p></div>
-            <form id="catalog-sync"><label><span data-copy="providerName"></span><input name="name" maxlength="64" required autocomplete="off"></label>
+            <form id="catalog-sync"><label><span data-copy="providerName"></span><input name="name" maxlength="64" required list="catalog-provider-options" autocomplete="off"></label><datalist id="catalog-provider-options"></datalist>
+            <details id="catalog-source" class="admin-disclosure" open><summary data-copy="catalogSource"></summary>
             <label><span data-copy="catalogFile"></span><input id="catalog-file" type="file" accept=".json,application/json"></label>
-            <label><span data-copy="catalogJson"></span><textarea name="games" rows="8" required spellcheck="false"></textarea></label><details class="admin-disclosure"><summary data-copy="adminJsonExample"></summary><pre class="json-example" data-copy="catalogExample"></pre></details>
-            <p id="catalog-preview" role="status" aria-live="polite"></p><div class="actions"><button id="catalog-review" type="button" data-copy="catalogReview"></button><button type="submit" data-copy="sync"></button></div></form><p role="status" id="catalog-status"></p>
+            <label><span data-copy="catalogJson"></span><textarea name="games" rows="8" required spellcheck="false"></textarea></label><details class="admin-disclosure"><summary data-copy="adminJsonExample"></summary><pre class="json-example" data-copy="catalogExample"></pre></details></details>
+            <p id="catalog-preview" role="status" aria-live="polite"></p><div id="catalog-change-detail" hidden></div><div class="actions"><button id="catalog-review" type="button" data-copy="catalogReview"></button><button type="submit" data-copy="sync"></button></div></form><p role="status" id="catalog-status"></p>
+          </section>
+          <section id="catalog-history" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="catalog-history-title" hidden>
+            <h3 id="catalog-history-title" data-admin-heading tabindex="-1" data-copy="catalogHistory"></h3><div id="catalog-history-body"></div>
           </section>
           <section id="provider-tools" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="provider-tools-title" hidden>
             <div class="admin-page-heading">

@@ -42,3 +42,17 @@ export function matchesCatalogue(query, values, category) {
 export function collectionKey(title) {
   return normalizeCatalogueText(title.collectionEn || title.collectionFr || '');
 }
+
+export function providerCatalogIssue(games) {
+  if (!Array.isArray(games) || !games.length || games.length>500) return {key:'catalogFileCount'};
+  const ids=new Set();
+  for (const [index,game] of games.entries()) {
+    const row=index+1;
+    if (!game || typeof game.externalId!=='string' || !/^[\w.-]{1,128}$/.test(game.externalId)) return {key:'catalogGameId',row};
+    if (ids.has(game.externalId)) return {key:'catalogGameDuplicate',row};
+    if (![game.titleEn,game.titleFr].every(text=>typeof text==='string' && text.trim() && text.length<=120)) return {key:'catalogGameTitles',row};
+    if (typeof game.category!=='string'||!Object.hasOwn(catalogueCategories,game.category)) return {key:'catalogGameCategory',row};
+    ids.add(game.externalId);
+  }
+  return null;
+}
