@@ -4,6 +4,8 @@ import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
 import { discoveryCopy, createDiscoveryPlayer } from './discovery.js';
+import {growthCopy,createGrowthPlayer} from './growth-player.js';
+import {createGrowthAdmin} from './growth-admin.js';
 import { createDiscoveryAdmin } from './discovery-admin.js';
 import { accountBreakCopy, createBreakControls, showBreakPeriod } from './account-break.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
@@ -18,7 +20,7 @@ const copy = {
   ...comingSoonCopy,
   ...playerAccessCopy,
   ...accountBreakCopy,
-  ...discoveryCopy,
+  ...discoveryCopy,...growthCopy,
   supportLinkedRef: ['Related reference (optional)', 'Référence liée (facultative)'],
   ...dashboardCopy,
   ...websiteContentCopy,
@@ -900,9 +902,14 @@ function renderDialog() {
   if ($('#dialog').open) title.focus();
   if (screen === 'signin' || screen === 'signup') {
     const signup = screen === 'signup';
+    const signupFields=[];
+    if(signup){
+      const code=field('referralCode','text',language?'Code de parrainage (facultatif)':'Referral code (optional)','off');
+      const input=code.querySelector('input');input.required=false;input.maxLength=48;signupFields.push(code);
+    }
     panel.append(submitForm([
       field('email', 'email', t('email'), 'email'),
-      field('password', 'password', t('password'), signup ? 'new-password' : 'current-password')
+      field('password', 'password', t('password'), signup ? 'new-password' : 'current-password'), ...signupFields
     ], t(screen), async (data) => {
       const auth = await api(signup ? 'signup' : 'login', { ...data, ...(signup ? { locale: language ? 'fr-CA' : 'en-CA' } : {}) });
       if (auth.verificationRequired) {
@@ -1664,10 +1671,13 @@ const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute
 const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale, brand: () => tenantBrandName,
   canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
 
-const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter});
+const growthPlayer=createGrowthPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter});
+const growthAdmin=createGrowthAdmin({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,publish:()=>currentStaffPermissions.publishWebsite});
+const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter,extensions:growthPlayer});
 const discoveryAdmin=createDiscoveryAdmin({api,t,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
   openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
 const adminLoaders = {
+  ...Object.fromEntries(['partners','placements','report','review','experiments','polls','credits'].map(key=>['growth-'+key,()=>growthAdmin.load(key)])),
   'engagement-programs':()=>discoveryAdmin.load('programs'),
   'engagement-campaigns':()=>discoveryAdmin.load('campaigns'),
   'engagement-report':()=>discoveryAdmin.load('report'),
@@ -1696,7 +1706,10 @@ const reportUi = createReportUi({ api, t, element, action, appPath, role: () => 
     form.requestSubmit();
   } });
 
+let growthBannerContext;
 function render() {
+  const growthContext=String(player?.id||0)+'|'+language+'|'+(player?.safety?.accountBreak?.endsAt||0);
+  if(!isAdminPage && currentRoute==='/' && growthBannerContext!==growthContext){growthBannerContext=growthContext;void growthPlayer.banner($('#campaign-placement'));}
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
   if (languageChanged && !isAdminPage) {
@@ -2908,7 +2921,7 @@ function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
   currentStaffId = session.id;
   currentStaffRole = session.role;
-  currentStaffPermissions = session.permissions;
+  currentStaffPermissions = {...session.permissions,testCredits:Boolean(session.testCredits)};
   currentStaffMfaEnabled = Boolean(session.mfaEnabled);
   currentMfaSetupUri = undefined;
   $('#mfa-secret').hidden = true;
@@ -3214,4 +3227,8 @@ if (!isAdminPage) {
   if (resetToken) openPanel('passwordReset');
   else if (verifyToken) openPanel('emailVerification');
   else if (emailChangeToken) openPanel('emailChange');
+  else if(new URLSearchParams(location.search).has('listInvite')){
+    if(!player)afterSignIn='discovery';
+    openPanel(player?'discovery':'signin');
+  }
 }

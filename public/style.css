@@ -340,3 +340,9 @@ dialog::backdrop{background:#090e0bd9}
 .discovery-filters{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))}
 .discovery-choice{display:flex;gap:.5rem;align-items:center;margin:.35rem 0}.discovery-choice input{width:auto}
 .discovery-feedback:empty{display:none}.discovery-feedback{color:var(--green)}.discovery-body a:focus-visible,.discovery-tabs a:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+.growth-metrics{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.45rem 1rem;margin:1rem 0;align-items:baseline}
+.growth-metrics dt,.growth-metrics dd{margin:0;padding:.25rem 0;border-bottom:1px solid var(--line, #6c72804d)}
+.growth-metrics dd{font-variant-numeric:tabular-nums;text-align:end;font-weight:650}
+#campaign-placement{margin:1rem 0}#campaign-placement p{margin:.35rem 0}
+.discovery-body details>summary,.admin-page details>summary{cursor:pointer}

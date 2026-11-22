@@ -62,7 +62,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     Q09:l('Open both previews in the featured pair.','Ouvrez les deux fiches du duo sélectionné.')});
   function cosmetic(s){const n=el('span',local(s,'item'),'cosmetic cosmetic-'+s.color+' cosmetic-'+s.slot);n.title=slots()[s.slot];return n;}
   async function render(root,playerId) {
-    if(playerId!==activePlayer){selected='quests';activePlayer=playerId;}
+    if(playerId!==activePlayer){selected=new URLSearchParams(location.search).has('listInvite')?'community':'quests';activePlayer=playerId;}
     const gen=++generation;
     root.replaceChildren(el('p',l('Loading…','Chargement…')));
     let data;
@@ -78,8 +78,10 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     function select(k){selected=k;render(root,playerId);}
     const tabNames=[['quests',l('Quests','Quêtes')],['rewards',l('Rewards','Récompenses')],['profile',l('My profile','Mon profil')],['inbox',l('Inbox','Messages')],['preferences',l('Contact preferences','Préférences')]];
     if(extensions.community)tabNames.push(['community',l('Shared lists','Listes partagées')]);
+    if(data.partner&&extensions.partner)tabNames.push(['partner',l('Partner portal','Portail partenaire')]);
     root.replaceChildren();tabs(root,tabNames,selected,select);root.append(message);
     const body=el('div','','discovery-body');root.append(body);
+    if(selected==='partner'&&data.partner){await extensions.partner(body,playerId);return;}
     if(selected==='community'){await extensions.community(body,playerId);return;}
     const link=(label,path)=>{const a=el('a',label,'discovery-link');a.href=appPath(path);return a;};
     const post=(p,x)=>api('discovery/'+p,x);

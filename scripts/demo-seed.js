@@ -47,6 +47,8 @@ try {
     const games = ['gold', 'blackjack', 'roulette', 'aurora'];
     const wagers = [250, 500, 1000];
     const now = Date.now();
+    const growthSignup = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='growth_signups'").get()
+      ? db.prepare("INSERT INTO growth_signups(player,tenant,at,source,review,flag) VALUES(?,'sandbox',?,'direct','valid','')") : null;
     const playerInsert = db.prepare("INSERT INTO players(email,password,tenant_id,email_verified,preferred_locale,report_fixture,first_verified_at) VALUES (?,?,'sandbox',1,?,1,?)");
     const visitInsert = db.prepare("INSERT OR IGNORE INTO player_report_visits(tenant_id,player_id,minute,visited_at) VALUES ('sandbox',?,?,?)");
     const profileInsert = db.prepare('INSERT INTO player_profiles(tenant_id, player_id, display_name, preferred_locale, updated_at) VALUES (\'sandbox\', ?, ?, ?, ?)');
@@ -65,6 +67,7 @@ try {
         const oldestDay = Math.max(...Array.from({ length: 8 }, (_, r) => (index * 5 + r * 3) % 30));
         const result = playerInsert.run(email, nonLoginSecret, locale, now - oldestDay * 86_400_000 - 10 * 60_000);
         const id = Number(result.lastInsertRowid);
+        if (growthSignup) growthSignup.run(id, now - oldestDay * 86_400_000 - 10 * 60_000);
         profileInsert.run(id, name, locale, now);
         return id;
       });
