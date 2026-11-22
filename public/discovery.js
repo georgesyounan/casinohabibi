@@ -4,6 +4,9 @@ export const discoveryCopy={
   discoveryMissing:['This record is unavailable.','Cette fiche est indisponible.'],discoveryConflict:['This record changed. Reopen it to use the current version.','Cette fiche a changé. Rouvrez-la pour utiliser la version actuelle.'],
   discoveryPaused:['Your account is on a break.','Votre compte est en pause.'],discoveryClosed:['This quest is outside its participation window.','La période de participation à cette quête est fermée.'],
   discoveryExpired:['The claim deadline has passed.','La date limite est passée.'],discoveryUnowned:['Claim this cosmetic to equip it.','Réclamez cet article pour l’équiper.'],
+  questDependencies:['Publish the selected guides, collections and previews before publishing this quest.','Publiez les guides, les collections et les fiches sélectionnés avant de publier la quête.'],
+  invalidRewardCollection:['Enter the collection name in both languages.','Entrez le nom de la collection dans les deux langues.'],
+  contactChanged:['Your contact preferences changed. Reopen this page to see them.','Vos préférences ont changé. Rouvrez la page pour les consulter.'],
   campaignLocked:['A scheduled campaign can be cancelled. Create a new draft to change its message.','Une campagne planifiée peut être annulée. Créez un brouillon pour modifier le message.'],
   scheduleAmbiguous:['Choose a valid local time outside the daylight-saving transition.','Choisissez une heure locale valide hors du changement d’heure.']
 };
@@ -20,8 +23,8 @@ export function uiKit(french) {
     for(const key of ['required','min','max','maxLength','placeholder']) if(options[key]!==undefined) input[key]=options[key];
     label.append(input);form.append(label);return input;
   }
-  function pages(root,items,draw,empty,size=6) {
-    let page=0;
+  function pages(root,items,draw,empty,size=6,initialItem=0) {
+    let page=Math.max(0,Math.floor(initialItem/size));
     function render(){
       root.replaceChildren();
       for(const item of items.slice(page*size,(page+1)*size)) root.append(draw(item));
@@ -44,8 +47,9 @@ export function uiKit(french) {
   return {l,el,button,field,pages,tabs,date,local};
 }
 export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensions={}}) {
-  const u=uiKit(french),{l,el,button,pages,tabs,date,local}=u;
-  let selected='quests',generation=0,activePlayer;
+  const {l,el,button,field,pages,tabs,date,local}=uiKit(french);
+  let profileGroup=null,previewRewards=false;
+  let selected='quests',generation=0,activePlayer,focusQuest=Number(new URLSearchParams(location.search).get('quest'));
   const labels=()=>({available:l('Open to join','Inscription ouverte'),enrolled:l('In progress','En cours'),claimable:l('Ready to claim','À réclamer'),
     claimed:l('Claimed','Réclamée'),archived:l('Archived','Archivée'),scheduled:l('Upcoming','À venir'),expired:l('Expired','Expirée'),
     soldOut:l('All items claimed','Stock épuisé'),paused:l('Account break','Compte en pause')});
@@ -62,7 +66,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     Q09:l('Open both previews in the featured pair.','Ouvrez les deux fiches du duo sélectionné.')});
   function cosmetic(s){const n=el('span',local(s,'item'),'cosmetic cosmetic-'+s.color+' cosmetic-'+s.slot);n.title=slots()[s.slot];return n;}
   async function render(root,playerId) {
-    if(playerId!==activePlayer){selected=new URLSearchParams(location.search).has('listInvite')?'community':'quests';activePlayer=playerId;}
+    if(playerId!==activePlayer){profileGroup=null;previewRewards=false;selected=new URLSearchParams(location.search).has('listInvite')?'community':'quests';activePlayer=playerId;}
     const gen=++generation;
     root.replaceChildren(el('p',l('Loading…','Chargement…')));
     let data;
@@ -90,6 +94,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
       const {spec:s,award}=item,card=el('article','','discovery-card'),header=el('div','','discovery-line');
       header.append(el('h3',local(s,'title')),el('span',labels()[item.state],'discovery-state'));card.append(header,cosmetic(s));
       if(selected==='quests'){
+        card.addEventListener('click',()=>{focusQuest=item.id;},true);
         card.append(el('p',tasks()[s.template]));
         const progress=el('progress');progress.value=item.marks.length;progress.max=item.goal;progress.setAttribute('aria-label',l('Quest progress','Progression'));
         card.append(progress,el('small',`${item.marks.length} / ${item.goal}`));
@@ -102,10 +107,16 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
         }
         if(item.state==='available')card.append(button(l('Join quest','Participer'),()=>run(()=>post('join',{id:item.id}))));
         if(item.state==='enrolled'){
-          if(['Q02','Q03','Q06'].includes(s.template))card.append(link(l('Open guide','Ouvrir le guide'),'/help/'+s.target+'?lang='+ (french()?'fr':'en')));
+          if(['Q02','Q03','Q06'].includes(s.template)){
+            if(item.guide)card.append(link(l('Open guide','Ouvrir le guide'),item.guide.path+'&quest='+item.id));
+            else card.append(el('p',l('The guide is currently unavailable in this language.','Le guide est actuellement indisponible dans cette langue.')));
+          }
           if(s.template==='Q03'){
-            card.append(button(l('I read the guide','J’ai lu le guide'),()=>run(()=>post('visit',{kind:'guideAck',key:s.target})),true));
-            card.append(button(l('Open saved shelf','Ouvrir mes favoris'),()=>run(async()=>{await post('visit',{kind:'shelf'});location.href=appPath('/?category=favorites#games');}),true));
+            if(item.guide&&!item.marks.some(m=>m.step==='guide')){
+              if(item.guide.visited)card.append(button(l('I read the guide','J’ai lu le guide'),()=>run(()=>post('visit',{kind:'guideAck',key:item.guide.slug,locale:french()?'fr-CA':'en-CA'})),true));
+              else card.append(el('small',l('Open the guide before confirming that you read it.','Ouvrez le guide pour pouvoir confirmer sa lecture.')));
+            }
+            card.append(link(l('Open saved shelf','Ouvrir mes favoris'),'/?lang='+(french()?'fr':'en')+'&category=favorites#games'));
           }else if(s.template==='Q08')card.append(button(l('My recent saves','Mes derniers favoris'),async()=>{
             try{const history=await api('discovery/activity',undefined,'GET');const list=el('div');card.append(list);
               pages(list,history.entries,r=>button(r.slug+' · activity-'+r.id,async()=>{
@@ -115,9 +126,13 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
             }catch(e){message.textContent=t(e.message);}
           },true));
           else if(['Q05','Q07'].includes(s.template)&&extensions.community)card.append(button(l('Open shared lists','Ouvrir les listes partagées'),()=>select('community'),true));
-          else if(s.template==='Q06')for(const key of s.collection.split('|').map(x=>x.trim())){
-            card.append(button(key,()=>run(async()=>{await post('visit',{kind:'collection',key});location.href=appPath('/?collection='+encodeURIComponent(key)+'#games');}),true));
-          }else if(s.template==='Q09' && item.previews)for(const preview of item.previews)card.append(link(local(preview,'title'),'/coming-soon/'+preview.slug+'?lang='+(french()?'fr':'en')));
+          else if(['Q02','Q06'].includes(s.template)){
+            for(const c of item.collections)card.append(link(local(c,'title'),'/?lang='+(french()?'fr':'en')+'&collection='+encodeURIComponent(c.key)+'#games'));
+            if(item.collections.length<(s.template==='Q06'?2:1))card.append(el('small',l('A collection is currently unavailable in this language.','Une collection est actuellement indisponible dans cette langue.')));
+          }else if(s.template==='Q09' && item.previews){
+            for(const preview of item.previews)card.append(link(local(preview,'title'),'/coming-soon/'+preview.slug+'?lang='+(french()?'fr':'en')));
+            if(item.previews.length<2)card.append(el('p',l('The full pair is currently unavailable in this language.','Le duo complet est actuellement indisponible dans cette langue.')));
+          }
           else if(item.catalogue){
             if(item.catalogue.remaining)card.append(link(l('See Coming Soon previews','Voir les fiches à venir'),'/?lang='+(french()?'fr':'en')+'#coming-soon'));
           }else card.append(link(l('Browse catalogue','Voir le catalogue'),'/'+'#games'));
@@ -129,13 +144,15 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
         card.append(el('small',item.available===null?l('Unlimited stock','Stock illimité'):l('Available','Disponibles')+' · '+item.available));
       }
       if(item.state==='scheduled')card.append(el('small',l('Opens','Ouverture')+' · '+date(s.startsAt)));
-      if(s.claimUntil)card.append(el('small',l('Claim by','À réclamer avant le')+' '+date(s.claimUntil)));
+      const claimDeadline=s.claimUntil??(s.template==='offer'?s.endsAt:null);
+      if(claimDeadline)card.append(el('small',l('Claim by','À réclamer avant le')+' '+date(claimDeadline)));
       if(item.state==='paused'&&data.pause)card.append(el('small',l('Available again after','Accessible après le')+' '+date(data.pause.endsAt)));
-      if(item.state==='claimable')card.append(button(l('Claim reward','Réclamer'),()=>run(()=>post('claim',{ids:[item.id]}))));
+      if(item.state==='claimable'&&selected!=='profile')card.append(button(l('Claim reward','Réclamer'),()=>run(()=>post('claim',{ids:[item.id]}))));
       if(award?.claimId){
         card.append(el('small','claim-'+award.claimId+' · '+date(award.claimedAt)));
         card.append(button(l('Contact support','Contacter le soutien'),()=>openSupport('claim-'+award.claimId),true));
       }
+      if(selected==='profile' && !award?.claimId)card.append(el('p',s.template==='offer'?l('Claim this item in Rewards.','Réclamez cet article dans Récompenses.'):tasks()[s.template]));
       if(selected==='profile'&&award?.claimId){
         const equipped=data.equipped[s.slot]===award.claimId;
         card.append(button(equipped?l('Remove','Retirer'):l('Equip','Équiper'),()=>run(()=>post('equip',{slot:s.slot,claimId:equipped?null:award.claimId})),equipped));
@@ -148,14 +165,41 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
         const worn=data.items.filter(i=>i.award?.claimId && data.equipped[i.spec.slot]===i.award.claimId);
         for(const i of worn){display.append(cosmetic(i.spec));if(i.spec.slot==='theme')display.classList.add('profile-'+i.spec.color);}
         if(!worn.length)display.append(el('p',l('No items equipped.','Aucun article équipé.')));body.append(display);
+        const groups=new Map();
+        for(const item of data.items){
+          if(!item.award?.claimId && ['archived','expired','soldOut'].includes(item.state))continue;
+          const key=item.spec.rewardCollectionEn?.trim().toLocaleLowerCase('en-CA')||'';
+          if(!groups.has(key))groups.set(key,{label:item.spec.rewardCollectionEn?local(item.spec,'rewardCollection'):l('Discovery collection','Collection découverte'),items:[]});
+          groups.get(key).items.push(item);
+        }
+        if(!groups.size){body.append(el('p',l('No collections yet.','Aucune collection pour le moment.')));return;}
+        const sorted=[...groups].sort(([,a],[,b])=>Number(b.items.some(i=>i.award?.claimId))-Number(a.items.some(i=>i.award?.claimId)) || a.label.localeCompare(b.label));
+        if(!groups.has(profileGroup))profileGroup=sorted[0][0];
+        const toolbar=el('div','','discovery-actions'),groupBody=el('section');
+        body.append(toolbar,groupBody);
+        const picker=sorted.length>1?field(toolbar,'rewardGroup',l('Reward collection','Collection de récompenses'),{items:sorted.map(([key,g])=>[key,g.label]),value:profileGroup}):null;
+        function drawGroup(){
+          if(picker)profileGroup=picker.value;
+          const group=groups.get(profileGroup),owned=group.items.filter(i=>i.award?.claimId),remaining=group.items.filter(i=>!i.award?.claimId);
+          const milestone=l(owned.length+' of '+group.items.length+' items collected.',owned.length+' '+(owned.length>1?'articles obtenus':'article obtenu')+' sur '+group.items.length+'.');
+          groupBody.replaceChildren(el('h3',group.label),el('p',milestone));
+          if(owned.length===group.items.length)groupBody.append(el('p',l('Collection complete','Collection complète')));
+          if(remaining.length){
+            const show=button(previewRewards?l('Show owned items','Voir mes articles'):l('Preview remaining items','Aperçu des articles à obtenir'),()=>{previewRewards=!previewRewards;drawGroup();},true);
+            groupBody.append(show);
+          }
+          const grid=el('div');groupBody.append(grid);
+          pages(grid,previewRewards&&remaining.length?remaining:owned,card,l('No items collected yet.','Aucun article obtenu pour le moment.'));
+        }
+        picker?.addEventListener('change',()=>{previewRewards=false;drawGroup();});drawGroup();return;
       }
       if(selected==='rewards'){
         const ready=data.items.filter(i=>i.state==='claimable').slice(0,30);
         if(ready.length>1)body.append(button(l('Claim available items','Réclamer les articles disponibles')+' ('+ready.length+')',()=>run(()=>post('claim',{ids:ready.map(i=>i.id)}))));
       }
       const list=el('div');body.append(list);
-      const items=data.items.filter(i=>selected==='profile'?i.award?.claimId:selected==='quests'?i.spec.template!=='offer':true);
-      pages(list,items,card,l('No items here yet.','Aucun article pour le moment.'));return;
+      const items=data.items.filter(i=>selected==='quests'?i.spec.template!=='offer':true);
+      pages(list,items,card,l('No items here yet.','Aucun article pour le moment.'),6,selected==='quests'?items.findIndex(i=>i.id===focusQuest):0);return;
     }
     if(selected==='inbox'){
       const items=[...data.messages.map(m=>({...m,at:m.deliveredAt})),...data.items.filter(i=>i.award?.claimId).map(i=>({at:i.award.claimedAt,item:i}))].sort((a,b)=>b.at-a.at);
@@ -173,7 +217,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
         const label=el('label','','discovery-choice'),input=el('input');input.type='checkbox';input.checked=c.granted;
         label.append(input,document.createTextNode(c.channel==='email'?l('Email','Courriel'):l('Inbox','Messagerie du site')));section.append(label);
         input.addEventListener('change',()=>run(()=>post('preferences',{...c,granted:input.checked}),l('Preference saved.','Préférence enregistrée.')));
-        if(c.granted){const paused=c.pauseUntil>Date.now();section.append(button(paused?l('Resume','Reprendre'):l('Pause for 7 days','Suspendre pour 7 jours'),()=>run(()=>post('preferences',{...c,pauseUntil:paused?0:Date.now()+7*86400_000})),true));}
+        if(c.granted){const paused=c.pauseUntil>Date.now();section.append(button(paused?l('Resume','Reprendre'):l('Pause for 7 days','Suspendre pour 7 jours'),()=>run(()=>post('preferences',{...c,pauseOnly:true,pauseUntil:paused?0:Date.now()+7*86400_000})),true));}
       }
       body.append(section);
     }

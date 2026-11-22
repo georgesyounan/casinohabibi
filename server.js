@@ -13,6 +13,8 @@ import { createPublicPages, guideBody, pageHead, sitemapXml } from './lib/public
 import { createPublicationFollowup } from './lib/publication-followup.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
+import { createDiscoveryNavigation } from './lib/discovery-navigation.js';
+import { collectionKey } from './public/catalog.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
@@ -276,7 +278,7 @@ const savedTitles = createSavedTitles(db, { fail, transaction, onSave(tenant,pla
   const slug = db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenant,titleId)?.slug;
   const title = slug && comingSoon.published(tenant,slug,catalogueAudience(tenant));
   if (title) {
-    rewards.observe(tenant,player,'save',titleId,'activity-'+activity,now,{collections:[title.collectionEn,title.collectionFr]});
+    rewards.observe(tenant,player,'save',titleId,'activity-'+activity,now,{collections:[title.collectionEn,title.collectionFr],collectionKey:collectionKey(title)});
     growth.save(tenant,player,titleId,activity,now);
   }
 } });
@@ -290,16 +292,11 @@ const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath });
-const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record});
+const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
+const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 transaction(()=>{for(const {id} of db.prepare('SELECT id FROM tenants').all()) rewards.seed(id);});
-function discoveryDestination(tenant,path) {
-  const [,section,slug]=path.split('/');
-  const config=publishedTenantConfig(tenant).config;
-  return section==='coming-soon' ? comingSoonEnabled(tenant) && comingSoon.published(tenant,slug,catalogueAudience(tenant))
-    : section==='help' && config.enabledLocales.some(locale=>websiteContent.resolveGuide(tenant,config,slug,locale));
-}
 const communications = createCommunications(db,{fail,transaction,accountBreaks,audit:staffAudit.record,mailEnabled,
-  zoneFor: tenant=>publishedTenantConfig(tenant).config.reportingTimeZone || 'UTC', validDestination:discoveryDestination,
+  zoneFor: tenant=>publishedTenantConfig(tenant).config.reportingTimeZone || 'UTC', validDestination:campaignPath,
   send: async d=>{
     const host=db.prepare('SELECT host FROM tenant_domains WHERE tenant_id=? AND verified=1 ORDER BY (host=?) DESC,host LIMIT 1').get(d.tenant,publicSite?.hostname || '');
     if (!host || !/^[a-z0-9.-]+$/i.test(host.host)) throw new Error('Missing verified destination');
@@ -307,8 +304,27 @@ const communications = createCommunications(db,{fail,transaction,accountBreaks,a
     await deliverTransactionalEmail(d.email,d.subject,d.text+link,'casino-campaign-'+d.tenant+'-'+d.id);
   }
 });
-const getGrowthPreview=(tenant,slug)=>discoveryDestination(tenant,'/coming-soon/'+slug);
-const growth=transaction(()=>createGrowth(db,{fail,audit:staffAudit.record,accountBreaks,getPreview:getGrowthPreview}));
+function getGrowthPreview(tenant,slug,locale){
+  const config=publishedTenantConfig(tenant).config;
+  if(config.enabledSections?.comingSoon===false || (locale&&!config.enabledLocales.includes(locale)))return null;
+  return comingSoon.published(tenant,slug,catalogueAudience(tenant,locale));
+}
+function previewLanguage(tenant,slug,requested){
+  const config=publishedTenantConfig(tenant).config;
+  const locales=requested?[requested]:[config.primaryLocale,...config.enabledLocales.filter(l=>l!==config.primaryLocale)];
+  return locales.find(l=>getGrowthPreview(tenant,slug,l))||null;
+}
+function campaignPath(tenant,path,locale){
+  const [,section,slug]=path.split('/');
+  if(section==='help'){
+    const page=discoveryNavigation.guide(tenant,slug,locale);
+    const href=page?.translations.find(x=>x.locale===page.locale)?.href;
+    return href?href.slice(appBasePath.length):null;
+  }
+  const visible=section==='coming-soon'&&previewLanguage(tenant,slug,locale);
+  return visible?'/coming-soon/'+slug+'?lang='+visible.slice(0,2):null;
+}
+const growth=transaction(()=>createGrowth(db,{fail,audit:staffAudit.record,accountBreaks,getPreview:getGrowthPreview,previewLanguage}));
 const community=transaction(()=>createCommunity(db,{fail,audit:staffAudit.record,rewards,getPreview:getGrowthPreview}));
 const loopbackHost=h=>['127.0.0.1','localhost','[::1]','::1'].includes(h);
 const isolatedCredits=process.env.ENABLE_TEST_CREDITS==='1' && appEnvironment!=='production' && loopbackHost(host)
@@ -747,7 +763,7 @@ async function api(req, res, path, tenantId, requestId) {
     if(!Number.isSafeInteger(asOf)||asOf<=0||asOf>actual)fail(400,'invalid');
     return dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,asOf);
   };
-  if(route==='GET /api/growth/banner')return transaction(()=>({banner:growth.banner(tenantId,player)}));
+  if(route==='GET /api/growth/banner')return transaction(()=>({banner:growth.banner(tenantId,player,Date.now(),catalogueLocale)}));
   if(route==='GET /api/growth/partner'){
     if(!player)fail(401,'signin');
     return transaction(()=>{
@@ -755,7 +771,7 @@ async function api(req, res, path, tenantId, requestId) {
       const ctx=reportContext();
       ctx.fixture=db.prepare('SELECT report_fixture FROM players WHERE id=? AND tenant_id=?').get(player,tenantId).report_fixture;
       ctx.scope=ctx.fixture?'test':'site';
-      return {name:partner.name,code:partner.code,link:'/r/'+partner.code,creatives:growth.approved(tenantId,partner.id),
+      return {name:partner.name,code:partner.code,link:'/r/'+partner.code,creatives:growth.approved(tenantId,partner.id,Date.now(),catalogueLocale),
         report:growth.report(ctx,{},partner)};
     },{readOnly:true});
   }
@@ -798,7 +814,10 @@ async function api(req, res, path, tenantId, requestId) {
     const enabled=comingSoonEnabled(tenantId);
     const threeSaveQuest=Boolean(db.prepare(`SELECT 1 FROM discovery_programs p JOIN discovery_versions v ON v.program=p.id AND v.version=p.live
       WHERE p.tenant_id=? AND p.archived=0 AND json_extract(v.spec,'$.template')='Q01' LIMIT 1`).get(tenantId));
-    return {items,enabled,threeSaveQuest,previewCount:enabled?comingSoon.keys(tenantId,catalogueAudience(tenantId)).length:0};
+    const config=publishedTenantConfig(tenantId).config;
+    const editorial=websiteContent.adminList(tenantId,config);
+    const previews=enabled?comingSoon.previewOptions(tenantId,catalogueAudience(tenantId)):[];
+    return {items,enabled,threeSaveQuest,previewCount:previews.length,previews,collections:editorial.collections,guides:editorial.targets.filter(x=>x.key.startsWith('help/'))};
   }
   if (route==='GET /api/admin/discovery/campaigns') { staffContext(req,tenantId,websiteRoles); return {items:communications.staff(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone || 'UTC'}; }
   if (route==='POST /api/admin/discovery/programs' || route==='POST /api/admin/discovery/campaigns') {
@@ -826,6 +845,12 @@ async function api(req, res, path, tenantId, requestId) {
     if(!player) fail(401,'signin');
     return transaction(()=>{
       const state=rewards.state(tenantId,player);
+      const config=publishedTenantConfig(tenantId).config;
+      const locale=config.enabledLocales.includes(catalogueLocale)?catalogueLocale:config.primaryLocale;
+      for(const item of state.items){
+        discoveryNavigation.attach(tenantId,item,locale);
+        if(item.guide&&item.spec.template==='Q03')item.guide.visited=rewards.sawGuide(tenantId,player,item.id,item.guide.slug);
+      }
       const catalogueQuests=state.items.filter(i=>['Q01','Q04'].includes(i.spec.template) && !i.award);
       if(catalogueQuests.length){
         const keys=comingSoonEnabled(tenantId)?comingSoon.keys(tenantId,catalogueAudience(tenantId,catalogueLocale)):[];
@@ -838,9 +863,9 @@ async function api(req, res, path, tenantId, requestId) {
       }
       for(const item of state.items.filter(i=>i.spec.template==='Q09')) {
         item.previews=item.spec.pair.map(id=>db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenantId,id))
-          .map(r=>r&&discoveryDestination(tenantId,'/coming-soon/'+r.slug)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
+          .map(r=>r&&getGrowthPreview(tenantId,r.slug,locale)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
       }
-      return {...state,partner:Boolean(growth.owner(tenantId,player)),choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player)};
+      return {...state,partner:Boolean(growth.owner(tenantId,player)),choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player,50,catalogueLocale)};
     },{readOnly:true});
   }
   if (req.method==='POST' && /^\/api\/discovery\/[a-z]+$/.test(path)) {
@@ -855,10 +880,18 @@ async function api(req, res, path, tenantId, requestId) {
       if(path.endsWith('/read')) return communications.read(tenantId,player,input.id);
       if(path.endsWith('/visit')) {
         const {kind,key}=input;
-        if(kind==='guideAck' && typeof key==='string' && discoveryDestination(tenantId,'/help/'+key)) rewards.observe(tenantId,player,kind,key,'guide-'+key);
+        if(kind==='guideAck' && typeof key==='string'){
+          const guide=discoveryNavigation.guide(tenantId,key,input.locale);
+          if(!guide)fail(404,'discoveryMissing');
+          rewards.observe(tenantId,player,kind,guide.slug,'guide-'+guide.slug);
+        }
         else if(kind==='shelf') rewards.observe(tenantId,player,'shelf','shelf','shelf');
         else if(['activity','activityAck'].includes(kind) && Number.isSafeInteger(key) && rewards.owner(tenantId,'activity-'+key)===player) rewards.observe(tenantId,player,kind,key,'activity-'+key);
-        else if(kind==='collection' && typeof key==='string' && key && comingSoonEnabled(tenantId) && comingSoon.hasCollection(tenantId,catalogueAudience(tenantId),key)) rewards.observe(tenantId,player,kind,key,'collection-'+key);
+        else if(kind==='collection' && typeof key==='string'){
+          const c=discoveryNavigation.collection(tenantId,key,input.locale);
+          if(!c)fail(404,'discoveryMissing');
+          rewards.observe(tenantId,player,kind,c.key,'collection-'+c.key,Date.now(),{labels:[c.titleEn,c.titleFr]});
+        }
         else fail(404,'discoveryMissing');
         return {ok:true};
       }
@@ -1494,15 +1527,15 @@ async function api(req, res, path, tenantId, requestId) {
     db.prepare('DELETE FROM sessions WHERE player = ? AND tenant_id = ? AND token <> ?').run(player, tenantId, currentToken);
     return { ...account(player, tenantId), revokedSessions: activeSessions };
   }
+  if (route === 'GET /api/account/consents') {
+    if(!player)fail(401,'signin');
+    return {marketingEmailConsent:communications.emailEnabled(tenantId,player)};
+  }
   if (route === 'POST /api/account/consents') {
     if (!player) fail(401, 'signin');
     const { marketingEmail } = await body(req);
     if (typeof marketingEmail !== 'boolean') fail(400, 'invalid');
-    const latest = db.prepare("SELECT granted FROM player_consent_events WHERE player_id = ? AND tenant_id = ? AND consent_type = 'marketing_email' ORDER BY id DESC LIMIT 1").get(player, tenantId);
-    if (Boolean(latest?.granted) !== marketingEmail) {
-      const locale = db.prepare('SELECT preferred_locale AS locale FROM player_profiles WHERE player_id = ? AND tenant_id = ?').get(player, tenantId).locale;
-      db.prepare("INSERT INTO player_consent_events(tenant_id, player_id, consent_type, granted, locale, notice_version, source, captured_at) VALUES (?, ?, 'marketing_email', ?, ?, 'marketing_email_v1', 'account_settings', ?)").run(tenantId, player, Number(marketingEmail), locale, Date.now());
-    }
+    transaction(()=>communications.setEmailConsent(tenantId,player,marketingEmail));
     return account(player, tenantId);
   }
   if (route === 'POST /api/email-verification/request') {
@@ -1535,7 +1568,7 @@ async function api(req, res, path, tenantId, requestId) {
     const dailyWagerDateUtc = new Date().toISOString().slice(0, 10);
     const dailyWageredCents = dailyWagered(player, tenantId, dailyWagerDateUtc);
     const transactions = db.prepare('SELECT game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
-    const tickets = db.prepare('SELECT id, category, is_complaint AS isComplaint, message, status, created_at AS createdAt, updated_at AS updatedAt FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
+    const tickets = db.prepare('SELECT t.id,l.reference,t.category,t.is_complaint AS isComplaint,t.message,t.status,t.created_at AS createdAt,t.updated_at AS updatedAt FROM support_tickets t LEFT JOIN support_case_links l ON l.ticket=t.id WHERE t.player_id=? AND t.tenant_id=? ORDER BY id').all(player, tenantId);
     const consents = db.prepare('SELECT consent_type AS type, granted, locale, notice_version AS noticeVersion, source, captured_at AS capturedAt FROM player_consent_events WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId).map((entry) => ({ ...entry, granted: Boolean(entry.granted) }));
     const protectionHistory = db.prepare('SELECT action, duration_days AS durationDays, until_at AS untilAt, created_at AS createdAt FROM player_protection_events WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
     const messages = tickets.length ? db.prepare(`SELECT m.ticket_id AS ticketId, m.author_type AS authorType, m.message, m.created_at AS createdAt FROM support_ticket_messages m JOIN support_tickets t ON t.id = m.ticket_id AND t.tenant_id = m.tenant_id WHERE m.tenant_id = ? AND t.player_id = ? AND m.ticket_id IN (${tickets.map(() => '?').join(',')}) ORDER BY m.id`).all(tenantId, player, ...tickets.map(({ id }) => id)) : [];
@@ -1553,7 +1586,7 @@ async function api(req, res, path, tenantId, requestId) {
       previewSaveActivity: savedTitles.history(tenantId, player, { limit: -1 }).entries,
       sharedLists: community.state(tenantId,player).lists,
       referral: db.prepare("SELECT source,review,at FROM growth_signups WHERE tenant=? AND player=?").get(tenantId,player),
-      discovery: rewards.state(tenantId,player),
+      discovery: rewards.personal(tenantId,player),
       contactPreferences: communications.choices(tenantId,player),
       inbox: communications.inbox(tenantId,player,-1),
       simulatedBalanceCents: balance(player, tenantId),
@@ -1561,7 +1594,7 @@ async function api(req, res, path, tenantId, requestId) {
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
       consentHistory: consents,
       activity: transactions,
-      supportRequests: tickets.map(({ id, isComplaint, ...ticket }) => ({ ...ticket, isComplaint: Boolean(isComplaint), messages: messagesByTicket.get(id) || [] }))
+      supportRequests: tickets.map(({ id, isComplaint, ...ticket }) => ({ id, ...ticket, isComplaint: Boolean(isComplaint), messages: messagesByTicket.get(id) || [] }))
     };
   }
   if (route === 'GET /api/account/activity') {
@@ -1632,7 +1665,7 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'GET /api/support') {
     if (!player) fail(401, 'signin');
-    const tickets = db.prepare('SELECT id, category, is_complaint AS isComplaint, message, status, created_at AS createdAt, updated_at AS updatedAt FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50').all(player, tenantId);
+    const tickets = db.prepare('SELECT t.id,l.reference,t.category,t.is_complaint AS isComplaint,t.message,t.status,t.created_at AS createdAt,t.updated_at AS updatedAt FROM support_tickets t LEFT JOIN support_case_links l ON l.ticket=t.id WHERE t.player_id=? AND t.tenant_id=? ORDER BY updated_at DESC, id DESC LIMIT 50').all(player, tenantId);
     db.prepare('UPDATE support_tickets SET player_seen_at = ? WHERE player_id = ? AND tenant_id = ? AND id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50)').run(Date.now(), player, tenantId, player, tenantId);
     return attachSupportMessages(tickets, tenantId);
   }
@@ -2061,8 +2094,10 @@ createServer(async (req, res) => {
     tenantId = resolveTenant(req);
     const tagged=req.method==='GET'&&path.match(/^\/(r|go)\/([a-z0-9][a-z0-9-]{1,47})$/);
     if(tagged){
-      const click=transaction(()=>growth.click(tenantId,tagged[1],tagged[2],referralCookie(req),signedPlayer(req,tenantId)));
-      const lang=requestUrl.searchParams.get('lang');
+      const requested=requestUrl.searchParams.get('lang');
+      const locale=requested==='fr'?'fr-CA':requested==='en'?'en-CA':null;
+      const click=transaction(()=>growth.click(tenantId,tagged[1],tagged[2],referralCookie(req),signedPlayer(req,tenantId),Date.now(),locale));
+      const lang=click.locale?.slice(0,2)||requested;
       res.setHeader('Set-Cookie',`habibi_ref=${click.token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secureCookie}`);
       res.writeHead(302,{Location:appBasePath+click.path+(['fr','en'].includes(lang)?'?lang='+lang:''),'Cache-Control':'private, no-store','Referrer-Policy':'same-origin'});
       return res.end();
@@ -2098,11 +2133,32 @@ createServer(async (req, res) => {
         path, params: requestUrl.searchParams, helpSlug: help?.[1], previewSlug: preview?.[1]
       }), { readOnly: true });
       if (view.destination) {
-        res.writeHead(view.status, { Location: view.destination });
+        const quest=requestUrl.searchParams.get('quest');
+        const suffix=help&&/^[1-9]\d{0,14}$/.test(quest||'')?'&quest='+quest:'';
+        res.writeHead(view.status, { Location: view.destination+suffix });
         return res.end();
       }
       if (view.status) res.statusCode = view.status;
-      if (view.page) content = guideBody(content.toString(), view.page);
+      const wantsShelf=path==='/'&&requestUrl.searchParams.get('category')==='favorites';
+      const requestedCollection=path==='/'&&requestUrl.searchParams.get('collection');
+      if(req.method==='GET'&&!view.status&&(view.page||wantsShelf||requestedCollection)
+        && ![req.headers.purpose,req.headers['sec-purpose']].some(value=>value?.includes('prefetch'))){
+        const reader=signedPlayer(req,tenantId);
+        if(reader)transaction(()=>{
+          if(view.page)rewards.observe(tenantId,reader,'guide',view.page.slug,'guide-'+view.page.slug);
+          if(wantsShelf)rewards.observe(tenantId,reader,'shelf','shelf','shelf');
+          if(requestedCollection){
+            const c=discoveryNavigation.collection(tenantId,requestedCollection,view.meta?.locale);
+            if(c)rewards.observe(tenantId,reader,'collection',c.key,'collection-'+c.key,Date.now(),{labels:[c.titleEn,c.titleFr]});
+          }
+          dashboard.recordVisit(tenantId,reader);
+        });
+      }
+      if (view.page){
+        const quest=requestUrl.searchParams.get('quest');
+        const target=/^[1-9]\d{0,14}$/.test(quest||'')?appBasePath+'/?lang='+view.page.locale.slice(0,2)+'&quest='+quest+'#games':null;
+        content=guideBody(content.toString(),view.page,target);
+      }
       if (view.meta) content = pageHead(content.toString(), view.meta, new URL(playerLinkBase(req, tenantId)).origin);
       if (view.noindex || view.status === 404 || ['reset','verify','email-change','preview','editContent','editCard'].some((key) => requestUrl.searchParams.has(key))) {
         res.setHeader('X-Robots-Tag', 'noindex');

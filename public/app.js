@@ -306,7 +306,15 @@ const auditActionLabels = {
   support_ticket_assigned: ['Support ticket assigned', 'Demande de soutien attribuée'], support_ticket_unassigned: ['Support ticket unassigned', 'Demande de soutien désattribuée'], support_ticket_note_added: ['Private support note added', 'Note privée ajoutée à la demande de soutien'],
   provider_key_added: ['Provider credentials added', 'Identifiants du fournisseur ajoutés'], provider_key_rotated: ['Provider credentials changed', 'Identifiants du fournisseur modifiés'], provider_catalog_synced: ['Provider catalog imported', 'Catalogue du fournisseur importé'], catalog_listing_enabled: ['Catalog listing enabled', 'Fiche du catalogue activée'], catalog_listing_disabled: ['Catalog listing disabled', 'Fiche du catalogue désactivée'],
 };
+const workflowAuditLabels={
+  discovery_save:['Quest or offer draft saved','Brouillon de quête ou d’offre enregistré'],discovery_publish:['Quest or offer published','Quête ou offre publiée'],discovery_archive:['Quest or offer archived','Quête ou offre archivée'],
+  campaign_save:['Campaign draft saved','Brouillon de campagne enregistré'],campaign_schedule:['Campaign scheduled','Campagne planifiée'],campaign_cancel:['Campaign cancelled','Campagne annulée'],campaign_dispatch:['Delivery run requested','Traitement des envois demandé'],
+  partner_saved:['Partner saved','Partenaire enregistré'],placement_save:['Placement draft saved','Brouillon de publicité enregistré'],placement_publish:['Placement published','Publicité publiée'],placement_pause:['Placement paused','Publicité suspendue'],
+  poll_open:['Poll opened','Sondage ouvert'],poll_publishResults:['Poll results published','Résultats du sondage publiés'],referral_reviewed:['Referral reviewed','Parrainage vérifié'],campaign_spend:['Campaign spend recorded','Dépenses de campagne enregistrées'],
+  experiment_started:['Experiment started','Expérience démarrée'],experiment_closed:['Enrollment closed','Inscriptions terminées'],demo_credit_grant:['Test credits granted','Crédits de test octroyés'],demo_credit_debit:['Test credits debited','Crédits de test débités'],demo_credit_reverse:['Test credit entry reversed','Écriture de test contrepassée']
+};
 function auditActionLabel(action) {
+  if(Object.hasOwn(workflowAuditLabels,action))return workflowAuditLabels[action][language];
   if (auditActionLabels[action]) return auditActionLabels[action][language];
   const supportUpdate = action.match(/^support_ticket_(answered|closed)_priority_(low|normal|high|urgent)$/);
   if (supportUpdate) return language ? `Demande de soutien ${supportUpdate[1] === 'answered' ? 'répondue' : 'fermée'} · priorité ${supportUpdate[2]}` : `Support ticket ${supportUpdate[1]} · ${supportUpdate[2]} priority`;
@@ -1179,6 +1187,7 @@ function renderDialog() {
       const article = element('article', '', 'support-ticket');
       article.append(element('strong', `${t(supportCategoryCopy[ticket.isComplaint ? 'complaint' : ticket.category])} · ${t(supportStatusCopy[ticket.status])}`));
       article.append(element('small', `${t('supportReference')} #${ticket.id}`));
+      if(ticket.reference)article.append(element('small',ticket.reference));
       article.append(element('small', `${t('supportCreated')}: ${new Date(ticket.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')} · ${t('supportLastUpdated')}: ${new Date(ticket.updatedAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}`));
       article.append(element('h3', t('supportThread')));
       for (const message of supportThreadEntries(ticket)) {
@@ -1468,6 +1477,15 @@ function openPanel(next) {
   dialogError = undefined;
   renderDialog();
   if (!$('#dialog').open) $('#dialog').showModal();
+  if(next==='account'&&player){
+    const owner=player.id,checkbox=$('#panel input[name="marketingEmail"]'),previous=checkbox?.checked;
+    if(checkbox)void api('account/consents',undefined,'GET').then(current=>{
+      if(player?.id===owner&&checkbox.isConnected&&checkbox.checked===previous){
+        player.marketingEmailConsent=current.marketingEmailConsent;
+        checkbox.checked=current.marketingEmailConsent;
+      }
+    }).catch(()=>{});
+  }
   clearInterval(breakTimer);
   ++breakRefresh;
   if (player && ['account', 'play'].includes(next)) {
@@ -1836,12 +1854,14 @@ $('#game-search').value = searchQuery;
 for (const button of $('#filters').children) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
 $('#catalog-collection').addEventListener('change', (event) => {
   selectedCollection = event.currentTarget.value;
+  if(player&&selectedCollection)void api('discovery/visit',{kind:'collection',key:selectedCollection,locale:language?'fr-CA':'en-CA'}).catch(()=>{});
   rememberCatalogue();
   renderCatalog();
 });
 $('#filters').addEventListener('click', (event) => {
   if (!event.target.dataset.filter) return;
   filter = event.target.dataset.filter;
+  if(player&&filter==='favorites')void api('discovery/visit',{kind:'shelf'}).catch(()=>{});
   rememberCatalogue();
   for (const button of $('#filters').children) button.setAttribute('aria-pressed', button === event.target);
   renderCatalog();
@@ -2479,7 +2499,7 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
   $('#staff-audit-range-error').hidden = !invalidRange;
   $('#staff-audit-range-error').textContent = invalidRange ? t('staffAuditRangeInvalid') : '';
   if (invalidRange) return [];
-  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : /^(tenant_config_|website_content_)/.test(action) ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
+  const categoryFor = (action) => /^(discovery_|campaign_(?!spend))/.test(action)?'discovery':/^(partner_|placement_|poll_|referral_|experiment_|campaign_spend)/.test(action)?'growth':action.startsWith('demo_credit_')?'credits':action.startsWith('staff_mfa_') ? 'mfa' : /^(tenant_config_|website_content_)/.test(action) ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
   return source.filter((entry) => {
     const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.details?.recordId || ''} ${entry.details?.revision || ''} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
@@ -3227,7 +3247,7 @@ if (!isAdminPage) {
   if (resetToken) openPanel('passwordReset');
   else if (verifyToken) openPanel('emailVerification');
   else if (emailChangeToken) openPanel('emailChange');
-  else if(new URLSearchParams(location.search).has('listInvite')){
+  else if(currentRoute==='/' && (new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
     if(!player)afterSignIn='discovery';
     openPanel(player?'discovery':'signin');
   }

@@ -81,7 +81,7 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
     const request = ++bannerVersion;
     clearTimeout(bannerTimer);
     try {
-      const { banner: b } = await get('growth/banner');
+      const { banner: b } = await get('growth/banner?locale='+(french()?'fr-CA':'en-CA'));
       if (request !== bannerVersion) return;
       root.replaceChildren();
       root.hidden = !b;
@@ -130,7 +130,7 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
     let days = '30';
     async function refresh() {
       try {
-        const p = await get('growth/partner?days=' + days);
+        const p = await get('growth/partner?days=' + days+'&locale='+(french()?'fr-CA':'en-CA'));
         root.replaceChildren(
           el('h3', p.name),
           el('p', l('Signup code', 'Code d’inscription') + ' · ' + p.code)
@@ -164,7 +164,7 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
           (c) => {
             const n = el('article', '', 'discovery-card');
             n.append(el('strong', local(c, 'title')), el('p', local(c, 'text')), el('small', date(c.expires)));
-            share(n, location.origin + appPath('/go/' + c.slug));
+            share(n, location.origin + appPath('/go/' + c.slug+'?lang='+(french()?'fr':'en')));
             return n;
           },
           l('No active creative.', 'Aucune publicité active.')

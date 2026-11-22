@@ -50,12 +50,29 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer}) {
           input('slot',l('Cosmetic type','Type d’article'),{items:labels([['badge','Badge','Badge'],['theme','Theme','Thème'],['frame','Frame','Cadre']]),value:s.slot||'badge'});
           input('itemEn',l('English reward name','Récompense en anglais'),{required:true,maxLength:100});input('itemFr',l('French reward name','Récompense en français'),{required:true,maxLength:100});
           input('color',l('Colour','Couleur'),{items:labels([['gold','Gold','Or'],['forest','Forest','Forêt'],['ocean','Ocean','Océan'],['plum','Plum','Prune']]),value:s.color||'gold'});
-          input('collection',l('Collection names (separate two with |)','Collections (séparez deux noms par |)'),{maxLength:120});
-          input('target',l('Guide address','Adresse du guide'),{maxLength:64});
-          input('pair',l('Two catalogue IDs, separated by a comma','Deux numéros de fiches, séparés par une virgule'),{value:s.pair?.join(', ')||''});
+          const rewardGroup=el('details','','admin-disclosure');
+          rewardGroup.append(el('summary',l('Reward collection (optional)','Collection de récompenses (facultative)')));
+          for(const [key,en,fr] of [['rewardCollectionEn','English collection name','Nom anglais de la collection'],['rewardCollectionFr','French collection name','Nom français de la collection']]){
+            const control=input(key,l(en,fr),{maxLength:80});rewardGroup.append(control.closest('label'));
+          }
+          form.append(rewardGroup);
+          function suggest(key,label,suggestions,value,maxLength){
+            const control=input(key,label,{value,maxLength});
+            const choices=el('datalist');choices.id='quest-options-'+key;
+            for(const [id,title] of suggestions){const o=el('option');o.value=id;o.label=title;choices.append(o);}
+            form.append(choices);control.setAttribute('list',choices.id);
+          }
+          const collectionNames=(s.collection||'').split('|').map(x=>x.trim());
+          const collections=result.collections.map(c=>[c.key,local(c,'title')||c.key]);
+          suggest('collection',l('Collection','Collection'),collections,collectionNames[0]||'',120);
+          suggest('secondCollection',l('Second collection','Deuxième collection'),collections,collectionNames[1]||'',120);
+          suggest('target',l('Published guide','Guide publié'),result.guides.map(g=>[g.key.slice(5),local(g,'title')||g.key.slice(5)]),s.target||'',64);
+          const previews=result.previews.map(c=>[String(c.id),local(c,'title')]);
+          suggest('firstPreview',l('First preview','Première fiche'),previews,String(s.pair?.[0]||''),15);
+          suggest('secondPreview',l('Second preview','Deuxième fiche'),previews,String(s.pair?.[1]||''),15);
           function requirements(){
             const v=controls.template.value;
-            for(const [key,show] of [['collection',['Q02','Q06'].includes(v)],['target',['Q02','Q03','Q06'].includes(v)],['pair',v==='Q09']]){
+            for(const [key,show] of [['collection',['Q02','Q06'].includes(v)],['secondCollection',v==='Q06'],['target',['Q02','Q03','Q06'].includes(v)],['firstPreview',v==='Q09'],['secondPreview',v==='Q09']]){
               controls[key].closest('label').hidden=!show;controls[key].required=show;
             }
           }
@@ -76,7 +93,12 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer}) {
           const v=Object.fromEntries(new FormData(form));
           if(!isProgram)return {...v,quietStart:Number(v.quietStart),quietEnd:Number(v.quietEnd)};
           for(const k of ['startsAt','endsAt','claimUntil'])v[k]=v[k]?new Date(v[k]).getTime():k==='startsAt'?0:null;
-          v.stock=v.stock?Number(v.stock):null;v.pair=v.template==='Q09'?v.pair.split(',').map(x=>Number(x.trim())):[];
+          v.stock=v.stock?Number(v.stock):null;
+          if(v.template==='Q06')v.collection=[v.collection,v.secondCollection].join('|');
+          if(!['Q02','Q06'].includes(v.template))v.collection='';
+          if(!['Q02','Q03','Q06'].includes(v.template))v.target='';
+          v.pair=v.template==='Q09'?[Number(v.firstPreview),Number(v.secondPreview)]:[];
+          for(const key of ['firstPreview','secondPreview','secondCollection'])delete v[key];
           return v;
         }
         const preview=el('details','', 'admin-disclosure'),summary=el('summary',l('Preview','Aperçu')),sample=el('div');
