@@ -10,6 +10,8 @@ The **Discovery & rewards** workspace has separate pages for quest and offer pub
 
 For a timed partner presentation, see [DEMO_PRESENTATION_SCRIPT.md](DEMO_PRESENTATION_SCRIPT.md) or its [PDF version](DEMO_PRESENTATION_SCRIPT.pdf). Use [DEMO_ACCEPTANCE_CHECKLIST.md](DEMO_ACCEPTANCE_CHECKLIST.md) or its [PDF version](DEMO_ACCEPTANCE_CHECKLIST.pdf) to record the final Windows review. The longer [DEMO_WALKTHROUGH.md](DEMO_WALKTHROUGH.md) and its [PDF version](DEMO_WALKTHROUGH.pdf) provide additional details. For an AI-ready project overview to send with the source ZIP, see [PARTNER_HANDOFF.md](PARTNER_HANDOFF.md) or its [PDF version](PARTNER_HANDOFF.pdf).
 
+The [module inventory](MODULES.md) maps all 25 catalogue modules, the back-office sections, the optional test ledger and the phase acceptance checks.
+
 ## Local development
 
 Use Node.js 24 or newer. The project uses Node's built-in SQLite module and has no external dependencies.

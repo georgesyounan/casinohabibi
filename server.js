@@ -15,6 +15,9 @@ import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
+import { createGrowth } from './lib/growth.js';
+import { createCommunity } from './lib/community.js';
+import { createDemoCredits } from './lib/demo-credits.js';
 import { engagementReport } from './lib/engagement-reports.js';
 import { createAccountBreaks } from './lib/account-breaks.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
@@ -272,7 +275,10 @@ const accountBreaks = createAccountBreaks(db, { fail, transaction });
 const savedTitles = createSavedTitles(db, { fail, transaction, onSave(tenant,player,titleId,activity,now) {
   const slug = db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenant,titleId)?.slug;
   const title = slug && comingSoon.published(tenant,slug,catalogueAudience(tenant));
-  if (title) rewards.observe(tenant,player,'save',titleId,'activity-'+activity,now,{collections:[title.collectionEn,title.collectionFr]});
+  if (title) {
+    rewards.observe(tenant,player,'save',titleId,'activity-'+activity,now,{collections:[title.collectionEn,title.collectionFr]});
+    growth.save(tenant,player,titleId,activity,now);
+  }
 } });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
@@ -301,6 +307,19 @@ const communications = createCommunications(db,{fail,transaction,accountBreaks,a
     await deliverTransactionalEmail(d.email,d.subject,d.text+link,'casino-campaign-'+d.tenant+'-'+d.id);
   }
 });
+const getGrowthPreview=(tenant,slug)=>discoveryDestination(tenant,'/coming-soon/'+slug);
+const growth=transaction(()=>createGrowth(db,{fail,audit:staffAudit.record,accountBreaks,getPreview:getGrowthPreview}));
+const community=transaction(()=>createCommunity(db,{fail,audit:staffAudit.record,rewards,getPreview:getGrowthPreview}));
+const loopbackHost=h=>['127.0.0.1','localhost','[::1]','::1'].includes(h);
+const isolatedCredits=process.env.ENABLE_TEST_CREDITS==='1' && appEnvironment!=='production' && loopbackHost(host)
+  && (!publicSite || loopbackHost(publicSite.hostname)) && process.env.DEMO_CREDITS_TEST_DATA_DIR===dataDir && Boolean(process.env.DATA_DIR);
+const testCredits=createDemoCredits(db,{fail,audit:staffAudit.record,enabled:isolatedCredits});
+const referralCookie=req=>req.headers.cookie?.match(/(?:^|;\s*)habibi_ref=([a-f0-9]{64})(?:;|$)/)?.[1];
+function signedPlayer(req,tenantId){
+  const cookie=req.headers.cookie?.match(/(?:^|;\s*)northplay=([a-f0-9]{64})(?:;|$)/)?.[1];
+  return cookie && db.prepare(`SELECT s.player FROM sessions s JOIN players p ON p.id=s.player AND p.tenant_id=s.tenant_id AND p.access_status='active'
+    WHERE s.token=? AND s.tenant_id=? AND s.expires>?`).get(hash(cookie),tenantId,Date.now())?.player;
+}
 let lastCampaignWake=0;
 const dispatchCampaigns=()=>communications.dispatch().catch(()=>console.warn(JSON.stringify({event:'campaign_dispatch_failed'})));
 if(process.env.DISABLE_CAMPAIGN_WORKER!=='1') setInterval(dispatchCampaigns,30_000).unref();
@@ -396,6 +415,7 @@ function staffSession(staff, tenantId) {
   return {
     id: staff.id, email: staff.email, role: staff.role, mfaEnabled: Boolean(staff.mfa_enabled),
     brandId: tenantId, brandName: db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId).name,
+    testCredits:staff.role==="operator_admin"&&testCredits.available(tenantId),
     permissions: staffPermissions(staff)
   };
 }
@@ -680,9 +700,7 @@ function account(id, tenantId) {
 
 async function api(req, res, path, tenantId, requestId) {
   const cookie = req.headers.cookie?.match(/(?:^|; )northplay=([a-f0-9]{64})(?:;|$)/)?.[1];
-  const activeSession = () => cookie && db.prepare(`SELECT s.player FROM sessions s
-    JOIN players p ON p.id = s.player AND p.tenant_id = s.tenant_id AND p.access_status = 'active'
-    WHERE s.token = ? AND s.tenant_id = ? AND s.expires > ?`).get(hash(cookie), tenantId, Date.now())?.player;
+  const activeSession = () => signedPlayer(req,tenantId);
   const player = activeSession();
   if (player && req.method !== 'GET' && /^\/api\/(?:discovery\/|growth\/|community\/|account\/|me\/saved\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
     req.assertPlayerSession = () => { if (activeSession() !== player) fail(401, 'signin'); };
@@ -724,6 +742,53 @@ async function api(req, res, path, tenantId, requestId) {
   if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   const params = new URL(req.url,'http://localhost').searchParams;
+  const reportContext=()=>{
+    const actual=Date.now(),asOf=params.has('asOf')?Number(params.get('asOf')):actual;
+    if(!Number.isSafeInteger(asOf)||asOf<=0||asOf>actual)fail(400,'invalid');
+    return dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,asOf);
+  };
+  if(route==='GET /api/growth/banner')return transaction(()=>({banner:growth.banner(tenantId,player)}));
+  if(route==='GET /api/growth/partner'){
+    if(!player)fail(401,'signin');
+    return transaction(()=>{
+      const partner=growth.owner(tenantId,player);if(!partner)fail(403,'staffForbidden');
+      const ctx=reportContext();
+      ctx.fixture=db.prepare('SELECT report_fixture FROM players WHERE id=? AND tenant_id=?').get(player,tenantId).report_fixture;
+      ctx.scope=ctx.fixture?'test':'site';
+      return {name:partner.name,code:partner.code,link:'/r/'+partner.code,creatives:growth.approved(tenantId,partner.id),
+        report:growth.report(ctx,{},partner)};
+    },{readOnly:true});
+  }
+  if(route==='GET /api/community'){
+    if(!player)fail(401,'signin');
+    return params.has('id')?community.detail(tenantId,player,Number(params.get('id'))):community.state(tenantId,player);
+  }
+  if(req.method==='POST' && path.startsWith('/api/community/')){
+    if(!player)fail(401,'signin');
+    const input=await body(req);return transaction(()=>community.mutate(tenantId,player,path.slice('/api/community/'.length),input));
+  }
+  if(route==='GET /api/admin/growth'){
+    const staff=staffContext(req,tenantId,['operator_admin','operator_content','operator_support']);
+    const all=growth.staff(tenantId);
+    return {partners:staff.role==='operator_admin'?all.partners:[],placements:websiteRoles.includes(staff.role)?all.placements:[],
+      filters:all.placements.map(({id,slug})=>({id,slug})),partnerFilters:all.partners.map(({id,name})=>({id,name})),
+      pending:supportRoles.includes(staff.role)?all.pending:[],experiments:staff.role==='operator_admin'?all.experiments:[],polls:websiteRoles.includes(staff.role)?community.polls(tenantId):[],testCredits:staff.role==='operator_admin'&&testCredits.available(tenantId)};
+  }
+  if(route==='GET /api/admin/growth/report'){
+    staffContext(req,tenantId,supportRoles);return transaction(()=>growth.report(reportContext(),Object.fromEntries(params)),{readOnly:true});
+  }
+  if(route==='GET /api/admin/growth/credits'){
+    staffContext(req,tenantId,['operator_admin']);return testCredits.history(tenantId,Number(params.get('player')));
+  }
+  if(req.method==='POST' && path.startsWith('/api/admin/growth/')){
+    const handlers={partner:growth.partner,placement:growth.edit,review:growth.decide,spend:growth.spend,experiment:growth.experiment,poll:community.managePoll,credits:testCredits.post};
+    const key=path.slice('/api/admin/growth/'.length);
+    if(!Object.hasOwn(handlers,key))fail(404,'invalid');
+    const roles=key==='review'?supportRoles:['poll','placement'].includes(key)?websiteRoles:['operator_admin'];
+    staffContext(req,tenantId,roles);const input=await body(req,65536);
+    if(key==='credits')testCredits.requireTest(tenantId,input.playerId);
+    return auditedChange(roles,input,actor=>handlers[key](tenantId,actor.id,requestId,input),key==='poll'||(key==='placement'&&input.action!=='save')?'publishWebsite':undefined);
+  }
   if (route==='GET /api/admin/discovery/programs') { staffContext(req,tenantId,websiteRoles); return rewards.staff(tenantId); }
   if (route==='GET /api/admin/discovery/campaigns') { staffContext(req,tenantId,websiteRoles); return {items:communications.staff(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone || 'UTC'}; }
   if (route==='POST /api/admin/discovery/programs' || route==='POST /api/admin/discovery/campaigns') {
@@ -755,7 +820,7 @@ async function api(req, res, path, tenantId, requestId) {
         item.previews=item.spec.pair.map(id=>db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenantId,id))
           .map(r=>r&&discoveryDestination(tenantId,'/coming-soon/'+r.slug)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
       }
-      return {...state,choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player)};
+      return {...state,partner:Boolean(growth.owner(tenantId,player)),choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player)};
     },{readOnly:true});
   }
   if (req.method==='POST' && /^\/api\/discovery\/[a-z]+$/.test(path)) {
@@ -1466,6 +1531,8 @@ async function api(req, res, path, tenantId, requestId) {
       favorites,
       previewSaveHistory: comingSoon.playerSaves(tenantId, player),
       previewSaveActivity: savedTitles.history(tenantId, player, { limit: -1 }).entries,
+      sharedLists: community.state(tenantId,player).lists,
+      referral: db.prepare("SELECT source,review,at FROM growth_signups WHERE tenant=? AND player=?").get(tenantId,player),
       discovery: rewards.state(tenantId,player),
       contactPreferences: communications.choices(tenantId,player),
       inbox: communications.inbox(tenantId,player,-1),
@@ -1561,7 +1628,10 @@ async function api(req, res, path, tenantId, requestId) {
     const ticketId = transaction(() => {
       const result = db.prepare("INSERT INTO support_tickets(tenant_id, player_id, category, is_complaint, message, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)").run(tenantId, player, storedCategory, Number(isComplaint), message.trim(), now, now);
       const id = Number(result.lastInsertRowid);
-      rewards.link(tenantId,player,id,reference);
+      if(typeof reference==='string'&&reference.startsWith('list-')){
+        if(!community.canLink(tenantId,player,reference))fail(404,'discoveryMissing');
+        db.prepare('INSERT INTO support_case_links VALUES(?,?)').run(id,reference);
+      }else rewards.link(tenantId,player,id,reference);
       db.prepare("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, player_id, message, created_at) VALUES (?, ?, 'player', ?, ?, ?)").run(tenantId, id, player, message.trim(), now);
       return id;
     });
@@ -1667,7 +1737,7 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1 ORDER BY gc.title_en').all(tenantId);
   if (route === 'POST /api/signup' || route === 'POST /api/login') {
     limitAuthAttempts(req, route);
-    const { email, password, locale } = await body(req);
+    const { email, password, locale, referralCode } = await body(req);
     if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ||
         typeof password !== 'string' || password.length < 10 || password.length > 128 || (route.endsWith('signup') && locale !== undefined && !['en-CA', 'fr-CA'].includes(locale))) fail(400, 'credentials');
     const cleanEmail = email.trim().toLowerCase();
@@ -1681,6 +1751,7 @@ async function api(req, res, path, tenantId, requestId) {
         const { lastInsertRowid: id } = db.prepare('INSERT INTO players(email, password, tenant_id, email_verified, preferred_locale) VALUES (?, ?, ?, 0, ?)').run(cleanEmail, passwordHash, tenantId, locale || 'en-CA');
         db.prepare('INSERT INTO player_profiles(tenant_id, player_id, display_name, preferred_locale, updated_at) VALUES (?, ?, ?, ?, ?)').run(tenantId, id, '', locale || 'en-CA', Date.now());
         db.prepare('INSERT INTO ledger(player, wager, amount, tenant_id) VALUES (?, 0, 10000, ?)').run(id, tenantId);
+        growth.signup(tenantId,Number(id),referralCookie(req),referralCode);
         return { id };
       });
     } else if (!matches(passwordHash, row?.password || '')) {
@@ -1917,6 +1988,8 @@ const assets = {
   '/website-content.js': ['website-content.js', 'text/javascript'],
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
+  '/growth-player.js':['growth-player.js','text/javascript'],
+  '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/discovery.js': ['discovery.js', 'text/javascript'],
   '/discovery-admin.js': ['discovery-admin.js', 'text/javascript'],
   '/account-break.js': ['account-break.js', 'text/javascript'],
@@ -1966,6 +2039,14 @@ createServer(async (req, res) => {
       return res.end(JSON.stringify({ status: 'ready', requestId }));
     }
     tenantId = resolveTenant(req);
+    const tagged=req.method==='GET'&&path.match(/^\/(r|go)\/([a-z0-9][a-z0-9-]{1,47})$/);
+    if(tagged){
+      const click=transaction(()=>growth.click(tenantId,tagged[1],tagged[2],referralCookie(req),signedPlayer(req,tenantId)));
+      const lang=requestUrl.searchParams.get('lang');
+      res.setHeader('Set-Cookie',`habibi_ref=${click.token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secureCookie}`);
+      res.writeHead(302,{Location:appBasePath+click.path+(['fr','en'].includes(lang)?'?lang='+lang:''),'Cache-Control':'private, no-store','Referrer-Policy':'same-origin'});
+      return res.end();
+    }
     if (path.startsWith('/api/')) {
       res.setHeader('X-Robots-Tag', 'noindex');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

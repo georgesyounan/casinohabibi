@@ -22,6 +22,7 @@
 <main id="lobby" class="shell" tabindex="-1">
 <div id="lobby-announcement" class="lobby-announcement" role="status" aria-live="polite" hidden></div>
 <div id="site-public-banner" hidden></div>
+<aside id="campaign-placement" class="discovery-card" hidden></aside>
 <section class="hero" id="default-lobby-hero">
 <div class="hero-content"><p class="eyebrow" data-copy="sandbox"></p>
 <h1 data-copy="headline"></h1><p data-copy="intro"></p>
@@ -81,6 +82,7 @@
           <li><a href="#overview" data-admin-link data-admin-primary data-copy="adminNavDashboard"></a></li>
           <li><a href="#game-catalog" data-admin-link data-admin-primary data-copy="adminNavCatalogue"></a></li>
           <li><a href="#coming-soon-saves" data-admin-link data-admin-primary data-copy="adminNavPlayers"></a></li>
+          <li><a href="#growth" data-admin-link data-admin-primary data-copy="growth"></a></li>
           <li><a href="#engagement" data-admin-link data-admin-primary data-copy="discovery"></a></li>
           <li><a href="#support-inbox" data-admin-link data-admin-primary data-copy="supportInbox"></a></li>
         </ul>
@@ -300,6 +302,17 @@
               <tbody id="coming-soon-saves-body"></tbody>
             </table></div>
             <div class="actions" id="saves-pages" hidden><button type="button" class="ghost" id="saves-previous" data-copy="playerPrevious"></button><span id="saves-page-count" role="status"></span><button type="button" class="ghost" id="saves-next" data-copy="playerNext"></button></div>
+        </section>
+        <section id="growth" class="admin-page" data-admin-view data-roles="operator_admin,operator_content,operator_support" aria-labelledby="growth-heading" hidden>
+          <h2 id="growth-heading" tabindex="-1" data-admin-heading data-copy="growth"></h2>
+          <nav class="admin-subnav discovery-tabs" aria-labelledby="growth-heading"><a href="#growth-report" data-admin-link data-roles="operator_admin,operator_support" data-copy="growthReport"></a><a href="#growth-partners" data-admin-link data-roles="operator_admin" data-copy="growthPartners"></a><a href="#growth-placements" data-admin-link data-roles="operator_admin,operator_content" data-copy="growthPlacement"></a><a href="#growth-review" data-admin-link data-roles="operator_admin,operator_support" data-copy="growthReview"></a><a href="#growth-polls" data-admin-link data-roles="operator_admin,operator_content" data-copy="growthPoll"></a><a href="#growth-experiments" data-admin-link data-roles="operator_admin" data-copy="growthExperiment"></a><a href="#growth-credits" data-admin-link data-roles="operator_admin" data-permission="testCredits" data-copy="growthCredits"></a></nav>
+          <section id="growth-report" data-admin-panel data-roles="operator_admin,operator_support" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthReport"></h3><div id="growth-report-body"></div></section>
+          <section id="growth-partners" data-admin-panel data-roles="operator_admin" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthPartners"></h3><div id="growth-partners-body"></div></section>
+          <section id="growth-placements" data-admin-panel data-roles="operator_admin,operator_content" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthPlacement"></h3><div id="growth-placements-body"></div></section>
+          <section id="growth-review" data-admin-panel data-roles="operator_admin,operator_support" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthReview"></h3><div id="growth-review-body"></div></section>
+          <section id="growth-polls" data-admin-panel data-roles="operator_admin,operator_content" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthPoll"></h3><div id="growth-polls-body"></div></section>
+          <section id="growth-experiments" data-admin-panel data-roles="operator_admin" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthExperiment"></h3><div id="growth-experiments-body"></div></section>
+          <section id="growth-credits" data-admin-panel data-roles="operator_admin" data-permission="testCredits" hidden><h3 data-admin-heading tabindex="-1" data-copy="growthCredits"></h3><div id="growth-credits-body"></div></section>
         </section>
         <section id="engagement" class="admin-page" data-admin-view data-roles="operator_admin,operator_content,operator_support" aria-labelledby="engagement-heading" hidden>
           <h2 id="engagement-heading" tabindex="-1" data-admin-heading data-copy="discovery"></h2>

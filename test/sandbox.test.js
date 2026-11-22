@@ -20,7 +20,7 @@ const staffCredentials = { email: 'admin@example.test', password: 'example-staff
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
 async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false,
-  dataDirectory, encryptionKey = randomBytes(32).toString('hex'), onRequest } = {}) {
+  dataDirectory, testCredits = false, encryptionKey = randomBytes(32).toString('hex'), onRequest } = {}) {
   const directory = dataDirectory || await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
@@ -45,7 +45,7 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
       PROVIDER_KEY_ENCRYPTION: encryptionKey, SECURE_COOKIES: '0',
-      SANDBOX_TENANT_HOSTS: sandboxTenantHosts,
+      SANDBOX_TENANT_HOSTS: sandboxTenantHosts, ENABLE_TEST_CREDITS:testCredits?'1':'0', DEMO_CREDITS_TEST_DATA_DIR:testCredits?directory:'',
       APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_SENDMAIL: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
       ...(captureMail && { TEST_MAILBOX: mailbox, PUBLIC_BASE_URL: 'https://localhost' + appBasePath, RESET_EMAIL_API_KEY: 'fixture', RESET_EMAIL_FROM: 'test@example.test' })
     }
@@ -1677,4 +1677,169 @@ test('scheduled campaigns recheck brand, topic, channel, current break, quiet ho
   const paused=await arm();await person('safety/pause',{});await run();assert.equal((await outcomes(paused))[0].reason,'accountBreak');
   assert.equal((await person('discovery')).data.messages.length,1);
   assert.equal((await person('password-reset/request',{email:playerCredentials.email,locale:'en-CA'})).status,200);
+});
+async function growthAccount(who,alias,extra={}){
+  const credentials={email:alias+'@example.test',password:'private-fixture-password'};
+  const signup=await who('signup',{...credentials,...extra});
+  assert.equal(signup.status,200,JSON.stringify(signup.data));
+  assert.equal((await who('email-verification/complete',{token:new URL(signup.data.verifyUrl).searchParams.get('verify')})).status,200);
+  const login=await who('login',credentials);assert.equal(login.status,200);return login.data.id;
+}
+async function growthPreview(staff,name){
+  const card=(await staff('admin/coming-soon',cardDraft(name))).data.title;
+  assert.equal((await staff('admin/coming-soon',{slug:card.slug,version:card.version,action:'publish'})).status,200);return card;
+}
+const week=7*86400000;
+test('growth attributes one first save, isolates partner exports, versions placements, reconciles campaign spend and hides expired landings',async t=>{
+  const {base,database}=await startSandbox(t,{appBasePath:'/casinohabibi'}),url=base+'/casinohabibi';
+  const staff=client(url),alice=client(url),bob=client(url),jar=new Map(),guest=client(url,jar);
+  await staff('admin/login',staffCredentials);
+  const a=await growthAccount(alice,'affiliate-a'),b=await growthAccount(bob,'affiliate-b');
+  const partner=async(id,code)=>(await staff('admin/growth/partner',{name:code,code,playerId:id})).data.id;
+  const A=await partner(a,'alpha-link'),B=await partner(b,'bravo-link');assert.ok(A&&B);
+  const card=await growthPreview(staff,'Coastal Skies');
+  const spec={titleEn:'On the coast',titleFr:'Sur la côte',textEn:'See preview',textFr:'Voir la fiche',start:Date.now()-10000,end:Date.now()+week,preview:card.slug,currency:'CAD',budget:20000,partner:B};
+  const draft=await staff('admin/growth/placement',{action:'save',version:0,slug:'coast-preview',spec});assert.equal(draft.status,200);
+  const placement=draft.data.id;assert.equal((await guest('growth/banner')).data.banner,null);
+  assert.equal((await staff('admin/growth/placement',{action:'publish',id:placement,version:1})).status,200);
+  assert.equal((await guest('growth/banner')).data.banner.slug,'coast-preview');
+  async function tag(path,jar){
+    const response=await fetch(url+path,{redirect:'manual',headers:{Cookie:[...jar].map(([k,v])=>k+'='+v).join('; ')}});
+    for(const item of response.headers.getSetCookie()){const [k,v]=item.split(';')[0].split('=');jar.set(k,v);}
+    return response;
+  }
+  assert.equal((await tag('/r/alpha-link',jar)).status,302);
+  const id=await growthAccount(guest,'acquired-via-code',{referralCode:'bravo-link'});
+  const save=(client)=>client('me/saved/'+card.id,undefined,undefined,{},'PUT');
+  await save(guest);await save(guest);
+  assert.equal((await alice('growth/partner')).data.report.qualified,0);
+  const ownerReport=await bob('growth/partner');assert.equal(ownerReport.status,200,JSON.stringify(ownerReport.data));
+  assert.equal(ownerReport.data.report.qualified,1);assert.equal(ownerReport.data.creatives.length,1);
+  assert.doesNotMatch(JSON.stringify(ownerReport.data),/example\.test|playerId|budget|ownerId/);
+  assert.equal((await guest('growth/partner')).status,403);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  assert.deepEqual({...db.prepare('SELECT partner,source,review FROM growth_signups WHERE player=?').get(id)},{partner:B,source:'code',review:'valid'});
+  const adJar=new Map(),adGuest=client(url,adJar);
+  const landed=await tag('/go/coast-preview?lang=fr',adJar);assert.equal(landed.headers.get('location'),'/casinohabibi/coming-soon/'+card.slug+'?lang=fr');
+  await tag('/go/coast-preview',adJar);
+  await growthAccount(adGuest,'ad-lead');await save(adGuest);
+  const dupJar=new Map([['habibi_ref',adJar.get('habibi_ref')]]),dup=client(url,dupJar);
+  const flagged=await growthAccount(dup,'duplicate-lead');await save(dup);
+  const staffState=await staff('admin/growth');assert.equal(staffState.data.pending[0].player,flagged);
+  assert.equal((await staff('admin/growth/review',{playerId:flagged,decision:'ineligible',reason:'Duplicate in the private fixture'})).status,200);
+  const day=new Date().toISOString().slice(0,10);
+  assert.equal((await staff('admin/growth/spend',{id:placement,entries:[{day,currency:'CAD',cents:2500}]})).status,200);
+  const report=await staff('admin/growth/report?scope=site&placement='+placement);
+  assert.equal(report.status,200,JSON.stringify(report.data));assert.equal(report.data.qualified,1);assert.equal(report.data.visits,1);
+  assert.equal(report.data.costs[0].perSaver,2500);assert.equal(report.data.costs[0].budget,20000);assert.equal(report.data.visitSignupRate,1);
+  assert.equal((await staff('admin/growth/report?scope=test&placement='+placement)).data.visits,0);
+  assert.equal((await staff('admin/growth/report?brand=other')).status,403);
+  assert.equal((await staff('admin/growth/placement',{action:'save',id:placement,version:2,spec:{...spec,titleEn:'Revised'}})).status,200);
+  assert.equal((await guest('growth/banner')).data.banner.titleEn,'On the coast');
+  const past={...spec,start:Date.now()-week,end:Date.now()-1};
+  db.prepare('UPDATE growth_placements SET live=? WHERE id=?').run(JSON.stringify(past),placement);
+  assert.equal((await guest('growth/banner')).data.banner,null);assert.equal((await tag('/go/coast-preview',adJar)).status,404);
+  db.prepare('UPDATE growth_placements SET live=? WHERE id=?').run(JSON.stringify(spec),placement);
+  const stored=db.prepare('SELECT version FROM coming_soon_titles WHERE id=?').get(card.id);
+  assert.equal((await staff('admin/coming-soon',{action:'archive',slug:card.slug,version:stored.version})).status,200);
+  assert.equal((await tag('/go/coast-preview',adJar)).status,404);
+});
+
+test('growth reconciles a mature 6/10 cohort, repeated observations and reproducible holdout assignments',async t=>{
+  const {base,database}=await startSandbox(t),staff=client(base);await staff('admin/login',staffCredentials);
+  const card=await growthPreview(staff,'Northern Lights'),now=Date.now(),day=86400000;
+  const spec={titleEn:'North',titleFr:'Nord',textEn:'',textFr:'',start:now-60*day,end:now+15*day,preview:card.slug,currency:'CAD',budget:0};
+  const id=(await staff('admin/growth/placement',{action:'save',version:0,slug:'north-banner',spec})).data.id;
+  await staff('admin/growth/placement',{action:'publish',version:1,id});
+  const ex=(await staff('admin/growth/experiment',{placement:id,name:'First save study',start:now-40*day,end:now+day,days:7,holdout:50})).data.id;assert.ok(ex);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const seeds=[],signupAt=now-40*day;const {createHash}=await import('node:crypto');
+  db.prepare('UPDATE growth_experiments SET seed=? WHERE id=?').run('reproducible-study',ex);
+  for(let i=0;i<10;i++){
+    const pid=Number(db.prepare("INSERT INTO players(email,password,tenant_id,email_verified,first_verified_at,report_fixture) VALUES(?,'fixture','sandbox',1,?,0)").run('cohort-'+i+'@example.test',signupAt+1000).lastInsertRowid);
+    db.prepare("INSERT INTO growth_signups(player,tenant,at,source,review,flag) VALUES(?,'sandbox',?,'direct','valid','')").run(pid,signupAt);
+    const token=randomBytes(32).toString('hex');
+    db.prepare("INSERT INTO sessions(token,player,expires,tenant_id,created_at) VALUES(?,?,?,'sandbox',?)").run(createHash('sha256').update(token).digest('hex'),pid,now+day,now);
+    const user=client(base,new Map([['northplay',token]]));const before=(await user('growth/banner')).data.banner?.slug||'holdout';
+    assert.equal((await user('growth/banner')).data.banner?.slug||'holdout',before);seeds.push({pid,user,before});
+  }
+  assert.equal(new Set(seeds.map(s=>s.before)).size,2);assert.equal(db.prepare('SELECT count(*) AS n FROM growth_assignments').get().n,10);
+  db.prepare('UPDATE growth_assignments SET at=? WHERE experiment=?').run(signupAt+500,ex);
+  for(const {user,pid} of seeds.slice(0,6)){
+    for(let i=0;i<2;i++)await user('me/saved/'+card.id,undefined,undefined,{},'PUT');
+    db.prepare('UPDATE growth_first_saves SET at=? WHERE player=?').run(signupAt+day,pid);
+  }
+  for(const {pid} of seeds.slice(0,2))db.prepare("INSERT INTO player_report_visits VALUES('sandbox',?,?,?)").run(pid,Math.floor((signupAt+26*day)/60000),signupAt+26*day);
+  const ctx='?days=90&scope=site&asOf='+now;
+  const report=await staff('admin/growth/report'+ctx);assert.equal(report.status,200,JSON.stringify(report.data));
+  const r=report.data;assert.deepEqual([r.mature,r.activated,r.activationRate,r.returnCohort,r.returning],[10,6,0.6,6,2]);
+  assert.equal(r.experiments.reduce((s,e)=>s+e.cohort,0),10);assert.equal(r.experiments.reduce((s,e)=>s+e.converted,0),6);
+  assert.deepEqual((await staff('admin/growth/report'+ctx)).data,r);
+  for(const metric of ['visits','verified','qualified','activated','returning']){
+    const detail=await staff('admin/growth/report'+ctx+'&metric='+metric);
+    assert.equal(detail.status,200);assert.equal(detail.data.daily.reduce((sum,row)=>sum+row.total,0),r[metric]);
+    assert.ok(detail.data.daily.every(row=>Object.keys(row).length===2));
+  }
+  const control=seeds.find(s=>s.before==='holdout');
+  db.prepare('UPDATE growth_assignments SET at=? WHERE experiment=? AND player=?').run(now-1000,ex,control.pid);
+  await staff('admin/growth/experiment',{close:ex});assert.equal((await control.user('growth/banner')).data.banner,null);
+});
+
+test('invite-only collections keep private shelves separate, moderation and voting finish the correct quests',async t=>{
+  const {base}=await startSandbox(t);const [staff,owner,member,outsider]=Array.from({length:4},()=>client(base));
+  await staff('admin/login',staffCredentials);await growthAccount(owner,'list-owner');const mid=await growthAccount(member,'list-member');await growthAccount(outsider,'outside-list');
+  const privateCard=await growthPreview(staff,'My Secret Favorite'),shared=await growthPreview(staff,'Community Title');
+  await owner('me/saved/'+privateCard.id,undefined,undefined,{},'PUT');
+  const baseSpec=(await member('discovery')).data.items[0].spec,quests={};
+  for(const template of ['Q05','Q07']){
+    const d=(await staff('admin/discovery/programs',{action:'save',version:0,spec:{...baseSpec,template,titleEn:template,titleFr:template}})).data;
+    await staff('admin/discovery/programs',{action:'publish',id:d.id,version:1});await member('discovery/join',{id:d.id});quests[template]=d.id;
+  }
+  const id=(await owner('community/create',{name:'Film night'})).data.id;
+  assert.equal((await outsider('community?id='+id)).status,404);
+  const invite=async()=>(await owner('community/invite',{id})).data;
+  const denied=await invite();await owner('community/revoke',{id,inviteId:denied.inviteId});
+  assert.equal((await member('community/join',{token:denied.token})).status,404);
+  const valid=await invite();assert.equal((await member('community/join',{token:valid.token})).status,200);
+  assert.equal((await outsider('community/join',{token:valid.token})).status,404);
+  await member('community/add',{id,kind:'preview',value:shared.slug});await member('community/add',{id,kind:'theme',value:'Moon'});
+  const organizer=(await owner('community?id='+id)).data;
+  assert.equal(organizer.entries.length,2);assert.doesNotMatch(JSON.stringify(organizer),/my-secret-favorite/i);
+  const ent=organizer.entries.find(e=>e.kind==='preview').id;
+  assert.equal((await member('community/moderate',{id,entryId:ent,state:'approved'})).status,403);
+  await owner('community/moderate',{id,entryId:ent,state:'approved'});
+  assert.equal((await member('support',{category:'account',message:'Please review this shared list.',reference:'list-'+id})).status,200);
+  assert.equal((await outsider('support',{category:'account',message:'Please review this shared list.',reference:'list-'+id})).status,404);
+  const poll=(await staff('admin/growth/poll',{action:'open',titleEn:'Next theme',titleFr:'Prochain thème',options:[{titleEn:'North',titleFr:'Nord'},{titleEn:'South',titleFr:'Sud'}]})).data.id;
+  assert.equal((await member('community/result',{id:poll})).status,409);
+  await member('community/vote',{id:poll,choice:0});await member('community/vote',{id:poll,choice:1});
+  await staff('admin/growth/poll',{id:poll,action:'publishResults'});
+  assert.deepEqual((await member('community/result',{id:poll})).data.counts,[0,1]);
+  const results=(await member('discovery')).data.items;for(const quest of Object.values(quests))assert.equal(results.find(i=>i.id===quest).state,'claimable');
+  await owner('community/remove',{id,playerId:mid});assert.equal((await member('community?id='+id)).status,404);
+  assert.equal((await member('community/join',{token:valid.token})).status,404);
+  assert.equal((await member('community')).data.lists.length,0);
+});
+
+test('isolated demo credits grant debit reverse and retry exactly once, respect concurrent debits and reject live and nonfixture accounts',async t=>{
+  const isolated=await startSandbox(t,{testCredits:true}),normal=await startSandbox(t),staff=client(isolated.base),live=client(normal.base),player=client(isolated.base);
+  await staff('admin/login',staffCredentials);await live('admin/login',staffCredentials);
+  const pid=await growthAccount(player,'ledger-player');
+  const db=new DatabaseSync(isolated.database);t.after(()=>db.close());
+  const input=(kind,amount)=>({playerId:pid,kind,amount,reason:'Private ledger acceptance'});
+  assert.equal((await staff('admin/growth/credits',input('grant',100))).status,403);
+  db.exec("INSERT INTO report_fixture_tenants VALUES('sandbox')");
+  assert.equal((await staff('admin/growth/credits',input('grant',100))).status,403);
+  db.prepare('UPDATE players SET report_fixture=1 WHERE id=?').run(pid);
+  assert.equal((await player('admin/growth/credits',input('grant',100))).status,401);
+  const grant=await staff('admin/growth/credits',input('grant',100));assert.equal(grant.data.balance,100);
+  const req={'X-Request-ID':randomUUID()};const debit=await staff('admin/growth/credits',input('debit',20),undefined,req);assert.equal(debit.data.balance,80);
+  const reverse={playerId:pid,kind:'reverse',original:debit.data.id,reason:'Undo test debit'};
+  const reversed=await staff('admin/growth/credits',reverse);assert.equal(reversed.data.balance,100);
+  assert.deepEqual((await staff('admin/growth/credits',input('debit',20),undefined,req)).data,debit.data);
+  assert.equal((await staff('admin/growth/credits',reverse)).status,409);
+  const h=(await staff('admin/growth/credits?player='+pid)).data;assert.equal(h.entries.length,3);assert.equal(h.balance,100);
+  const concurrent=await Promise.all([1,2].map(()=>staff('admin/growth/credits',input('debit',80))));assert.deepEqual(concurrent.map(x=>x.status).sort(),[200,409]);
+  assert.equal((await staff('admin/growth/credits?player='+pid)).data.balance,20);
+  assert.equal((await live('admin/growth/credits',input('grant',100))).status,403);
 });
