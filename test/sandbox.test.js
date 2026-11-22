@@ -7,16 +7,19 @@ import { createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createSavedTitles } from '../lib/saved-titles.js';
 import { reportPeriod } from '../lib/dashboard.js';
+import { collectionKey, matchesCatalogue } from '../public/catalog.js';
 
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
-async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'northplay-test-'));
+async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false,
+  dataDirectory, encryptionKey = randomBytes(32).toString('hex'), onRequest } = {}) {
+  const directory = dataDirectory || await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
     const db = new DatabaseSync(database);
@@ -39,9 +42,9 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
     env: {
       ...process.env, APP_ENV: 'development', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: directory,
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
-      PROVIDER_KEY_ENCRYPTION: randomBytes(32).toString('hex'), SECURE_COOKIES: '0',
+      PROVIDER_KEY_ENCRYPTION: encryptionKey, SECURE_COOKIES: '0',
       SANDBOX_TENANT_HOSTS: sandboxTenantHosts,
-      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
+      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_SENDMAIL: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
       ...(captureMail && { TEST_MAILBOX: mailbox, PUBLIC_BASE_URL: 'https://localhost' + appBasePath, RESET_EMAIL_API_KEY: 'fixture', RESET_EMAIL_FROM: 'test@example.test' })
     }
   });
@@ -51,13 +54,18 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
   t.after(async () => {
     server.kill();
     await exited;
-    await rm(directory, { recursive: true, force: true });
+    if (!dataDirectory) await rm(directory, { recursive: true, force: true });
   });
   await Promise.race([
     once(server.stdout, 'data'),
     exited.then(([code]) => assert.fail(`Server exited with code ${code}\n${errors.join('')}`))
   ]);
-  server.stdout.resume();
+  if (onRequest) {
+    createInterface({ input: server.stdout }).on('line', (line) => {
+      const entry = JSON.parse(line);
+      if (entry.event === 'http_request') onRequest(entry);
+    });
+  } else server.stdout.resume();
   return { base: `http://127.0.0.1:${port}`, database, readMail: async () => (await readFile(mailbox, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)) };
 }
 
@@ -587,6 +595,74 @@ test('protected catalogue previews and published market and language restriction
   assert.equal((await staff('admin/coming-soon', { action: 'publish', slug: 'orchard', version: 2 })).status, 409);
 });
 
+test('catalogue search matches bilingual titles, categories, studios and collections across terms', () => {
+  const labels = ['Winter Garden', 'Jardin d’hiver', 'Écho Montréal', 'Railway', 'Les chemins de fer'];
+  assert.ok(matchesCatalogue('hiver montreal', labels, 'table'));
+  assert.ok(matchesCatalogue('jeux table fer', labels, 'table'));
+  assert.ok(matchesCatalogue('Table games', labels, 'table'));
+  assert.ok(matchesCatalogue('machines a sous', [], 'slots'));
+  assert.ok(!matchesCatalogue('roulette', labels, 'table'));
+  assert.ok(!matchesCatalogue('???', labels, 'table'));
+  assert.equal(collectionKey({ collectionEn: 'Café Express', collectionFr: 'Train-café' }), 'cafe express');
+  assert.equal(collectionKey({ collectionFr: 'Rétro été' }), 'retro ete');
+});
+
+test('the catalogue index pages compact staff records while public collections follow published revisions and eligibility', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const staff = client(base), guest = client(base), editor = client(base);
+  await staff('admin/login', staffCredentials);
+  const credentials = { email: 'catalogue-editor@example.test', password: 'example-editor-password' };
+  await staff('admin/staff', { ...credentials, role: 'operator_content' });
+  await editor('admin/login', credentials);
+  const path = 'admin/coming-soon', index = path + '/index';
+  assert.equal((await guest(index)).status, 401);
+  const titles = [];
+  for (let n = 1; n <= 10; n++) {
+    const data = cardDraft('Garden ' + n, { studio: 'Écho Montréal', category: 'table', collectionEn: 'Midnight', collectionFr: 'Après minuit' });
+    const { title } = (await editor(path, data)).data;
+    titles.push(title);
+  }
+  const first = (await editor(index)).data, last = (await editor(index + '?page=2')).data;
+  assert.deepEqual([first.total, first.page, first.items.length, last.items.length], [10, 1, 8, 2]);
+  assert.equal(new Set([...first.items, ...last.items].map((r) => r.id)).size, 10);
+  for (const field of ['artwork', 'descriptionEn', 'draft', 'published']) assert.ok(!Object.hasOwn(first.items[0], field));
+  assert.equal((await editor(index + '?page=999')).data.page, 2);
+  for (const invalid of ['page=0', 'page=-1', 'page=1e1', 'category=unknown', 'state=unknown', 'q=' + 'x'.repeat(121)])
+    assert.equal((await editor(index + '?' + invalid)).status, 400);
+  assert.equal((await editor(index + '?q=montreal+minuit+jeux&category=table&state=draft')).data.total, 10);
+  assert.equal((await editor(index + '?q=missing')).data.total, 0);
+  const active = titles[0], other = titles[1];
+  const command = (actor, action, title) => actor(path, { action, slug: title.slug, version: title.version });
+  assert.equal((await command(editor, 'publish', active)).status, 403);
+  const firstLive = (await command(staff, 'publish', active)).data.title;
+  const put = (title, extra) => staff(path, { ...cardDraft(title.titleEn), slug: title.slug, version: title.version, ...extra });
+  const draftChanged = (await put(firstLive, { collectionEn: 'Station', collectionFr: 'La gare' })).data.title;
+  assert.equal((await editor(index + '?q=gare&state=changed')).data.items[0].id, active.id);
+  assert.equal((await editor(index + '?state=published')).data.total, 1);
+  assert.deepEqual((await guest('coming-soon?locale=fr-CA')).data.titles.map((r) => r.collectionFr), ['Après minuit']);
+  const legacyEdit = (await put(draftChanged, {})).data.title;
+  assert.equal(legacyEdit.collectionFr, 'La gare');
+  const newLive = (await command(staff, 'publish', legacyEdit)).data.title;
+  assert.equal((await guest('coming-soon/' + active.slug + '?locale=fr-CA')).data.collectionFr, 'La gare');
+  let restricted = (await put(other, { locales: ['fr-CA'], displayMarket: 'MX', collectionEn: '', collectionFr: 'Voyages' })).data.title;
+  restricted = (await command(staff, 'publish', restricted)).data.title;
+  assert.ok(!(await guest('coming-soon?locale=fr-CA')).data.titles.some((r) => r.id === restricted.id));
+  const missing = (await put(titles[2], { collectionEn: 'Hidden', collectionFr: '' })).data.title;
+  assert.equal((await command(staff, 'publish', missing)).data.error, 'comingSoonCollectionTranslation');
+  assert.equal((await put(titles[3], { collectionEn: '!!!' })).status, 400);
+  assert.equal((await command(staff, 'archive', newLive)).status, 200);
+  assert.equal((await guest('coming-soon?locale=fr-CA')).data.titles.length, 0);
+  assert.equal((await editor(index + '?state=archived')).data.items[0].id, active.id);
+  const db = new DatabaseSync(database);
+  try {
+    db.exec("UPDATE tenant_config_versions SET config=json_set(config,'$.displayMarket','MX') WHERE tenant_id='sandbox' AND status='published'");
+    assert.equal((await guest('coming-soon?locale=fr-CA')).data.titles[0].collectionFr, 'Voyages');
+    assert.equal((await guest('coming-soon?locale=en-CA')).data.titles.length, 0);
+    db.exec("INSERT INTO tenants VALUES('other','other','Other Brand','active',1); UPDATE tenant_domains SET tenant_id='other' WHERE host='localhost'");
+    assert.equal((await editor(index, undefined, 'localhost')).status, 401);
+  } finally { db.close(); }
+});
+
 test('Discover preserves surviving positions, fills vacancies and rotates expired visits', async (t) => {
   const { base, database } = await startSandbox(t);
   const staff = client(base);
@@ -1005,8 +1081,13 @@ test('website content keeps drafts private, publishes single bilingual revisions
   assert.equal((await guest('website-content')).data.help.length, 0);
 });
 
-test('website publication survives request chunk boundaries, concurrent edits and an audited transaction retry', async (t) => {
-  const { base, database } = await startSandbox(t);
+test('website publication survives request chunk boundaries, concurrent edits and an audited transaction retry', { timeout: 20_000 }, async (t) => {
+  const header = { 'X-Request-ID': randomUUID() };
+  let observeFailure;
+  const failedRequest = new Promise((resolve) => { observeFailure = resolve; });
+  const { base, database } = await startSandbox(t, { onRequest(entry) {
+    if (entry.requestId === header['X-Request-ID'] && entry.status === 500) observeFailure(entry);
+  } });
   const staff = client(base);
   const login = await staff('admin/login', staffCredentials);
   const cookie = login.setCookies[0].split(';')[0];
@@ -1057,11 +1138,20 @@ test('website publication survives request chunk boundaries, concurrent edits an
   const db = new DatabaseSync(database);
   t.after(() => db.close());
   const action = { kind: 'help', slug: 'accents', version: 2, action: 'publish' };
-  const header = { 'X-Request-ID': randomUUID() };
   db.exec(
     "CREATE TRIGGER deny_publication BEFORE INSERT ON staff_events WHEN NEW.action='website_content_published' BEGIN SELECT RAISE(ABORT,'test rollback'); END"
   );
-  assert.equal((await staff('admin/website-content', action, undefined, header)).status, 500);
+  const failed = await staff('admin/website-content', action, undefined, header);
+  assert.equal(failed.status, 500);
+  assert.equal(failed.data.requestId, header['X-Request-ID']);
+  const log = await failedRequest;
+  assert.deepEqual(log.publication, { action: 'publish', record: 'website-content/help/accents' });
+  assert.equal(log.tenantId, 'sandbox');
+  assert.equal(log.errorCode, 'internal');
+  const failedItem = (await staff('admin/publication-followup?q=' + header['X-Request-ID'])).data.items[0];
+  assert.equal(failedItem.reason, 'unavailable');
+  assert.equal(failedItem.record, 'website-content/help/accents');
+  assert.deepEqual((await staff('admin/publication-followup?q=preferences')).data.items.map((item) => item.id), [failedItem.id]);
   assert.equal((await client(base)('help/accents')).status, 404);
   assert.equal((await staff('admin/website-content/help/accents')).data.version, 2);
   db.exec('DROP TRIGGER deny_publication');
@@ -1069,4 +1159,173 @@ test('website publication survives request chunk boundaries, concurrent edits an
   assert.equal(published.status, 200);
   assert.deepEqual((await staff('admin/website-content', action, undefined, header)).data, published.data);
   assert.equal((await staff('admin/website-content/help/accents')).data.history.length, 1);
+  const resolved = (await staff('admin/publication-followup?state=resolved')).data.items;
+  assert.deepEqual(resolved.map((row) => [row.id, row.auditId]), [[failedItem.id, published.data.auditId]]);
+});
+
+test('publication follow-up limits references by brand and grant, pages attempts, and resolves the matching record on success', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const [owner, publisher, other, guest] = Array.from({ length: 4 }, () => client(base));
+  await owner('admin/login', staffCredentials);
+  const first = { email: 'publisher-one@example.test', password: 'fixture-password-one' };
+  const second = { email: 'publisher-two@example.test', password: 'fixture-password-two' };
+  for (const [who, creds] of [[publisher, first], [other, second]]) {
+    await owner('admin/staff', { ...creds, role: 'operator_content', publishCatalogue: true, reason: 'Publish the test catalogue' });
+    assert.equal((await who('admin/login', creds)).status, 200);
+  }
+  const follow = 'admin/publication-followup', endpoint = 'admin/coming-soon';
+  const input = cardDraft('Midnight', { titleFr: 'Étoiles de nuit', collectionEn: 'Night journey', collectionFr: '' });
+  const title = (await publisher(endpoint, input)).data.title;
+  const operation = { action: 'publish', slug: title.slug, version: title.version };
+  const header = { 'X-Request-ID': randomUUID() };
+  assert.equal((await guest(follow)).status, 401);
+  assert.deepEqual((await owner('admin/overview')).data.publicationFollowup, { total: 0, open: 0 });
+  for (let i = 0; i < 2; i++) assert.equal((await publisher(endpoint, operation, undefined, header)).data.error, 'comingSoonCollectionTranslation');
+  assert.deepEqual((await publisher('admin/overview')).data.publicationFollowup, { total: 1, open: 1 });
+  assert.deepEqual((await other(follow)).data.items, []);
+  const problem = (await owner(follow + '?q=' + header['X-Request-ID'])).data.items[0];
+  assert.deepEqual([problem.record, problem.titleEn, problem.attempts, problem.actor], ['coming-soon/midnight', 'Midnight', 2, first.email]);
+  assert.equal(problem.auditId, null);
+  assert.deepEqual((await owner(follow + '?q=etoiles+nuit')).data.items.map((item) => item.id), [problem.id]);
+  assert.deepEqual((await other(follow + '?q=etoiles+nuit')).data.items, []);
+  assert.equal((await other(endpoint, operation)).data.error, 'comingSoonCollectionTranslation');
+  assert.equal((await owner(follow + '?q=midnight')).data.total, 2);
+  const updated = (await publisher(endpoint, { ...input, slug: title.slug, version: title.version, collectionFr: 'Voyage de nuit' })).data.title;
+  assert.equal((await owner(follow)).data.total, 2);
+  const published = (await owner(endpoint, { ...operation, version: updated.version })).data;
+  assert.ok(published.auditId);
+  assert.deepEqual((await owner(follow)).data.counts, { total: 2, open: 0 });
+  assert.equal((await owner(follow + '?state=resolved&q=' + header['X-Request-ID'])).data.items[0].auditId, published.auditId);
+  const personal = (await publisher(follow + '?state=resolved')).data.items;
+  assert.equal(personal.length, 1);
+  assert.ok(personal[0].resolvedAt);
+  assert.equal(personal[0].auditId, null);
+  // A successful action on another record cannot clear an outstanding problem.
+  for (let n = 0; n < 7; n++) {
+    const draft = (await publisher(endpoint, { ...input, titleEn: 'Record ' + n })).data.title;
+    await publisher(endpoint, { ...operation, slug: draft.slug, version: draft.version });
+  }
+  assert.equal((await owner(endpoint, { action: 'archive', slug: title.slug, version: published.title.version })).status, 200);
+  const page = (await owner(follow)).data, tail = (await owner(follow + '?page=2')).data;
+  assert.deepEqual([page.total, page.items.length, tail.items.length], [7, 6, 1]);
+  assert.equal(new Set([...page.items, ...tail.items].map((r) => r.id)).size, 7);
+  assert.equal((await owner(follow + '?q=record-2')).data.total, 1);
+  assert.equal((await owner(follow + '?state=all')).status, 400);
+  assert.equal((await owner(follow + '?page=-1')).status, 400);
+  assert.equal((await owner('admin/staff/role', { email: first.email, role: 'operator_content', publishCatalogue: false, reason: 'End test publishing shift' })).status, 200);
+  assert.equal((await publisher(follow)).status, 403);
+  assert.equal((await publisher('admin/overview')).data.publicationFollowup, null);
+  const db = new DatabaseSync(database);
+  try {
+    db.exec("INSERT INTO tenants VALUES('other','other','Other Brand','active',1); UPDATE tenant_domains SET tenant_id='other' WHERE host='localhost'");
+    assert.equal((await owner(follow, undefined, 'localhost')).status, 401);
+  } finally { db.close(); }
+});
+
+test('P1 recovery drill restores account, catalogue, saved activity, website revisions and publication receipts into a second instance', async (t) => {
+  const encryptionKey = randomBytes(32).toString('hex');
+  const source = await startSandbox(t, { encryptionKey });
+  const staff = client(source.base),
+    player = client(source.base);
+  await staff('admin/login', staffCredentials);
+  await register(player);
+  const account = (await player('account')).data;
+  const card = (await staff('admin/coming-soon', cardDraft('Neon Orchard'))).data.title;
+  const publishedCard = (
+    await staff('admin/coming-soon', { action: 'publish', slug: card.slug, version: card.version })
+  ).data;
+  const savePath = 'me/saved/' + card.id;
+  const saved = (await player(savePath, undefined, undefined, {}, 'PUT')).data;
+  assert.ok(publishedCard.auditId && saved.activityId);
+  const path = 'admin/website-content',
+    page = { kind: 'help', slug: 'saved-titles' };
+  const content = {
+    titleEn: 'Saving titles',
+    titleFr: 'Mes favoris',
+    bodyEn: 'How to save a title.',
+    bodyFr: 'Comment garder un favori.',
+    artwork: '',
+    altEn: '',
+    altFr: '',
+    linkEn: '',
+    linkFr: '',
+    target: 'title/' + card.slug
+  };
+  const draft = (await staff(path, { ...page, action: 'save', version: 0, content })).data;
+  const operation = { ...page, action: 'publish', version: draft.version };
+  const header = { 'X-Request-ID': randomUUID() };
+  const publishedPage = (await staff(path, operation, undefined, header)).data;
+  assert.ok(publishedPage.auditId);
+  const newDraft = (
+    await staff(path, {
+      ...page,
+      action: 'save',
+      version: publishedPage.version,
+      content: { ...content, titleFr: 'Brouillon privé' }
+    })
+  ).data;
+  assert.equal(newDraft.status, 'changed');
+  const events = (await staff('admin/audit')).data.events.filter((e) =>
+    [publishedCard.auditId, publishedPage.auditId].includes(e.id)
+  );
+  assert.equal(events.length, 2);
+  const root = await mkdtemp(join(tmpdir(), 'northplay-restore-drill-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const backup = join(root, 'snapshot.sqlite'),
+    restoredDirectory = join(root, 'restored');
+  const dbOp = (...args) =>
+    JSON.parse(
+      execFileSync(process.execPath, ['scripts/db-ops.js', ...args], {
+        env: { ...process.env, APP_ENV: 'development', DATA_DIR: dirname(source.database) },
+        encoding: 'utf8'
+      })
+    );
+  const snapshot = dbOp('backup', backup);
+  assert.equal(dbOp('verify', backup).sha256, snapshot.sha256);
+  assert.equal(dbOp('prepare-restore', backup, restoredDirectory).sourceSha256, snapshot.sha256);
+  assert.equal((await staff(path, { ...page, action: 'archive', version: newDraft.version })).status, 200);
+  await player(savePath, undefined, undefined, {}, 'DELETE');
+  await staff('admin/coming-soon', { action: 'archive', slug: card.slug, version: publishedCard.title.version });
+  assert.equal((await client(source.base)('help/saved-titles')).status, 404);
+  await t.test('start the restored service and verify the snapshot through its public and staff APIs', async (t) => {
+    const restored = await startSandbox(t, { dataDirectory: restoredDirectory, encryptionKey });
+    assert.equal((await (await fetch(restored.base + '/readyz')).json()).status, 'ready');
+    const owner = client(restored.base),
+      member = client(restored.base),
+      visitor = client(restored.base);
+    await owner('admin/login', staffCredentials);
+    const identity = (await member('login', playerCredentials)).data;
+    assert.equal(identity.id, account.id);
+    assert.equal(identity.emailVerified, 1);
+    const listing = (await visitor('coming-soon/' + card.slug)).data;
+    assert.deepEqual([listing.id, listing.slug], [card.id, card.slug]);
+    const restoredCard = (await owner('admin/coming-soon')).data.find((row) => row.id === card.id);
+    assert.equal(restoredCard.publishedVersion, publishedCard.title.publishedVersion);
+    assert.deepEqual(
+      (await member('me/saved')).data.titles.map((row) => row.activityId),
+      [saved.activityId]
+    );
+    assert.deepEqual((await member(savePath, undefined, undefined, {}, 'PUT')).data, saved);
+    const profile = (await owner('admin/players/' + account.id)).data;
+    assert.deepEqual(
+      profile.savedActivity.entries.map((row) => row.id),
+      [saved.activityId]
+    );
+    const publicPage = (await visitor('help/saved-titles?locale=fr-CA')).data;
+    assert.deepEqual([publicPage.revision, publicPage.title], [publishedPage.revision, 'Mes favoris']);
+    assert.match(publicPage.link.href, /\/coming-soon\/neon-orchard\?/);
+    const editorial = (await owner(path + '/help/saved-titles')).data;
+    assert.deepEqual([editorial.draftRevision, editorial.content.titleFr], [newDraft.revision, 'Brouillon privé']);
+    assert.deepEqual((await owner(path, operation, undefined, header)).data, publishedPage);
+    const restoredEvents = (await owner('admin/audit')).data.events;
+    assert.deepEqual(
+      restoredEvents.filter((e) => events.some((original) => e.id === original.id)),
+      events
+    );
+    assert.deepEqual(
+      restoredEvents.filter((e) => e.correlationId === header['X-Request-ID']).map((e) => e.id),
+      [publishedPage.auditId]
+    );
+    assert.equal((await client(source.base)('help/saved-titles')).status, 404);
+  });
 });
