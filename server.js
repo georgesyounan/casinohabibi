@@ -304,7 +304,7 @@ const communications = createCommunications(db,{fail,transaction,accountBreaks,a
     await deliverTransactionalEmail(d.email,d.subject,d.text+link,'casino-campaign-'+d.tenant+'-'+d.id);
   }
 });
-function getGrowthPreview(tenant,slug,locale){
+function publishedCataloguePreview(tenant,slug,locale){
   const config=publishedTenantConfig(tenant).config;
   if(config.enabledSections?.comingSoon===false || (locale&&!config.enabledLocales.includes(locale)))return null;
   return comingSoon.published(tenant,slug,catalogueAudience(tenant,locale));
@@ -312,7 +312,7 @@ function getGrowthPreview(tenant,slug,locale){
 function previewLanguage(tenant,slug,requested){
   const config=publishedTenantConfig(tenant).config;
   const locales=requested?[requested]:[config.primaryLocale,...config.enabledLocales.filter(l=>l!==config.primaryLocale)];
-  return locales.find(l=>getGrowthPreview(tenant,slug,l))||null;
+  return locales.find(l=>publishedCataloguePreview(tenant,slug,l))||null;
 }
 function campaignPath(tenant,path,locale){
   const [,section,slug]=path.split('/');
@@ -324,8 +324,8 @@ function campaignPath(tenant,path,locale){
   const visible=section==='coming-soon'&&previewLanguage(tenant,slug,locale);
   return visible?'/coming-soon/'+slug+'?lang='+visible.slice(0,2):null;
 }
-const growth=transaction(()=>createGrowth(db,{fail,audit:staffAudit.record,accountBreaks,getPreview:getGrowthPreview,previewLanguage}));
-const community=transaction(()=>createCommunity(db,{fail,audit:staffAudit.record,rewards,getPreview:getGrowthPreview}));
+const growth=transaction(()=>createGrowth(db,{fail,audit:staffAudit.record,accountBreaks,getPreview:publishedCataloguePreview,previewLanguage}));
+const community=transaction(()=>createCommunity(db,{fail,audit:staffAudit.record,rewards,getPreview:publishedCataloguePreview}));
 const loopbackHost=h=>['127.0.0.1','localhost','[::1]','::1'].includes(h);
 const isolatedCredits=process.env.ENABLE_TEST_CREDITS==='1' && appEnvironment!=='production' && loopbackHost(host)
   && (!publicSite || loopbackHost(publicSite.hostname)) && process.env.DEMO_CREDITS_TEST_DATA_DIR===dataDir && Boolean(process.env.DATA_DIR);
@@ -863,7 +863,7 @@ async function api(req, res, path, tenantId, requestId) {
       }
       for(const item of state.items.filter(i=>i.spec.template==='Q09')) {
         item.previews=item.spec.pair.map(id=>db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenantId,id))
-          .map(r=>r&&getGrowthPreview(tenantId,r.slug,locale)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
+          .map(r=>r&&publishedCataloguePreview(tenantId,r.slug,locale)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
       }
       return {...state,partner:Boolean(growth.owner(tenantId,player)),choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player,50,catalogueLocale)};
     },{readOnly:true});
@@ -1880,19 +1880,30 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/play') {
     if (!player) fail(401, 'signin');
-    const { game, wager, requestId, choice } = await body(req);
+    const { game, wager, requestId, choice, previewSlug, locale } = await body(req);
+    if (previewSlug !== undefined && (typeof previewSlug !== 'string' || previewSlug.length>64 ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(previewSlug) || !['fr-CA','en-CA'].includes(locale))) fail(400,'invalid');
     if (!games.some(({ id }) => id === game) || ![100, 500, 1000].includes(wager) ||
         typeof requestId !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestId) ||
         (game === 'roulette' && !['red', 'black'].includes(choice)) || (game !== 'roulette' && choice !== undefined)) fail(400, 'invalid');
     return transaction(() => {
+      req.assertPlayerSession();
       const safety = db.prepare('SELECT pause_until, cooling_off_until, excluded_at, daily_limit_cents FROM player_safety WHERE player = ?').get(player);
       if (safety?.excluded_at) fail(403, 'excluded');
       if (safety?.pause_until > Date.now()) fail(403, 'paused');
       if (safety?.cooling_off_until > Date.now()) fail(403, 'coolingOffBlocked');
       const existing = db.prepare('SELECT game, wager, amount, outcome FROM ledger WHERE player = ? AND tenant_id = ? AND request_id = ?').get(player, tenantId, requestId);
       if (existing) {
-        if (existing.game !== game || existing.wager !== wager || (game === 'roulette' && JSON.parse(existing.outcome || '{}').choice !== choice)) fail(409, 'invalid');
+        const previous = JSON.parse(existing.outcome || '{}');
+        if (existing.game !== game || existing.wager !== wager || previous.preview?.slug !== previewSlug ||
+            (game === 'roulette' && previous.choice !== choice)) fail(409, 'invalid');
         return { ...account(player, tenantId), amount: existing.amount, outcome: existing.outcome };
+      }
+      let preview;
+      if (previewSlug !== undefined) {
+        const card = publishedCataloguePreview(tenantId,previewSlug,locale);
+        if (!card || card.demoGame !== game) fail(409,'demoUnavailable');
+        preview = {slug:card.slug, titleEn:card.titleEn, titleFr:card.titleFr};
       }
       const wagered = dailyWagered(player, tenantId);
       if (wagered + wager > (safety?.daily_limit_cents ?? 2500)) fail(409, 'dailyLimit');
@@ -1904,7 +1915,7 @@ async function api(req, res, path, tenantId, requestId) {
         const redNumbers = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
         const color = number === 0 ? 'green' : redNumbers.has(number) ? 'red' : 'black';
         amount = color === choice ? wager : -wager;
-        outcome = JSON.stringify({ number, color, choice });
+        outcome = { number, color, choice };
       } else if (game === 'gold' || game === 'aurora') {
         const symbols = ['🍒', '🍋', '🍇', '🔔', '⭐', '💎'];
         const reels = Array.from({ length: 3 }, () => symbols[randomInt(symbols.length)]);
@@ -1912,7 +1923,7 @@ async function api(req, res, path, tenantId, requestId) {
         const match = Math.max(...counts.values());
         const multiplier = match === 3 ? 5 : match === 2 ? 2 : 0;
         amount = multiplier ? wager * (multiplier - 1) : -wager;
-        outcome = JSON.stringify({ reels, multiplier });
+        outcome = { reels, multiplier };
       } else if (game === 'blackjack') {
         const suits = ['♠', '♥', '♦', '♣'];
         const ranks = Array.from({ length: 13 }, (_, index) => index + 2);
@@ -1937,12 +1948,13 @@ async function api(req, res, path, tenantId, requestId) {
         const verdict = playerScore > 21 || (dealerScore <= 21 && dealerScore > playerScore) ? 'loss'
           : playerScore === dealerScore ? 'push' : 'win';
         amount = verdict === 'win' ? wager : verdict === 'loss' ? -wager : 0;
-        outcome = JSON.stringify({ playerCards: playerHand.map(label), dealerCards: dealerHand.map(label), playerScore, dealerScore, verdict });
+        outcome = { playerCards: playerHand.map(label), dealerCards: dealerHand.map(label), playerScore, dealerScore, verdict };
       } else {
         amount = randomInt(2) === 1 ? wager : -wager;
       }
-      db.prepare('INSERT INTO ledger(player, game, wager, amount, request_id, created_at, outcome, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(player, game, wager, amount, requestId, Date.now(), outcome, tenantId);
-      return { ...account(player, tenantId), amount, outcome };
+      const receipt = outcome ? JSON.stringify(preview ? { ...outcome, preview } : outcome) : null;
+      db.prepare('INSERT INTO ledger(player, game, wager, amount, request_id, created_at, outcome, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(player, game, wager, amount, requestId, Date.now(), receipt, tenantId);
+      return { ...account(player, tenantId), amount, outcome: receipt };
     });
   }
   if (route === 'POST /api/providers' || route === 'POST /api/providers/list' || route === 'POST /api/providers/audit' || route === 'POST /api/providers/catalog' || route === 'POST /api/providers/catalog/preview' || route === 'POST /api/providers/catalog/list' || route === 'POST /api/providers/catalog/status') {

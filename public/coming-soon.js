@@ -1,4 +1,4 @@
-import { catalogueCategories, collectionKey, matchesCatalogue } from './catalog.js';
+import { games, catalogueCategories, collectionKey, matchesCatalogue } from './catalog.js';
 
 export const comingSoonCopy = {
   catalogueCollection: ['Collection', 'Collection'],
@@ -19,6 +19,13 @@ export const comingSoonCopy = {
   catalogueConfirmArchive: ['Archive this preview and remove it from the public catalogue?', 'Archiver cette fiche et la retirer du catalogue public ?'],
   catalogueReload: ['Reload this preview', 'Recharger cette fiche'],
   catalogueOtherPreview: ['Another preview', 'Autre fiche à découvrir'],
+  playableDemo: ['Playable demo', 'Démo jouable'],
+  cataloguePreviewsAndDemos: ['Previews and demos', 'Aperçus et démos'],
+  openPlayableDemo: ['Play the demo', 'Jouer à la démo'],
+  demoMechanics: ['Playable demo', 'Démo jouable'],
+  noDemoGame: ['Preview only', 'Fiche seulement'],
+  invalidDemoGame: ['Choose an available demo for this category.', 'Choisissez une démo disponible dans cette catégorie.'],
+  demoUnavailable: ['This demo is no longer available here.', 'Cette démo n’est plus disponible sur cette fiche.'],
   comingSoonMarket: ['Display market (blank for all markets)', 'Marché d’affichage (vide pour tous les marchés)'],
   comingSoonLanguages: ['Show this card in', 'Afficher cette fiche en'],
   comingSoonBoth: ['English and French', 'Anglais et français'],
@@ -77,7 +84,7 @@ export const comingSoonCopy = {
 const fields = ['titleEn', 'titleFr', 'studio', 'descriptionEn', 'descriptionFr', 'altEn', 'altFr', 'collectionEn', 'collectionFr', 'category', 'featuredRank'];
 const canEdit = ['operator_admin', 'operator_content', 'operator_provider'];
 const canReviewSaves = ['operator_admin', 'operator_support'];
-export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, openPlayer, lobbyEnabled, isFrench, getFavorites, favoritePending, toggleFavorite, catalogueParams }) {
+export function createComingSoonUi({ api, t, element, action, appPath, currentRoute, openPlayer, lobbyEnabled, isFrench, getFavorites, favoritePending, toggleFavorite, catalogueParams, startDemo }) {
   const detailSlug = currentRoute.match(/^\/coming-soon\/([a-z0-9-]{1,64})$/)?.[1];
   const $ = (id) => document.getElementById(id);
   const form = $('coming-soon-form');
@@ -149,7 +156,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
 
   function card(title) {
     const info = element('div', '', 'card-info');
-    info.append(element('small', t('comingSoon'), 'catalog-label'), element('strong', titleName(title)),
+    info.append(element('small', t(title.demoGame ? 'playableDemo' : 'comingSoon'), 'catalog-label'), element('strong', titleName(title)),
       element('small', [t(title.category), title.studio, collectionName(title)].filter(Boolean).join(' · ')),
       linkTo(title, t('comingSoonOpen'), 'button ghost'));
     const node = element('article', '', 'card');
@@ -163,7 +170,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     row.querySelector('.cards').replaceChildren(...items.map(card));
   }
 
-  function renderLobby(filter, search, collection) {
+  function renderLobby(filter, search, collection, recentPreviews) {
     const collections = new Map();
     if (lobbyEnabled()) for (const title of lobby.titles) {
       if (collectionName(title)) collections.set(collectionKey(title), collectionName(title));
@@ -176,17 +183,19 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     $('catalog-collection-control').hidden = !collection && !options.length;
     if (!lobbyEnabled()) {
       $('coming-soon').hidden = true;
-      return { count: 0, available: 0, hasFavorites: false };
+      return { count: 0, playable: 0, available: 0, hasFavorites: false };
     }
     const bySlug = new Map(lobby.titles.map((title) => [title.slug, title]));
     const stars = lobby.titles.filter((title) => isFavorite(title.favoriteKey));
     const normal = filter === 'all' && !search.trim() && !collection;
     const filtered = normal ? [] : lobby.titles.filter((title) => {
-      if (filter === 'recent' || (filter === 'favorites' && !isFavorite(title.favoriteKey))) return false;
-      if (!['all', 'favorites'].includes(filter) && filter !== title.category) return false;
+      if (filter === 'recent' && (!title.demoGame || !recentPreviews.has(title.slug))) return false;
+      if (filter === 'favorites' && !isFavorite(title.favoriteKey)) return false;
+      if (!['all', 'favorites', 'recent'].includes(filter) && filter !== title.category) return false;
       return (!collection || collectionKey(title) === collection) &&
         matchesCatalogue(search, [title.titleEn, title.titleFr, title.studio, title.collectionEn, title.collectionFr], title.category);
     });
+    if (filter === 'recent') filtered.sort((a,b) => recentPreviews.get(a.slug)-recentPreviews.get(b.slug));
     if (filter === 'favorites') {
       const order = new Map([...getFavorites()].map((key, index) => [key, index]));
       filtered.sort((a, b) => order.get(b.favoriteKey) - order.get(a.favoriteKey));
@@ -196,7 +205,10 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     showRow('coming-soon-featured', normal ? lobby.featured.map((slug) => bySlug.get(slug)) : []);
     showRow('coming-soon-discover', normal ? lobby.discover.map((slug) => bySlug.get(slug)) : []);
     showRow('coming-soon-filtered', filtered);
-    return { count: normal ? lobby.titles.length : filtered.length, available: lobby.titles.length, hasFavorites: stars.length > 0 };
+    const listed = normal ? lobby.titles : filtered;
+    const playable = listed.filter(title => title.demoGame).length;
+    $('coming-soon-heading').textContent = t(playable ? 'cataloguePreviewsAndDemos' : 'comingSoon');
+    return { count: listed.length, playable, available: lobby.titles.length, hasFavorites: stars.length > 0 };
   }
 
   function detailCard(title, french, allowSave) {
@@ -204,10 +216,11 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     body.lang = french ? 'fr-CA' : 'en-CA';
     const info = element('div', '', 'coming-soon-detail-copy');
     const category = catalogueCategories[title.category];
-    info.append(element('p', french ? 'À venir' : 'Coming Soon', 'eyebrow'), element(allowSave ? 'h1' : 'h4', french ? title.titleFr : title.titleEn),
+    info.append(element('p', title.demoGame ? (french ? 'Démo jouable' : 'Playable demo') : (french ? 'À venir' : 'Coming Soon'), 'eyebrow'), element(allowSave ? 'h1' : 'h4', french ? title.titleFr : title.titleEn),
       element('p', [category[Number(french)], title.studio, french ? title.collectionFr : title.collectionEn].filter(Boolean).join(' · ')));
     const description = french ? title.descriptionFr : title.descriptionEn;
     if (description) info.append(element('p', description));
+    if (allowSave && title.demoGame) info.append(action(t('openPlayableDemo'), () => startDemo(title.demoGame, title)));
     body.append(cover(title, french, allowSave), info);
     return body;
   }
@@ -264,6 +277,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     form.reset();
     editLanguage.value = language;
     for (const name of fields) if (title) form.elements[name].value = title[name] ?? '';
+    updateDemoOptions(title?.demoGame || '');
     form.elements.cardMarket.value = title?.displayMarket || '';
     form.elements.locales.value = title?.locales.length === 1 ? title.locales[0] : 'both';
     dirty = conflict = false;
@@ -334,6 +348,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     if (refreshOnClose) void loadDrafts();
   }
   function renderAdmin() {
+    updateDemoOptions();
     if (canEdit.includes(staffRole)) {
       const browsing = form.hidden && !draftSlug;
       newButton.hidden = !browsing;
@@ -476,11 +491,19 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     }
   }
 
+  function updateDemoOptions(value = form.elements.demoGame.value) {
+    const select = form.elements.demoGame;
+    const options = games.filter(game => game.type === form.elements.category.value);
+    select.replaceChildren(new Option(t('noDemoGame'), ''), ...options.map(game => new Option(game.name[Number(isFrench())], game.id)));
+    select.value = options.some(game => game.id === value) ? value : '';
+  }
+  form.elements.category.addEventListener('change', () => updateDemoOptions());
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (saving || opening || readingArtwork || conflict) return;
     const file = form.elements.artworkFile.files[0];
     const data = Object.fromEntries(fields.map((name) => [name, form.elements[name].value]));
+    data.demoGame = form.elements.demoGame.value;
     data.displayMarket = form.elements.cardMarket.value.trim().toUpperCase();
     data.locales = form.elements.locales.value === 'both' ? ['en-CA', 'fr-CA'] : [form.elements.locales.value];
     data.featuredRank = Number(data.featuredRank);

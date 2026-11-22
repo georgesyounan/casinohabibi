@@ -346,3 +346,6 @@ dialog::backdrop{background:#090e0bd9}
 .growth-metrics dd{font-variant-numeric:tabular-nums;text-align:end;font-weight:650}
 #campaign-placement{margin:1rem 0}#campaign-placement p{margin:.35rem 0}
 .discovery-body details>summary,.admin-page details>summary{cursor:pointer}
+.demo-round-cover{display:block;width:100%;height:clamp(5rem,18vh,8.5rem);object-fit:cover;border-radius:.65rem}
+.demo-round-error:empty{display:none}
+.demo-round-error{color:var(--text);border-left:3px solid var(--gold);padding-left:.7rem}
