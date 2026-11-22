@@ -3,6 +3,8 @@ import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
+import { discoveryCopy, createDiscoveryPlayer } from './discovery.js';
+import { createDiscoveryAdmin } from './discovery-admin.js';
 import { accountBreakCopy, createBreakControls, showBreakPeriod } from './account-break.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
@@ -16,6 +18,8 @@ const copy = {
   ...comingSoonCopy,
   ...playerAccessCopy,
   ...accountBreakCopy,
+  ...discoveryCopy,
+  supportLinkedRef: ['Related reference (optional)', 'Référence liée (facultative)'],
   ...dashboardCopy,
   ...websiteContentCopy,
   ...followupCopy,
@@ -469,7 +473,7 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const auditedMutation = data !== undefined && /^(admin\/(config|website-content|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  const auditedMutation = data !== undefined && /^(admin\/(config|website-content|coming-soon|discovery\/|growth\/|community\/|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
   const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
   const publication = (path === 'admin/website-content' || path === 'admin/coming-soon') &&
     ['publish', 'archive'].includes(data?.action);
@@ -840,7 +844,10 @@ const supportCategoryCopy = { account: 'supportCategoryAccount', game: 'supportC
 const supportStatusCopy = { open: 'supportStatusOpen', answered: 'supportStatusAnswered', closed: 'supportStatusClosed' };
 const supportPriorityCopy = { low: 'supportPriorityLow', normal: 'supportPriorityNormal', high: 'supportPriorityHigh', urgent: 'supportPriorityUrgent' };
 
-async function openSupportCenter() {
+let supportReference='';
+let afterSignIn;
+async function openSupportCenter(reference) {
+  supportReference=typeof reference==='string'?reference:'';
   try {
     player.supportTickets = await api('support', undefined, 'GET');
     player.supportReplies = 0;
@@ -912,7 +919,8 @@ function renderDialog() {
       language = publicLanguage(auth.preferredLocale);
       if (publicLocales.includes(auth.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
-      openPanel(selectedGame ? 'play' : 'account');
+      openPanel(afterSignIn || (selectedGame ? 'play' : 'account'));
+      afterSignIn=undefined;
     }), action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
     if (!signup) {
       panel.append(action(t('passwordReset'), () => openPanel('passwordReset'), 'ghost'));
@@ -1013,7 +1021,14 @@ function renderDialog() {
     panel.append(action(t('signin'), () => { history.replaceState(null, '', location.pathname); openPanel('signin'); }, 'ghost'));
     return;
   }
+  if (screen === 'discovery') {
+    const content=element('div');
+    panel.append(content);
+    void discoveryPlayer.render(content,player.id);
+    return;
+  }
   if (screen === 'account') {
+    panel.append(action(t('discovery'),()=>openPanel('discovery'),'ghost'));
     breakControls = createBreakControls({
       element, t, locale: language ? 'fr-CA' : 'en-CA', period: player.safety.accountBreak,
       browseHref: appPath('/') + '#games',
@@ -1140,8 +1155,11 @@ function renderDialog() {
     const message = element('textarea');
     Object.assign(message, { name: 'message', required: true, minLength: 10, maxLength: 3000, rows: 5 });
     messageLabel.append(message);
-    panel.append(submitForm([categoryLabel, messageLabel], t('supportSend'), async ({ category: ticketCategory, message: ticketMessage }) => {
-      await api('support', { category: ticketCategory, message: ticketMessage });
+    const ref=field('reference','text',t('supportLinkedRef'),'off');
+    const refInput=ref.querySelector('input');refInput.required=false;refInput.value=supportReference;refInput.placeholder='claim-…, save-…, activity-…';
+    panel.append(submitForm([categoryLabel, messageLabel, ref], t('supportSend'), async ({ category: ticketCategory, message: ticketMessage,reference }) => {
+      await api('support', { category: ticketCategory, message: ticketMessage,reference:reference.trim() });
+      supportReference='';
       player.supportTickets = await api('support', undefined, 'GET');
       dialogError = undefined;
       renderDialog();
@@ -1646,7 +1664,13 @@ const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute
 const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale, brand: () => tenantBrandName,
   canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
 
+const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter});
+const discoveryAdmin=createDiscoveryAdmin({api,t,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
+  openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
 const adminLoaders = {
+  'engagement-programs':()=>discoveryAdmin.load('programs'),
+  'engagement-campaigns':()=>discoveryAdmin.load('campaigns'),
+  'engagement-report':()=>discoveryAdmin.load('report'),
   'website-editorial': websiteEditor.load,
   overview: () => refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); }),
   'coming-soon-admin': comingSoonUi.loadDrafts,
@@ -1710,7 +1734,11 @@ function render() {
   renderCatalog();
   if (favoriteStatusKey) announceFavorite(favoriteStatusKey, favoriteActivityId);
   comingSoonUi.renderAdmin();
-  if (languageChanged) playerAccessUi.render();
+  if (languageChanged) {
+    playerAccessUi.render();
+    const current=document.querySelector('#engagement:not([hidden]) [data-admin-panel]:not([hidden])');
+    if(current)void adminLoaders[current.id]?.();
+  }
   updateCatalogPreview();
   if (supportInboxEntries) renderSupportInbox();
   if ($('#dialog').open) renderDialog();
@@ -1767,6 +1795,10 @@ $('#language').addEventListener('click', async () => {
       history.replaceState(null, '', url);
     }
   }
+});
+$('#open-discovery').addEventListener('click',()=>{
+  if(!player)afterSignIn='discovery';
+  openPanel(player?'discovery':'signin');
 });
 $('#account').addEventListener('click', () => {
   selectedGame = undefined;
@@ -2521,6 +2553,7 @@ function renderSupportInbox() {
       } else if (!ticket.playerExcludedAt) context.append(element('p', t('supportPlayerNoActiveRestriction')));
       article.append(context);
     }
+    if(ticket.reference)article.append(action(ticket.reference,()=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(ticket.playerId);},'ghost'));
     article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
     article.append(element('h4', t('supportThread')));
     for (const message of supportThreadEntries(ticket)) {

@@ -1,0 +1,170 @@
+export const discoveryCopy={
+  discovery:['Discovery & rewards','Découverte et récompenses'],discoveryAdmin:['Quests & rewards','Quêtes et récompenses'],
+  campaignAdmin:['Communications','Communications'],discoveryReports:['Reward reports','Rapports de récompenses'],
+  discoveryMissing:['This record is unavailable.','Cette fiche est indisponible.'],discoveryConflict:['This record changed. Reopen it to use the current version.','Cette fiche a changé. Rouvrez-la pour utiliser la version actuelle.'],
+  discoveryPaused:['Your account is on a break.','Votre compte est en pause.'],discoveryClosed:['This quest is outside its participation window.','La période de participation à cette quête est fermée.'],
+  discoveryExpired:['The claim deadline has passed.','La date limite est passée.'],discoveryUnowned:['Claim this cosmetic to equip it.','Réclamez cet article pour l’équiper.'],
+  campaignLocked:['A scheduled campaign can be cancelled. Create a new draft to change its message.','Une campagne planifiée peut être annulée. Créez un brouillon pour modifier le message.'],
+  scheduleAmbiguous:['Choose a valid local time outside the daylight-saving transition.','Choisissez une heure locale valide hors du changement d’heure.']
+};
+export function uiKit(french) {
+  const l=(en,fr)=>french()?fr:en;
+  const el=(tag,text='',cls='')=>{const n=document.createElement(tag);if(text!=='')n.textContent=text;if(cls)n.className=cls;return n;};
+  function button(text,fn,secondary=false){const b=el('button',text,secondary?'ghost':'');b.type='button';b.addEventListener('click',fn);return b;}
+  function field(form,name,title,options={}) {
+    const label=el('label',title), input=el(options.items?'select':options.multiline?'textarea':'input');
+    input.name=name;
+    if(options.items) for(const [value,text] of options.items){const o=el('option',text);o.value=value;input.append(o);}
+    else if(!options.multiline) input.type=options.type||'text';
+    if(options.value!=null) input.value=options.value;
+    for(const key of ['required','min','max','maxLength','placeholder']) if(options[key]!==undefined) input[key]=options[key];
+    label.append(input);form.append(label);return input;
+  }
+  function pages(root,items,draw,empty,size=6) {
+    let page=0;
+    function render(){
+      root.replaceChildren();
+      for(const item of items.slice(page*size,(page+1)*size)) root.append(draw(item));
+      if(!items.length) root.append(el('p',empty,'muted'));
+      if(items.length<=size) return;
+      const nav=el('div','','discovery-actions');
+      const prev=button(l('Previous','Précédent'),()=>{page--;render();},true), next=button(l('Next','Suivant'),()=>{page++;render();},true);
+      prev.disabled=page===0;next.disabled=(page+1)*size>=items.length;
+      nav.append(prev,el('span',`${page+1} / ${Math.ceil(items.length/size)}`),next);root.append(nav);
+    }
+    render();
+  }
+  function tabs(root,names,active,change){
+    const nav=el('nav','','discovery-tabs');nav.setAttribute('aria-label',l('Sections','Rubriques'));
+    for(const [key,label] of names){const b=button(label,()=>change(key),true);if(key===active)b.setAttribute('aria-current','page');nav.append(b);}
+    root.append(nav);
+  }
+  const date=time=>new Intl.DateTimeFormat(french()?'fr-CA':'en-CA',{dateStyle:'medium',timeStyle:'short'}).format(time);
+  const local=(obj,key)=>obj[key+(french()?'Fr':'En')];
+  return {l,el,button,field,pages,tabs,date,local};
+}
+export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensions={}}) {
+  const u=uiKit(french),{l,el,button,pages,tabs,date,local}=u;
+  let selected='quests',generation=0,activePlayer;
+  const labels=()=>({available:l('Open to join','Inscription ouverte'),enrolled:l('In progress','En cours'),claimable:l('Ready to claim','À réclamer'),
+    claimed:l('Claimed','Réclamée'),archived:l('Archived','Archivée'),scheduled:l('Upcoming','À venir'),expired:l('Expired','Expirée'),
+    soldOut:l('All items claimed','Stock épuisé'),paused:l('Account break','Compte en pause')});
+  const names=()=>({collections:l('Collections','Collections'),rewards:l('Rewards','Récompenses'),announcements:l('Site news','Nouvelles du site')});
+  const slots=()=>({badge:l('Badge','Badge'),theme:l('Theme','Thème'),frame:l('Frame','Cadre')});
+  const tasks=()=>({Q01:l('Save three different Coming Soon previews.','Ajoutez trois fiches « À venir » différentes à vos favoris.'),
+    Q02:l('Read the guide, then save a preview from its collection.','Lisez le guide, puis ajoutez une fiche de sa collection aux favoris.'),
+    Q03:l('Acknowledge the guide and open your saved shelf.','Confirmez la lecture du guide et ouvrez vos favoris.'),
+    Q04:l('Open three different Coming Soon previews.','Ouvrez trois fiches « À venir » différentes.'),
+    Q05:l('Vote on an editorial theme, then view its result.','Votez sur un thème éditorial et consultez le résultat.'),
+    Q06:l('Visit both seasonal collections and read their recap.','Visitez les deux collections saisonnières et consultez le bilan.'),
+    Q07:l('Join a shared list and contribute a preview.','Rejoignez une liste partagée et ajoutez une fiche.'),
+    Q08:l('Open one of your saved activities and acknowledge its reference.','Ouvrez une activité de vos favoris et confirmez sa référence.'),
+    Q09:l('Open both previews in the featured pair.','Ouvrez les deux fiches du duo sélectionné.')});
+  function cosmetic(s){const n=el('span',local(s,'item'),'cosmetic cosmetic-'+s.color+' cosmetic-'+s.slot);n.title=slots()[s.slot];return n;}
+  async function render(root,playerId) {
+    if(playerId!==activePlayer){selected='quests';activePlayer=playerId;}
+    const gen=++generation;
+    root.replaceChildren(el('p',l('Loading…','Chargement…')));
+    let data;
+    try{data=await api('discovery',undefined,'GET');}catch(e){if(gen===generation)root.replaceChildren(el('p',t(e.message)));return;}
+    if(gen!==generation||!root.isConnected)return;
+    const message=el('p','','discovery-feedback');message.setAttribute('role','status');
+    let busy=false;
+    async function run(fn,confirmation=''){
+      if(busy)return;busy=true;
+      try{await fn();await render(root,playerId);if(confirmation&&root.isConnected)root.querySelector('.discovery-feedback').textContent=confirmation;}
+      catch(e){message.textContent=t(e.message);}finally{busy=false;}
+    }
+    function select(k){selected=k;render(root,playerId);}
+    const tabNames=[['quests',l('Quests','Quêtes')],['rewards',l('Rewards','Récompenses')],['profile',l('My profile','Mon profil')],['inbox',l('Inbox','Messages')],['preferences',l('Contact preferences','Préférences')]];
+    if(extensions.community)tabNames.push(['community',l('Shared lists','Listes partagées')]);
+    root.replaceChildren();tabs(root,tabNames,selected,select);root.append(message);
+    const body=el('div','','discovery-body');root.append(body);
+    if(selected==='community'){await extensions.community(body,playerId);return;}
+    const link=(label,path)=>{const a=el('a',label,'discovery-link');a.href=appPath(path);return a;};
+    const post=(p,x)=>api('discovery/'+p,x);
+    function card(item) {
+      const {spec:s,award}=item,card=el('article','','discovery-card'),header=el('div','','discovery-line');
+      header.append(el('h3',local(s,'title')),el('span',labels()[item.state],'discovery-state'));card.append(header,cosmetic(s));
+      if(selected==='quests'){
+        card.append(el('p',tasks()[s.template]));
+        const progress=el('progress');progress.value=item.marks.length;progress.max=item.goal;progress.setAttribute('aria-label',l('Quest progress','Progression'));
+        card.append(progress,el('small',`${item.marks.length} / ${item.goal}`));
+        if(item.state==='available')card.append(button(l('Join quest','Participer'),()=>run(()=>post('join',{id:item.id}))));
+        if(item.state==='enrolled'){
+          if(['Q02','Q03','Q06'].includes(s.template))card.append(link(l('Open guide','Ouvrir le guide'),'/help/'+s.target+'?lang='+ (french()?'fr':'en')));
+          if(s.template==='Q03'){
+            card.append(button(l('I read the guide','J’ai lu le guide'),()=>run(()=>post('visit',{kind:'guideAck',key:s.target})),true));
+            card.append(button(l('Open saved shelf','Ouvrir mes favoris'),()=>run(async()=>{await post('visit',{kind:'shelf'});location.href=appPath('/?category=favorites#games');}),true));
+          }else if(s.template==='Q08')card.append(button(l('My recent saves','Mes derniers favoris'),async()=>{
+            try{const history=await api('discovery/activity',undefined,'GET');const list=el('div');card.append(list);
+              pages(list,history.entries,r=>button(r.slug+' · activity-'+r.id,async()=>{
+                try{await post('visit',{kind:'activity',key:r.id});list.replaceChildren(el('p',r.slug+' · '+date(r.createdAt)+' · activity-'+r.id),
+                  button(l('Confirm this reference','Confirmer cette référence'),()=>run(()=>post('visit',{kind:'activityAck',key:r.id}))));}catch(e){message.textContent=t(e.message);}
+              },true),l('No saved activity.','Aucune activité de favoris.'));
+            }catch(e){message.textContent=t(e.message);}
+          },true));
+          else if(['Q05','Q07'].includes(s.template)&&extensions.community)card.append(button(l('Open shared lists','Ouvrir les listes partagées'),()=>select('community'),true));
+          else if(s.template==='Q06')for(const key of s.collection.split('|').map(x=>x.trim())){
+            card.append(button(key,()=>run(async()=>{await post('visit',{kind:'collection',key});location.href=appPath('/?collection='+encodeURIComponent(key)+'#games');}),true));
+          }else if(s.template==='Q09' && item.previews)for(const preview of item.previews)card.append(link(local(preview,'title'),'/coming-soon/'+preview.slug+'?lang='+(french()?'fr':'en')));
+          else card.append(link(l('Browse catalogue','Voir le catalogue'),'/'+'#games'));
+        }
+        if(award)card.append(el('small',l('Completion','Quête terminée')+' · grant-'+award.grantId+' · '+date(award.grantedAt)));
+      }
+      if(selected==='rewards'){
+        if(item.goal && !award)card.append(el('p',`${tasks()[s.template]} (${item.marks.length}/${item.goal})`));
+        card.append(el('small',item.available===null?l('Unlimited stock','Stock illimité'):l('Available','Disponibles')+' · '+item.available));
+      }
+      if(item.state==='scheduled')card.append(el('small',l('Opens','Ouverture')+' · '+date(s.startsAt)));
+      if(s.claimUntil)card.append(el('small',l('Claim by','À réclamer avant le')+' '+date(s.claimUntil)));
+      if(item.state==='paused'&&data.pause)card.append(el('small',l('Available again after','Accessible après le')+' '+date(data.pause.endsAt)));
+      if(item.state==='claimable')card.append(button(l('Claim reward','Réclamer'),()=>run(()=>post('claim',{ids:[item.id]}))));
+      if(award?.claimId){
+        card.append(el('small','claim-'+award.claimId+' · '+date(award.claimedAt)));
+        card.append(button(l('Contact support','Contacter le soutien'),()=>openSupport('claim-'+award.claimId),true));
+      }
+      if(selected==='profile'&&award?.claimId){
+        const equipped=data.equipped[s.slot]===award.claimId;
+        card.append(button(equipped?l('Remove','Retirer'):l('Equip','Équiper'),()=>run(()=>post('equip',{slot:s.slot,claimId:equipped?null:award.claimId})),equipped));
+      }
+      return card;
+    }
+    if(selected==='quests'||selected==='rewards'||selected==='profile'){
+      if(selected==='profile'){
+        const display=el('div','','cosmetic-profile');display.append(el('h3',l('Equipped items','Articles équipés')));
+        const worn=data.items.filter(i=>i.award?.claimId && data.equipped[i.spec.slot]===i.award.claimId);
+        for(const i of worn){display.append(cosmetic(i.spec));if(i.spec.slot==='theme')display.classList.add('profile-'+i.spec.color);}
+        if(!worn.length)display.append(el('p',l('No items equipped.','Aucun article équipé.')));body.append(display);
+      }
+      if(selected==='rewards'){
+        const ready=data.items.filter(i=>i.state==='claimable').slice(0,30);
+        if(ready.length>1)body.append(button(l('Claim available items','Réclamer les articles disponibles')+' ('+ready.length+')',()=>run(()=>post('claim',{ids:ready.map(i=>i.id)}))));
+      }
+      const list=el('div');body.append(list);
+      const items=data.items.filter(i=>selected==='profile'?i.award?.claimId:selected==='quests'?i.spec.template!=='offer':true);
+      pages(list,items,card,l('No items here yet.','Aucun article pour le moment.'));return;
+    }
+    if(selected==='inbox'){
+      const items=[...data.messages.map(m=>({...m,at:m.deliveredAt})),...data.items.filter(i=>i.award?.claimId).map(i=>({at:i.award.claimedAt,item:i}))].sort((a,b)=>b.at-a.at);
+      pages(body,items,m=>{
+        const n=el('article','','discovery-card');
+        if(m.item){n.append(el('h3',l('Reward receipt','Reçu de récompense')),cosmetic(m.item.spec),el('small','claim-'+m.item.award.claimId+' · '+date(m.at)));return n;}
+        n.append(el('h3',local(m,'subject')),el('p',local(m,'text')),el('small',date(m.at)));
+        if(m.destination)n.append(link(l('View','Consulter'),m.destination));
+        if(!m.readAt)n.append(button(l('Mark as read','Marquer comme lu'),()=>run(()=>post('read',{id:m.id})),true));return n;
+      },l('No messages yet.','Aucun message pour le moment.'));return;
+    }
+    for(const [topic,name] of Object.entries(names())){
+      const section=el('section','','discovery-card');section.append(el('h3',name));
+      for(const c of data.choices.filter(c=>c.topic===topic)){
+        const label=el('label','','discovery-choice'),input=el('input');input.type='checkbox';input.checked=c.granted;
+        label.append(input,document.createTextNode(c.channel==='email'?l('Email','Courriel'):l('Inbox','Messagerie du site')));section.append(label);
+        input.addEventListener('change',()=>run(()=>post('preferences',{...c,granted:input.checked}),l('Preference saved.','Préférence enregistrée.')));
+        if(c.granted){const paused=c.pauseUntil>Date.now();section.append(button(paused?l('Resume','Reprendre'):l('Pause for 7 days','Suspendre pour 7 jours'),()=>run(()=>post('preferences',{...c,pauseUntil:paused?0:Date.now()+7*86400_000})),true));}
+      }
+      body.append(section);
+    }
+  }
+  return {render,openTab(k){selected=k;}};
+}

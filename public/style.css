@@ -318,3 +318,25 @@ dialog::backdrop{background:#090e0bd9}
   .site-content-card > div { width: 100%; }
   .site-content-card > img { width: 100%; max-height: 16rem; }
 }
+
+.discovery-launch{margin:.25rem 0 1rem}
+.discovery-tabs,.discovery-actions,.discovery-line{display:flex;align-items:center;flex-wrap:wrap;gap:.45rem .75rem}
+.discovery-tabs{margin:.7rem 0 1rem;border-bottom:1px solid var(--line);padding-bottom:.65rem}
+.discovery-tabs button,.discovery-tabs a{padding:.45rem .7rem}
+.discovery-tabs [aria-current=page]{border:1px solid var(--green);color:var(--green)}
+.discovery-body,.discovery-editor,.discovery-filters{display:grid;gap:.65rem}
+.discovery-card,.cosmetic-profile{margin:.6rem 0;padding:.9rem 1rem;border:1px solid var(--line);border-radius:.7rem}
+.discovery-card h3,.discovery-card h4,.discovery-card p{margin:.2rem 0 .5rem}
+.discovery-card small,.discovery-card progress{display:block;margin:.4rem 0;color:var(--muted)}
+.discovery-card progress{max-width:100%;accent-color:var(--green)}
+.discovery-card button,.discovery-card a,.cosmetic{margin:.22rem .4rem .22rem 0}
+.discovery-line{justify-content:space-between}.discovery-state{color:var(--muted);font-size:.85em}
+.discovery-link{text-decoration:underline;text-underline-offset:.2em}
+.cosmetic{display:inline-block;padding:.22rem .65rem;border:1px solid currentColor;border-radius:.4rem;font-weight:650}
+.cosmetic-gold,.profile-gold{color:#ffe6a3;background:#473a1c}.cosmetic-forest,.profile-forest{color:#cef2cc;background:#203f31}.cosmetic-ocean,.profile-ocean{color:#ccecff;background:#203f52}.cosmetic-plum,.profile-plum{color:#f8ddff;background:#49344d}
+.discovery-editor{max-width:44rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))}
+.discovery-editor label,.discovery-filters label{display:grid;min-width:0;gap:.2rem}
+.discovery-editor details,.discovery-editor button{grid-column:1/-1}
+.discovery-filters{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))}
+.discovery-choice{display:flex;gap:.5rem;align-items:center;margin:.35rem 0}.discovery-choice input{width:auto}
+.discovery-feedback:empty{display:none}.discovery-feedback{color:var(--green)}.discovery-body a:focus-visible,.discovery-tabs a:focus-visible{outline:2px solid var(--green);outline-offset:2px}
