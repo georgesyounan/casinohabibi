@@ -1,3 +1,5 @@
+import { showBreakPeriod } from './account-break.js';
+
 export const playerAccessCopy = {
   playerSearchLabel: ['Email, player ID, save or activity reference', 'Courriel, numéro de joueur, référence de favori ou d’activité'],
   playerFavoriteHistory: ['Favorite activity', 'Historique des favoris'],
@@ -50,6 +52,33 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
   let message = '';
   let searched = false;
   let activityQuery = '';
+  let breakTimer;
+  let breakRequest = 0;
+
+  function renderBreak() {
+    const period = byId('player-record-break');
+    period.hidden = !player.accountBreak;
+    showBreakPeriod(period, player.accountBreak, t, locale());
+  }
+  async function refreshBreak() {
+    if (!player || document.hidden || !record.getClientRects().length) return;
+    const id = player.id;
+    const request = ++breakRequest;
+    try {
+      const { accountBreak } = await api('admin/players/' + id + '/break', undefined, 'GET');
+      if (request !== breakRequest || player?.id !== id) return;
+      if (player.accountBreak?.endsAt === accountBreak?.endsAt && player.accountBreak?.startedAt === accountBreak?.startedAt) return;
+      player.accountBreak = accountBreak;
+      renderBreak();
+    } catch (error) {
+      if (request === breakRequest && ['staffAuth', 'staffForbidden', 'playerNotFound'].includes(error.message)) {
+        resetRecord();
+        render();
+      }
+    }
+  }
+  window.addEventListener('focus', refreshBreak);
+  document.addEventListener('visibilitychange', refreshBreak);
 
   function render() {
     byId('player-search-status').textContent = searched
@@ -65,6 +94,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-record-title').textContent = player.email;
     byId('player-record-summary').textContent = ['player-' + player.id, t(suspended ? 'playerSuspendedState' : 'playerActive'),
       t(player.emailVerified ? 'playerVerified' : 'playerUnverified'), t('playerSessions') + ' · ' + player.activeSessions].join('　|　');
+    renderBreak();
     const actions = byId('player-record-actions');
     actions.replaceChildren();
     if (!suspended) actions.append(action(t('playerSendRecovery'), () => change('recovery'), 'ghost'));
@@ -80,7 +110,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-favorite-events').replaceChildren(...(entries.length ? entries.map((event) => {
       const row = element('li');
       row.append(element('strong', t(event.action === 'save' ? 'playerAddedFavorite' : 'playerRemovedFavorite') + ' · ' + event.slug),
-        element('small', ['activity-' + event.id, 'save-' + event.saveId, new Date(event.createdAt).toLocaleString(locale())].join(' · ')));
+        element('small', ['activity-' + event.id, 'save-' + event.saveId, new Date(event.createdAt).toLocaleString(locale()), event.duringAccountBreak && t('breakDuringSave')].filter(Boolean).join(' · ')));
       return row;
     }) : [element('li', t('playerNoFavorites'))]));
     byId('player-more-activity').hidden = !nextCursor;
@@ -93,6 +123,8 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
   }
 
   function resetRecord() {
+    ++breakRequest;
+    clearInterval(breakTimer);
     ++operation;
     player = undefined;
     message = '';
@@ -111,6 +143,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
       const result = await api('admin/players/' + id + activityQuery, undefined, 'GET');
       if (current !== generation) return;
       player = result;
+      breakTimer = setInterval(refreshBreak, 15_000);
       byId('player-activity-details').open = Boolean(activityQuery);
       render();
       byId('player-record-title').focus();

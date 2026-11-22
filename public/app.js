@@ -3,6 +3,7 @@ import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
+import { accountBreakCopy, createBreakControls, showBreakPeriod } from './account-break.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
@@ -14,6 +15,7 @@ const isAdminPage = currentRoute === '/admin';
 const copy = {
   ...comingSoonCopy,
   ...playerAccessCopy,
+  ...accountBreakCopy,
   ...dashboardCopy,
   ...websiteContentCopy,
   ...followupCopy,
@@ -44,7 +46,7 @@ const copy = {
   safetyIntro: ['These controls apply to simulated play only. This prototype does not accept deposits or withdrawals.', 'Ces contrôles s’appliquent uniquement au jeu simulé. Ce prototype n’accepte ni dépôts ni retraits.'],
   safetyCta: ['Sign in for account controls', 'Connectez-vous pour accéder aux contrôles'],
   accountControls: ['Open my account controls', 'Ouvrir les contrôles de mon compte'],
-  breakTitle: ['Take a pause', 'Faites une pause'], breakText: ['Pause demo play for 15 minutes from your account.', 'Mettez le jeu de démonstration en pause pendant 15 minutes depuis votre compte.'],
+  breakTitle: ['Take a pause', 'Faites une pause'], breakText: ['Choose a break from 15 minutes to 30 days in your account.', 'Choisissez une pause de 15 minutes à 30 jours dans votre compte.'],
   limitTitle: ['Set a demo limit', 'Fixez une limite fictive'], limitText: ['Choose a daily cap for simulated wagers. The limit can only be lowered.', 'Choisissez une limite quotidienne de mises fictives. Vous pouvez seulement la réduire.'],
   excludeTitle: ['Exclude your account', 'Excluez votre compte'], excludeText: ['Self-exclusion blocks future sign-ins to this demo account and cannot be undone here.', 'L’autoexclusion bloque les prochaines connexions à ce compte de démonstration et ne peut pas être annulée ici.'],
   helpEyebrow: ['Good to know', 'À retenir'], faqTitle: ['Frequently asked questions', 'Questions fréquentes'],
@@ -158,7 +160,7 @@ const copy = {
   supportTickets: ['Your requests', 'Vos demandes'], supportNoTickets: ['You have no support requests yet.', 'Vous n’avez pas encore de demandes de soutien.'], supportReference: ['Reference', 'Référence'], supportCreated: ['Opened', 'Ouverte'], supportLastUpdated: ['Last updated', 'Dernière mise à jour'], supportReply: ['Reply', 'Répondre'], supportReplyLabel: ['Response', 'Réponse'], supportReplyPlaceholder: ['Write a reply for the player', 'Rédigez une réponse au joueur'], supportRateLimited: ['You have sent several requests recently. Please try again later.', 'Vous avez envoyé plusieurs demandes récemment. Veuillez réessayer plus tard.'],
   supportNewReplies: ['New support replies ({count})', 'Réponses de soutien non lues ({count})'], supportUnreadLabel: ['You have {count} unread support replies.', 'Vous avez {count} réponses de soutien non lues.'],
   supportInbox: ['Support inbox', 'Boîte de soutien'], supportInboxHelp: ['Review requests and formal complaints, then reply in English or French.', 'Consultez les demandes et les plaintes officielles, puis répondez en anglais ou en français.'], supportRefresh: ['Refresh inbox', 'Actualiser la boîte'], supportNoInbox: ['There are no support requests.', 'Il n’y a aucune demande de soutien.'], supportSaved: ['Support reply saved.', 'La réponse de soutien a été enregistrée.'], supportConflict: ['This request changed since it was loaded. The inbox was refreshed; review the latest details before trying again.', 'Cette demande a changé depuis son chargement. La boîte a été actualisée; vérifiez les détails les plus récents avant de réessayer.'],
-  supportPlayerProtectionContext: ['Relevant player protection controls', 'Mesures de protection pertinentes du compte'], supportPlayerExcluded: ['The account is self-excluded.', 'Le compte est en autoexclusion.'], supportPlayerCoolingOffUntil: ['Cooling-off period active until {date}.', 'Suspension temporaire en cours jusqu’au {date}.'], supportPlayerPauseUntil: ['Play break active until {date}.', 'Pause de jeu en cours jusqu’à {date}.'], supportPlayerNoActiveRestriction: ['No active pause, cooling-off period, or self-exclusion is recorded.', 'Aucune pause, suspension temporaire ou autoexclusion n’est active actuellement.'],
+  supportPlayerProtectionContext: ['Relevant player protection controls', 'Mesures de protection pertinentes du compte'], supportPlayerExcluded: ['The account is self-excluded.', 'Le compte est en autoexclusion.'], supportPlayerNoActiveRestriction: ['No active pause, cooling-off period, or self-exclusion is recorded.', 'Aucune pause, suspension temporaire ou autoexclusion n’est active actuellement.'],
   supportCloseNoReply: ['Close without reply', 'Fermer sans répondre'], supportConfirmClose: ['Close this request without sending a reply?', 'Fermer cette demande sans envoyer de réponse?'], supportClosedNoReply: ['Request closed without sending a reply.', 'La demande a été fermée sans réponse.'],
   supportInternalNotes: ['Internal staff notes', 'Notes internes du personnel'], supportNoNotes: ['No internal notes yet.', 'Aucune note interne pour le moment.'], supportNotePlaceholder: ['Add information for other support staff (up to 2,000 characters)', 'Ajoutez une information pour l’équipe de soutien (2 000 caractères maximum)'], supportAddNote: ['Add internal note', 'Ajouter une note interne'], supportNoteSaved: ['Internal note added.', 'La note interne a été ajoutée.'],
   supportAssignedTo: ['Assigned to', 'Attribuée à'], supportUnassigned: ['Unassigned', 'Non attribuée'], supportAssign: ['Assign ticket', 'Attribuer la demande'], supportAssignmentSaved: ['Ticket assignment saved.', 'L’attribution de la demande a été enregistrée.'],
@@ -265,7 +267,7 @@ const copy = {
   balance: ['Your simulated balance is too low for this wager.', 'Votre solde fictif est insuffisant pour cette mise.'],
   adminDisabled: ['Admin setup is not loaded. Confirm .env is next to package.json, stop any old server on port 3000, then restart Start Northplay Demo.bat.', 'La configuration d’administration n’a pas été chargée. Vérifiez que .env se trouve à côté de package.json, arrêtez toute ancienne instance sur le port 3000, puis relancez Start Northplay Demo.bat.'],
   tenantUnknown: ['This casino address is not configured.', 'Cette adresse de casino n’est pas configurée.'],
-  safety: ['Play controls', 'Contrôles de jeu'], pause: ['Take a 15 minute break', 'Faire une pause de 15 minutes'],
+  safety: ['Play controls', 'Contrôles de jeu'],
   exclude: ['Self-exclude this account', 'M’autoexclure de ce compte'],
   paused: ['Play is paused for 15 minutes.', 'Le jeu est suspendu pendant 15 minutes.'],
   excluded: ['This account is self-excluded and cannot sign in or play.', 'Ce compte est autoexclu et ne peut pas ouvrir une session ni jouer.'],
@@ -276,10 +278,8 @@ const copy = {
   reminder30: ['Every 30 minutes', 'Toutes les 30 minutes'], reminder60: ['Every 60 minutes', 'Toutes les 60 minutes'], reminder120: ['Every 120 minutes', 'Toutes les 120 minutes'],
   saveReminder: ['Save reminder frequency', 'Enregistrer la fréquence des rappels'],
   dailyLimit: ['You have reached your daily demo wager limit.', 'Vous avez atteint votre limite quotidienne de mises fictives.'],
-  pauseActive: ['Play is paused until', 'Le jeu est suspendu jusqu’à'],
   sessionReminder: ['You have been playing this demo for {minutes} minutes. Consider taking a break.', 'Vous jouez à cette démo depuis {minutes} minutes. Pensez à faire une pause.'], sessionReminderAcknowledge: ['Acknowledge', 'Compris'],
-  coolingOff: ['Take a cooling-off period', 'Suspendre temporairement le jeu'], coolingOffHelp: ['Choose 1, 7, or 30 days without demo play. An active period can be extended but not shortened.', 'Choisissez une suspension du jeu de démonstration de 1, 7 ou 30 jours. Vous pouvez prolonger une période active, mais pas la raccourcir.'], coolingOffOne: ['1 day', '1 jour'], coolingOffSeven: ['7 days', '7 jours'], coolingOffThirty: ['30 days', '30 jours'], coolingOffConfirm: ['Start or extend this cooling-off period? It cannot be shortened after it begins.', 'Commencer ou prolonger cette suspension temporaire? Elle ne pourra pas être raccourcie une fois commencée.'], coolingOffSet: ['Demo play is paused until', 'Le jeu de démonstration est suspendu jusqu’au'], coolingOffActive: ['Your cooling-off period is active until', 'La suspension temporaire du jeu est en vigueur jusqu’au'],
-  coolingOffTitle: ['Cooling-off period', 'Suspension temporaire du jeu'],
+  coolingOffOne: ['1 day', '1 jour'], coolingOffSeven: ['7 days', '7 jours'], coolingOffThirty: ['30 days', '30 jours'],
   coolingOffBlocked: ['Demo play is unavailable during your cooling-off period.', 'Le jeu de démonstration est indisponible pendant la suspension temporaire.'],
   unavailable: ['The service is temporarily unavailable.', 'Le service est temporairement indisponible.']
 };
@@ -474,7 +474,8 @@ async function api(path, data, method = 'POST') {
   const publication = (path === 'admin/website-content' || path === 'admin/coming-soon') &&
     ['publish', 'archive'].includes(data?.action);
   let attempt;
-  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) {
+  const startingBreak = path === 'safety/pause' || path === 'safety/cooling-off';
+  if ((auditedMutation || savingPreview || startingBreak) && globalThis.crypto?.randomUUID) {
     if (publication) {
       const signature = JSON.stringify([data.kind, data.slug, data.action, data.version]);
       attempt = pendingPublications.get(path);
@@ -520,9 +521,9 @@ function applyTenant(config) {
   const publicFaq = config.enabledSections?.faq ?? true;
   $('#faq').hidden = !publicFaq;
   for (const link of document.querySelectorAll('a[href$="#faq"]')) link.hidden = !publicFaq;
-  const onlyGuideTranslation = publicWebsite.isHelp && document.querySelector('link[rel="canonical"]') &&
+  const onlyTranslation = (publicWebsite.isHelp || comingSoonUi.isDetail) && document.querySelector('link[rel="canonical"]') &&
     document.querySelectorAll('link[rel="alternate"][hreflang]').length < 2;
-  $('#language').hidden = !isAdminPage && (publicLocales.length < 2 || onlyGuideTranslation);
+  $('#language').hidden = !isAdminPage && (publicLocales.length < 2 || onlyTranslation);
   if (!isAdminPage) {
     const preferred = localStorage.getItem('northplay-language');
     language = publicLanguage(preferred ? (preferred === 'fr' ? 'fr-CA' : 'en-CA') : primaryPublicLocale);
@@ -707,7 +708,7 @@ function readTenantConfig() {
 }
 
 function updateDocumentTitle() {
-  if (publicWebsite.isHelp && document.querySelector('link[rel="canonical"]')) return;
+  if ((publicWebsite.isHelp || comingSoonUi.isDetail) && document.querySelector('link[rel="canonical"]')) return;
   document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
     : publicWebsite.isHelp && publicWebsite.title() ? publicWebsite.title() + ' · ' + tenantBrandName
     : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
@@ -851,7 +852,36 @@ async function openSupportCenter() {
   }
 }
 
+let breakControls;
+let breakRefresh = 0;
+let breakTimer;
+async function refreshOpenBreak() {
+  if (!player || !$('#dialog').open || !['account', 'play'].includes(screen) || document.hidden) return;
+  const version = ++breakRefresh;
+  const owner = player.id;
+  try {
+    const fresh = await api('safety/break', undefined, 'GET');
+    if (version !== breakRefresh || player?.id !== owner || !$('#dialog').open || !['account', 'play'].includes(screen)) return;
+    const was = player.safety.accountBreak;
+    const next = fresh.accountBreak;
+    if (was?.endsAt === next?.endsAt && was?.startedAt === next?.startedAt) return;
+    player.safety.accountBreak = next;
+    if (screen === 'account') breakControls?.update(next);
+    else renderDialog();
+  } catch (error) {
+    if (error.message === 'signin' && version === breakRefresh && player?.id === owner && $('#dialog').open) {
+      player = null;
+      playerSessionStartedAt = undefined;
+      restoreGuestFavorites();
+      updateAccount();
+      updateSessionReminder();
+      openPanel('signin');
+    }
+  }
+}
+
 function renderDialog() {
+  breakControls = undefined;
   const panel = $('#panel');
   panel.replaceChildren();
   $('#status').textContent = dialogError ? t(dialogError) : '';
@@ -983,6 +1013,25 @@ function renderDialog() {
     panel.append(action(t('signin'), () => { history.replaceState(null, '', location.pathname); openPanel('signin'); }, 'ghost'));
     return;
   }
+  if (screen === 'account') {
+    breakControls = createBreakControls({
+      element, t, locale: language ? 'fr-CA' : 'en-CA', period: player.safety.accountBreak,
+      browseHref: appPath('/') + '#games',
+      submit: async minutes => {
+        const owner = player.id;
+        ++breakRefresh;
+        const safety = minutes === 15 ? await api('safety/pause', {})
+          : (await api('safety/cooling-off', { days: minutes / 1440 })).safety;
+        if (player?.id === owner) {
+          ++breakRefresh;
+          player.safety = safety;
+          breakControls?.update(safety.accountBreak);
+        }
+        return safety.accountBreak;
+      }
+    });
+    panel.append(breakControls.section);
+  }
   panel.append(element('p', t('balanceLabel') + ' · ' + money(player.balance)));
   const resetBalanceButton = action(t('resetDemoBalance'), async () => {
     if (!window.confirm(t('confirmResetDemoBalance'))) return;
@@ -1013,9 +1062,13 @@ function renderDialog() {
   usage.append(usageBar);
   panel.append(usage);
   if (screen === 'play') {
-    if (player.safety?.excluded || player.safety?.coolingOffUntil > Date.now() || player.safety?.pausedUntil > Date.now()) {
-      const coolingOffActive = player.safety?.coolingOffUntil > Date.now();
-      panel.append(element('p', player.safety.excluded ? t('excluded') : coolingOffActive ? t('coolingOffActive') + ' ' + new Date(player.safety.coolingOffUntil).toLocaleString(language ? 'fr-CA' : 'en-CA') : t('pauseActive') + ' ' + new Date(player.safety.pausedUntil).toLocaleTimeString(language ? 'fr-CA' : 'en-CA')));
+    if (player.safety.excluded || player.safety.accountBreak) {
+      if (player.safety.excluded) panel.append(element('p', t('excluded')));
+      else {
+        const status = element('div', '', 'account-break');
+        showBreakPeriod(status, player.safety.accountBreak, t, language ? 'fr-CA' : 'en-CA');
+        panel.append(status);
+      }
       return;
     }
     panel.append(element('p', t('simulation')));
@@ -1370,47 +1423,9 @@ function renderDialog() {
     }
   });
   panel.append(reminderForm);
-  panel.append(element('h3', t('coolingOffTitle')),
-    element('p', t('coolingOffHelp')));
-  if (player.safety.coolingOffUntil > Date.now()) {
-    panel.append(element('p', t('coolingOffActive') + ' ' + new Date(player.safety.coolingOffUntil).toLocaleString(language ? 'fr-CA' : 'en-CA')));
-  }
-  const coolingOffForm = element('form');
-  const coolingOffLabel = element('label', t('coolingOffTitle'));
-  const coolingOffSelect = element('select');
-  coolingOffSelect.name = 'days';
-  for (const [days, key] of [[1, 'coolingOffOne'], [7, 'coolingOffSeven'], [30, 'coolingOffThirty']]) {
-    const option = element('option', t(key));
-    option.value = String(days);
-    coolingOffSelect.append(option);
-  }
-  coolingOffLabel.append(coolingOffSelect);
-  const coolingOffButton = element('button', t('coolingOff'));
-  coolingOffForm.append(coolingOffLabel, coolingOffButton);
-  coolingOffForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!window.confirm(t('coolingOffConfirm'))) return;
-    coolingOffButton.disabled = true;
-    try {
-      player = await api('safety/cooling-off', { days: Number(coolingOffSelect.value) });
-      const until = new Date(player.safety.coolingOffUntil).toLocaleString(language ? 'fr-CA' : 'en-CA');
-      openPanel('account');
-      $('#status').textContent = `${t('coolingOffSet')} ${until}`;
-    } catch (error) {
-      dialogError = error.message;
-      $('#status').textContent = t(dialogError);
-    } finally {
-      coolingOffButton.disabled = false;
-    }
-  });
-  panel.append(coolingOffForm);
   const supportReplies = player.supportReplies || 0;
   const supportLabel = supportReplies ? t('supportNewReplies').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(supportReplies)) : t('supportTitle');
   panel.append(action(supportLabel, openSupportCenter, 'ghost'), element('h3', t('safety')),
-    action(t('pause'), async () => {
-      player.safety = await api('safety/pause', {});
-      openPanel('account');
-    }, 'ghost'),
     action(t('exclude'), async () => {
       if (!window.confirm(t('confirmExclude'))) return;
       await api('safety/exclude', {});
@@ -1428,7 +1443,16 @@ function openPanel(next) {
   dialogError = undefined;
   renderDialog();
   if (!$('#dialog').open) $('#dialog').showModal();
+  clearInterval(breakTimer);
+  ++breakRefresh;
+  if (player && ['account', 'play'].includes(next)) {
+    void refreshOpenBreak();
+    breakTimer = setInterval(refreshOpenBreak, 15_000);
+  }
 }
+$('#dialog').addEventListener('close', () => { clearInterval(breakTimer); ++breakRefresh; });
+window.addEventListener('focus', refreshOpenBreak);
+document.addEventListener('visibilitychange', refreshOpenBreak);
 
 function cacheGuestFavorites() {
   try { localStorage.setItem('northplay-favorites', JSON.stringify([...guestFavorites])); } catch {}
@@ -1499,10 +1523,7 @@ function announceFavorite(message, activityId) {
 function renderCatalog() {
   const editorial = comingSoonUi.renderLobby(filter, searchQuery, selectedCollection);
   const previewTitle = comingSoonUi.renderDetail();
-  if (previewTitle) {
-    updateDocumentTitle();
-    document.title = `${previewTitle} · ${document.title}`;
-  }
+  if (previewTitle && !document.querySelector('link[rel="canonical"]')) document.title = `${previewTitle} · ${tenantBrandName}`;
   const catalog = $('#catalog');
   catalog.replaceChildren();
   const createArt = (icon, theme) => {
@@ -1707,7 +1728,7 @@ $('#skip-link').addEventListener('click', (event) => {
 $('#language').addEventListener('click', async () => {
   const previousLanguage = language;
   const nextLocale = language ? 'en-CA' : 'fr-CA';
-  const alternative = publicWebsite.isHelp && document.querySelector(`link[rel="alternate"][hreflang="${nextLocale}"]`);
+  const alternative = (publicWebsite.isHelp || comingSoonUi.isDetail) && document.querySelector(`link[rel="alternate"][hreflang="${nextLocale}"]`);
   if (alternative) {
     if (player) {
       try { await api('account/preferences', { locale: nextLocale }); }
@@ -1715,6 +1736,11 @@ $('#language').addEventListener('click', async () => {
     }
     localStorage.setItem('northplay-language', nextLocale.slice(0, 2));
     const url = new URL(alternative.href);
+    if (comingSoonUi.isDetail) {
+      const params = new URLSearchParams(location.search);
+      for (const [key, value] of url.searchParams) params.set(key, value);
+      url.search = params;
+    }
     location.assign(url.pathname + url.search);
     return;
   }
@@ -2485,12 +2511,14 @@ function renderSupportInbox() {
     if (!ticket.isComplaint && ticket.category === 'responsible_play') {
       const locale = language ? 'fr-CA' : 'en-CA';
       const now = Date.now();
-      const protectionStates = [];
-      if (ticket.playerExcludedAt) protectionStates.push(t('supportPlayerExcluded'));
-      if (ticket.playerCoolingOffUntil > now) protectionStates.push(t('supportPlayerCoolingOffUntil').replace('{date}', new Date(ticket.playerCoolingOffUntil).toLocaleString(locale)));
-      if (ticket.playerPauseUntil > now) protectionStates.push(t('supportPlayerPauseUntil').replace('{date}', new Date(ticket.playerPauseUntil).toLocaleString(locale)));
       const context = element('aside', '', 'support-safety-context');
-      context.append(element('strong', t('supportPlayerProtectionContext')), element('p', protectionStates.join(' ') || t('supportPlayerNoActiveRestriction')));
+      context.append(element('strong', t('supportPlayerProtectionContext')));
+      if (ticket.playerExcludedAt) context.append(element('p', t('supportPlayerExcluded')));
+      if (ticket.accountBreak && ticket.accountBreak.endsAt > now) {
+        const dates = element('div');
+        showBreakPeriod(dates, ticket.accountBreak, t, locale);
+        context.append(dates);
+      } else if (!ticket.playerExcludedAt) context.append(element('p', t('supportPlayerNoActiveRestriction')));
       article.append(context);
     }
     article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
