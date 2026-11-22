@@ -380,3 +380,7 @@ dialog::backdrop{background:#090e0bd9}
 .referral-share input{width:100%;box-sizing:border-box}
 .referral-statement,.referral-statement details{min-width:0}
 .referral-statement summary,#player-referral-content dd,.contact-list .discovery-card{overflow-wrap:anywhere}
+
+#scheduled-shelf { margin-block: 1.25rem; }
+.shelf-titles { display: flex; flex-wrap: wrap; gap: .65rem; padding: 0; list-style: none; }
+.shelf-titles a { display: inline-block; padding: .55rem .85rem; color: inherit; border: 1px solid currentColor; border-radius: .5rem; }

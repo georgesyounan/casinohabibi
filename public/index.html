@@ -29,6 +29,7 @@
 <a class="button" href="#games" data-copy="browse"></a></div>
 </section>
 <section class="welcome-rail" aria-label="Key information"><div><span class="rail-mark">CAD</span><span data-copy="cadDisplay"></span></div><div><span class="rail-mark">EN / FR</span><span data-copy="twoLanguages"></span></div><div><span class="rail-mark">DEMO</span><span data-copy="simulatedOnly"></span></div></section>
+<section id="scheduled-shelf" aria-live="polite" hidden></section>
 <section id="games" class="games"><div class="section-title"><div><p class="eyebrow" data-copy="lobbyEyebrow"></p><h2 data-copy="games"></h2><p class="section-intro" data-copy="gamesIntro"></p></div></div>
 <button id="open-discovery" type="button" class="ghost discovery-launch" data-copy="discovery"></button>
 <div id="catalog-controls" class="catalog-controls" hidden><label class="game-search"><span data-copy="searchGames"></span><input id="game-search" type="search" maxlength="120" autocomplete="off"></label>
@@ -88,6 +89,7 @@
         </ul>
         <p data-copy="adminSettings"></p>
         <ul>
+          <li><a href="#operator-workspace" data-admin-link data-admin-primary data-copy="opWorkspace"></a></li>
           <li><a href="#casino-settings" data-admin-link data-admin-primary data-copy="adminNavWebsite"></a></li>
           <li><a href="#staff-management" data-admin-link data-admin-primary data-copy="adminNavStaff"></a></li>
           <li><a href="#audit-log" data-admin-link data-admin-primary data-copy="adminNavAudit"></a></li>
@@ -371,6 +373,25 @@
           <small id="support-totals"></small><p id="support-summary" role="status"></p><p role="status" id="support-inbox-status"></p>
           <div id="support-tickets"></div>
           <div id="support-pages" class="case-pager" hidden><button type="button" id="support-previous" class="ghost" data-copy="playerPrevious"></button><span id="support-page"></span><button type="button" id="support-next" class="ghost" data-copy="playerNext"></button></div>
+        </section>
+        <section id="operator-workspace" class="admin-page" data-admin-view aria-labelledby="operator-workspace-title" hidden>
+          <h2 id="operator-workspace-title" data-admin-heading data-copy="opWorkspace" tabindex="-1"></h2>
+          <nav class="admin-subnav discovery-tabs" aria-labelledby="operator-workspace-title">
+            <a href="#operator-products" data-admin-link data-copy="opProducts" data-roles="operator_admin,operator_provider"></a>
+            <a href="#operator-shelves" data-admin-link data-copy="opShelves" data-roles="operator_admin,operator_content,operator_provider"></a>
+            <a href="#operator-sessions" data-admin-link data-copy="opSessions" data-roles="operator_admin,operator_provider"></a>
+            <a href="#operator-services" data-admin-link data-copy="opServices"></a>
+            <a href="#operator-clients" data-admin-link data-copy="opClients" data-roles="operator_admin"></a>
+            <a href="#operator-pilot" data-admin-link data-copy="opPilot" data-roles="operator_admin"></a>
+            <a href="#operator-orders" data-admin-link data-copy="opOrders"></a>
+          </nav>
+          <section id="operator-products" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="operator-products-title" hidden><h3 id="operator-products-title" data-admin-heading data-copy="opProducts" tabindex="-1"></h3><div id="operator-products-body"></div></section>
+          <section id="operator-shelves" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_content,operator_provider" aria-labelledby="operator-shelves-title" hidden><h3 id="operator-shelves-title" data-admin-heading data-copy="opShelves" tabindex="-1"></h3><div id="operator-shelves-body"></div></section>
+          <section id="operator-sessions" class="admin-panel" data-admin-panel data-roles="operator_admin,operator_provider" aria-labelledby="operator-sessions-title" hidden><h3 id="operator-sessions-title" data-admin-heading data-copy="opSessions" tabindex="-1"></h3><div id="operator-sessions-body"></div></section>
+          <section id="operator-services" class="admin-panel" data-admin-panel aria-labelledby="operator-services-title" hidden><h3 id="operator-services-title" data-admin-heading data-copy="opServices" tabindex="-1"></h3><div id="operator-services-body"></div></section>
+          <section id="operator-clients" class="admin-panel" data-admin-panel data-roles="operator_admin" aria-labelledby="operator-clients-title" hidden><h3 id="operator-clients-title" data-admin-heading data-copy="opClients" tabindex="-1"></h3><div id="operator-clients-body"></div></section>
+          <section id="operator-pilot" class="admin-panel" data-admin-panel data-roles="operator_admin" aria-labelledby="operator-pilot-title" hidden><h3 id="operator-pilot-title" data-admin-heading data-copy="opPilot" tabindex="-1"></h3><div id="operator-pilot-body"></div></section>
+          <section id="operator-orders" class="admin-panel" data-admin-panel aria-labelledby="operator-orders-title" hidden><h3 id="operator-orders-title" data-admin-heading data-copy="opOrders" tabindex="-1"></h3><div id="operator-orders-body"></div></section>
         </section>
         <section id="casino-settings" class="admin-page" data-admin-view data-roles="operator_admin,operator_content" aria-labelledby="casino-settings-title" hidden>
           <div class="admin-page-heading">

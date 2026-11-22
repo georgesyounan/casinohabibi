@@ -1,3 +1,7 @@
+import { createPartnerUi, partnerLobbyCopy } from './partner-lobby.js';
+import { createPublicShelf, createShelfEditor, shelfCopy } from './lobby-shelves.js';
+import { createPilotUi, pilotCopy } from './finance-pilot.js';
+import { createOperatorUi, operatorCopy } from './operator-workflows.js';
 import { providerCatalogCopy, createProviderCatalogUi } from './provider-catalog.js';
 import { createSupportQueue } from './support-queue.js';
 import { catalogueCategories, games, roundPreview, demoTitle, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
@@ -19,7 +23,7 @@ const currentRoute = location.pathname.startsWith(appPath('/'))
   ? location.pathname.slice(appBasePath.length) : location.pathname;
 const isAdminPage = currentRoute === '/admin';
 const copy = {
-  ...comingSoonCopy,...providerCatalogCopy,
+  ...comingSoonCopy,...providerCatalogCopy,...operatorCopy,...pilotCopy,...shelfCopy,...partnerLobbyCopy,
   ...playerAccessCopy,
   ...accountBreakCopy,
   ...discoveryCopy,...growthCopy,
@@ -526,7 +530,7 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const auditedMutation = data !== undefined && /^(admin\/(config|website-content|coming-soon|discovery\/|growth\/|community\/|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  const auditedMutation = data !== undefined && /^(admin\/(shelves\/change|operator\/|config|website-content|coming-soon|discovery\/|growth\/|community\/|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
   const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
   const publication = (path === 'admin/website-content' || path === 'admin/coming-soon') &&
     ['publish', 'archive'].includes(data?.action);
@@ -1863,7 +1867,17 @@ const discoveryAdmin=createDiscoveryAdmin({api,t,supportHref,appPath,french:()=>
   openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
 const providerCatalogUi=createProviderCatalogUi({api,t,appPath,french:()=>Boolean(language),canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue),
   openPanel:id=>adminWorkspace.open(id)});
+const operatorUi=createOperatorUi({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,
+  staffId:()=>currentStaffId,canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue),open:id=>adminWorkspace.open('operator-'+id)});
+const partnerUi=createPartnerUi({api,t,french:()=>Boolean(language),appPath,staffId:()=>currentStaffId});
+const shelfEditor=createShelfEditor({api,t,french:()=>Boolean(language),staffId:()=>currentStaffId,canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue)});
+const publicShelf=createPublicShelf({api,appPath,french:()=>Boolean(language)});
+const pilotUi=createPilotUi({api,t,french:()=>Boolean(language),staffId:()=>currentStaffId});
 const adminLoaders = {
+  'operator-clients':partnerUi.load,
+  'operator-shelves':shelfEditor.load,
+  'operator-pilot':pilotUi.load,
+  ...Object.fromEntries(['products','sessions','services','orders'].map(key=>['operator-'+key,()=>operatorUi.load(key)])),
   ...Object.fromEntries(['partners','placements','report','review','experiments','polls','credits'].map(key=>['growth-'+key,()=>growthAdmin.load(key)])),
   'engagement-programs':()=>discoveryAdmin.load('programs'),
   'engagement-campaigns':()=>discoveryAdmin.load('campaigns'),
@@ -1879,6 +1893,7 @@ const adminLoaders = {
   'audit-log': () => refreshStaffAudit().catch((error) => { $('#staff-audit-summary').textContent = t(error.message); })
 };
 const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => {
+  if(panel!=='operator-clients') partnerUi.clear();
   const editorial = panel === 'website-editorial';
   for (const selector of ['#tenant-config','#tenant-config-preview','#tenant-settings-help']) $(selector).hidden = editorial;
   const load = adminLoaders[panel] || adminLoaders[view];
@@ -1899,6 +1914,7 @@ function render() {
   if(!isAdminPage && currentRoute==='/' && growthBannerContext!==growthContext){growthBannerContext=growthContext;void growthPlayer.banner($('#campaign-placement'));}
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
+  if (languageChanged && !isAdminPage && currentRoute==='/') void publicShelf.refresh();
   if (languageChanged && !isAdminPage) {
     void publicWebsite.load();
     if (!publicWebsite.isHelp) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
@@ -1947,6 +1963,11 @@ function render() {
   if(languageChanged&&adminWorkspace.isOpen('catalog-management'))providerCatalogUi.directory();
   if(languageChanged&&adminWorkspace.isOpen('catalog-history'))void providerCatalogUi.history();
   if(languageChanged&&adminWorkspace.isOpen('catalog-import'))providerCatalogUi.showSaved();
+  if(languageChanged&&currentStaffId&&adminWorkspace.isOpen('operator-clients'))void partnerUi.load();
+  if(languageChanged&&currentStaffId&&adminWorkspace.isOpen('operator-shelves'))void shelfEditor.load();
+  if(languageChanged&&currentStaffId&&adminWorkspace.isOpen('operator-pilot'))void pilotUi.load();
+  if(languageChanged && currentStaffId) for(const key of ['products','sessions','services','orders'])
+    if(adminWorkspace.isOpen('operator-'+key)) void operatorUi.load(key);
 }
 
 $('#skip-link').addEventListener('click', (event) => {
@@ -2808,7 +2829,7 @@ $('#overview-export').addEventListener('click', exportOperatorOverview);
 
 function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
-  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)){supportQueue.clear();providerCatalogUi.clear();}
+  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)){supportQueue.clear();providerCatalogUi.clear();operatorUi.clear();pilotUi.clear();shelfEditor.clear();partnerUi.clear();}
   currentStaffId = session.id;
   currentStaffRole = session.role;
   currentStaffPermissions = {...session.permissions,testCredits:Boolean(session.testCredits)};
@@ -3091,6 +3112,7 @@ try {
 }
 if (!isAdminPage) {
   void publicWebsite.load();
+  if(currentRoute==='/')publicShelf.start();
   if (!publicWebsite.isHelp) {
     try { providerGames = await api('games', undefined, 'GET'); }
     catch { /* Keep the local catalogue available. */ }

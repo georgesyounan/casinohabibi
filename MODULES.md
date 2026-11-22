@@ -2,6 +2,18 @@
 
 Le catalogue de démonstration compte 13 modules techniques et 12 modules d’interface. Dans l’administration, le menu principal ouvre une rubrique et les onglets affichent un seul outil à la fois. Les liens directs conservent la rubrique après connexion. Les possibilités de modification dépendent du rôle et de la marque.
 
+## Espace opérateur
+
+| Outil | Parcours disponible |
+| --- | --- |
+| Produits et sessions démo | Activer le produit et son fournisseur fictif, simuler un échec, réessayer, lancer une manche et consulter sa chronologie. |
+| Sélections planifiées | Épingler et masquer des fiches fournisseur, prévisualiser les places et publier pour un marché, un appareil et une plage horaire. |
+| Clients d’intégration | Créer, renouveler ou révoquer une clé limitée à la lecture du hall de démonstration de la marque. |
+| Services et commandes | Demander une traduction, choisir l’agent, suivre les commentaires, les versions du devis fictif et la livraison. |
+| Scénarios financiers | Exécuter V05 à V07 en TST. Examiner les écritures, le règlement tardif et les versions de clôture. |
+
+[Revue des 28 modules du cahier](docs/development-review.md) · [Critères et état des 88 tickets](docs/development-backlog.csv)
+
 ## Modules techniques
 
 | Module | Fonction | Où la vérifier |

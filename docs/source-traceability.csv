@@ -1,0 +1,175 @@
+Reference ID,Source,Location,Evidence,Source feature or control,Story IDs,Module IDs,Development treatment
+SL-01,Slotegrator,p1 · 0:15,Shown,Operator sign-in and masked fields,D01.2 D01.3,D01,Operator access and demo onboarding.
+SL-02,Slotegrator,p1 · 0:25,Shown,"Multiple projects, project selector, notifications, time, language and user menu",D01.3,D01,Bind all global controls to the active brand.
+SL-03,Slotegrator,p1 · 0:31,Shown,"Bets, Wins, GGR, Deposits, Withdrawal, Users and weekly Client Statistic chart",D13.1 D13.3,D13,Separate first-release catalogue metrics from financial measures. Define users and period basis.
+SL-04,Slotegrator,p1 · 0:37,Narrated,"One API for games, payments, modules and extensions",D27.1 D19.1 D18.1,"D18, D19, D27","Separate provider, wallet and public read contracts behind scoped adapters."
+SL-05,Slotegrator,p1 · 0:37,Promotional claim,"15,000+ games in the 2022 video",,,Historical supplier scale. No contracted title count or delivery target.
+SL-06,Slotegrator,p1 · 0:48,Shown,"Payments, payment systems, Limits, Active and Add payment method",D18.1 D18.2 D18.3,D18,Use market/currency coverage and route configuration.
+SL-07,Slotegrator,p1 · 0:52,Illustrated,"Visa, Mastercard, American Express, SWIFT, UnionPay, Ethereum and Bitcoin",D18.1 D24.1,"D18, D24",Examples for fixtures. Actual integrations depend on a selected processor or asset network.
+SL-08,Slotegrator,p1 · 0:55,Shown / narrated,"BI, selectable reporting period, GGR, behavior metrics and weekly chart",D13.2 D13.3,D13,"Add named metric definitions, drilldowns and report window."
+SL-09,Slotegrator,p1 · 1:05,Narrated,Money-laundering risk and multiple accounts claiming bonuses,D15.1 D15.2 D11.2,"D11, D15",Reviewable signals and recorded decisions.
+SL-10,Slotegrator,p1 · 1:16,Shown / narrated,"Registration settings, user segments, restrictions, bonus offers and block confirmation",D02.1 D02.2 D09.2 D11.1,"D02, D09, D11",Apply separate grants to player lookups and restrictions.
+SL-11,Slotegrator,p1 · 1:16,Shown,"User list fields Name, ID, Age, State and GGR",D02.2 D13.3 D14.1,"D02, D13, D14",Resolve identity and financial fields by permission and phase.
+SL-12,Slotegrator,p1 · 1:25,Narrated,Bonus offers and a loyalty program,D11.1 D11.2 D12.3,"D11, D12","Separate award terms, progress and entitlements."
+SL-13,Slotegrator,p1 · 1:32,Narrated,"Affiliate services, Google Analytics, NetRefer and Post Affiliate Pro",D10.1 D10.2 D27.3,"D10, D27",Measure/affiliate connector examples. Actual vendors are a selection decision.
+SL-14,Slotegrator,p1 · 1:43,Shown / narrated,"Required identity documents, player profile and verification progress",D14.1 D14.2,D14,Fingerprint graphic illustrates verification; no biometric capture requirement inferred from it.
+SL-15,Slotegrator,p2 · 1:57,Shown,"Style, Themes, Fonts and SEO tabs",D05.2 D05.3,D05,Style and Themes used. Fonts and SEO are visible labels; their project fields are proposed.
+SL-16,Slotegrator,p2 · 1:57,Shown,"Home, About casino, Accounts, Bonuses, Deposit, FAQ, All games, Profile, Terms & conditions, Transactions",D05.1 D05.3,D05,Editor templates map to active product capabilities.
+SL-17,Slotegrator,p2 · 1:57,Shown,"Add header, body, content, footer and contacts",D05.3,D05,Represent page regions and ordered blocks.
+SL-18,Slotegrator,p2 · 1:57,Shown,"Blocks and Components palettes; Basic, SEO and Forms groups",D05.3,D05,Blocks is used; Components appears as a label only.
+SL-19,Slotegrator,p2 · 1:57,Shown,"Layout, image, text, video, button, image slider and spacing tools",D05.3,D05,Store typed block data with device previews.
+SL-20,Slotegrator,p2 · 1:57,Shown,"Back, desktop/laptop/tablet/phone preview and Publish",D05.1 D05.3,D05,Capture a revision and check its rendering at each width.
+SL-21,Slotegrator,p2 · 2:01–2:13,Shown,"Drag a slider, switch theme, add a block below the banner and approach Publish",D05.3,D05,Published revision and revert behavior are proposed acceptance requirements.
+SL-22,Slotegrator,p2 · 2:04,Shown,"Logo, Sign In, Sign up, carousel arrows/dots, navigation and content grid",D02.1 D05.1 D08.1,"D02, D05, D08",Player-facing preview components.
+SL-23,Slotegrator,p2 · 2:09,Label only,"View HTML, View CSS and Add Block menu",D05.3,D05,Add Block is demonstrated. Treat generated code views as read-only by default.
+SB-01,SpringBME,p1 · 0:27,Shown,"Public Home, News, BME Marketplace, Console, Shop and Go to BME Dashboard",D01.3 D03.1,"D01, D03",Reference navigation for operator onboarding.
+SB-02,SpringBME,p1 · 0:27,Shown,"Get Started, Sign In, Sign Up, password recovery, terms and Try Demo",D01.3 D04.1,"D01, D04",Create Company appears as the alternate action; its complete workflow needs discovery.
+SB-03,SpringBME,p1 · 0:40,Shown,"Dashboard, Site Launcher, Products, Payments and Services opened",D13.1 D04.3 D03.1 D18.1 D22.1,"D03, D04, D13, D18, D22",Map these to the existing console and proposed extension screens.
+SB-04,SpringBME,p1 · 0:40,Label only,"Partner Settings, Tools, Developers and Invoice",D01.3 D27.1 D22.3,"D01, D22, D27",Menu evidence only. Confirm Tools scope and invoice/portal semantics before implementation.
+SB-05,SpringBME,p1 · 0:40,Shown,"Partner selector, global search, notifications, messages, profile and floating chat",D01.3 D22.2,"D01, D22","Notification, support entry and search scope by partner."
+SB-06,SpringBME,p1 · 0:41,Shown,"Partner Info, service-order totals, billing estimate and Industrial News",D01.3 D22.2 D22.3,"D01, D22",News feed is informational. Keep estimates and invoiced amounts distinct.
+SB-07,SpringBME,p1 · 0:41,Shown,"Create Partner, Turnkey or Whitelabel, AlphaBet, assigned ID and website",D01.3 D04.3,"D01, D04",Reference flow for creating and then selecting a partner.
+SB-08,SpringBME,p1 · 0:41,Shown,"Default language, currency and time zone; supported English, Spanish, Lithuanian and USD",D01.3,D01,"English/EUR/time zone are sample defaults, not fixed market settings."
+SB-09,SpringBME,p2 · 1:04,Shown,"Spring Builder, My sites, domain entry, template Preview/Select, Launch Website and site card",D04.3,D04,Store verified resulting hostname. Template names and domain suffixes are historical examples.
+SB-10,SpringBME,p2 · 1:04,Label only,Site Launcher CMS and Invited,D04.3 D05.1,"D04, D05",Scope the CMS normally; confirm collaboration behavior before creating an Invited workflow.
+SB-11,SpringBME,p2 · 1:24,Shown,"All services, Sport products, Gaming products, Data Feed solution, Marketing solution, Retail products, Gaming Management System",D03.1,D03,Product directory facets.
+SB-12,SpringBME,p2 · 1:24,Shown,"Product Description, Setup, Release Notes, Ask Question, type, latest update and category",D03.1 D03.2,D03,Provide a setup schema per supported integration.
+SB-13,SpringBME,p2 · 1:24,Shown,13 product cards: Sportsbook and Live Casino Software activated,D03.1 D03.2 D23.1,"D03, D23",Activating a listing is separate from building or contracting its underlying product.
+SB-14,SpringBME,p2 · 1:24,Label only,"Financial betting, Virtual sports, Statistics, live sport video streaming, Poker, Skill game, Casino suite, VivaroGo and VR Casino",D03.1,D03,Represent these nine listings in discovery fixtures. No underlying engine is specified.
+SB-15,SpringBME,p2 · 1:24,Narrated / label,Fantasy sports for later and VR Expo Builder marked Coming Soon,D03.1,D03,Represent both availability states; defer integration selection.
+SB-16,SpringBME,p3 · 1:26,Shown,"Sportsbook Setup Max Payout 5,000, Max Odd 1,000 and Selection Liability 10,000",D23.1,D23,Store units and boundary behavior. Demo numbers are fixtures.
+SB-17,SpringBME,p3 · 1:26,Described,"Live/pre-match, virtual sports, esports, dynamic odds, statistics, streaming, SuperBet, Counter Offer, full/partial/automatic cash-out",D03.1 D23.2 D23.3,"D03, D23","Qualify core odds and cash-out by contract. Branded bet types, streaming and data rights require discovery."
+SB-18,SpringBME,p3 · 1:26,Described,"Classic, Modern, Asian and Combo layouts; desktop, mobile, retail and native apps",D03.1 D23.1,"D03, D23",Catalogue capability flags only. Each additional surface needs a separate product decision.
+SB-19,SpringBME,p3 · 1:26,Described,"CMS, reporting, configurable defaults, multilingual, payments, API-hosted player data, trading/risk/support and licensing assistance",D05.2 D13.2 D18.1 D27.1 D22.1,"D05, D13, D18, D22, D27",Supplier-service descriptions. Data hosting and support responsibilities need explicit selection.
+SB-20,SpringBME,p3 · 1:33,Shown,Activate Live Casino Software then enable BetConstruct; provider menu,D03.2 D03.3,D03,Two independent enablement levels.
+SB-21,SpringBME,p3 · 1:33,Label only,"NetEnt, BetGames, Evolution, Xpro, BingoBoom and Asia Gaming",D03.2,D03,Historical supplier rows. Only BetConstruct is enabled in the demo.
+SB-22,SpringBME,p3 · 1:33,Described,"Certified RNG, bonus management, tournaments, mobile, third-party integration; Microgaming, NetEnt and iSoftBet",D06.3 D11.2 D12.4 D27.1,"D06, D11, D12, D27",Record evidence or supplier capability if supplied. Certification scope is an external decision.
+SB-23,SpringBME,p3 · 1:42,Shown,Payment rows with countries/currencies; combined MasterCard/Visa entry and Skrill enabled,D18.1,D18,Model route coverage and brand activation.
+SB-24,SpringBME,p3 · 1:42,Label only,"Neteller, Qiwi, InterkassaMaster, WireCard and OXXO",D18.1,D18,"Historical directory entries, independent of present availability."
+SB-25,SpringBME,p4 · 1:48,Shown,"Services search; All, Law and Finance, Business Development, Sports and Gaming, IT and Other",D22.1,D22,Filter and search the service directory.
+SB-26,SpringBME,p4 · 1:48,Shown,"14 services: Financial, Trade Shows and Logistics, Legal, QA & Testing, Risk Management, Live Casino Studio, Information Security, Translation and Localisation, Marketing, Design, Live Scouting, Bookmaking (Trading), Operations & IT, Licensing",D22.1,D22,Model service records. The 14 offerings do not each imply a software engine.
+SB-27,SpringBME,p4 · 1:53,Shown,"Translation Description, My Orders, Pricing, FAQ; website/document/custom projects, 15+ languages stated",D22.1 D22.2,D22,Language coverage is vendor description. Configure the actual offered languages.
+SB-28,SpringBME,p4 · 1:53–2:12,Shown,"English-to-Spanish request, title, description and optional file; saved Ordered status, date and details",D22.2,D22,Use as an end-to-end service order fixture.
+SB-29,SpringBME,p4 · 2:12,Shown / label,Comments and Add Comment; Attachments and Offers visible,D22.2 D22.3,D22,Comments are shown. Commercial offer acceptance is proposed and depends on terms.
+EM-01,EveryMatrix CasinoEngine,p1 · 1:49,Shown,"Realm, global search, Favorites, Recently Used and Visited Players",D01.3 D02.2,"D01, D02",Use scoped shortcuts and prevent stale cross-brand results.
+EM-02,EveryMatrix CasinoEngine,p1 · 1:49,Shown,"Casino Games name search, vendor/sub-vendor/category/device/tag filters, Hide Assigned Games, pagination and page size",D06.3 D06.4 D07.1,"D06, D07",Index canonical records and indicate manual assignments in the editor.
+EM-03,EveryMatrix CasinoEngine,p1 · 1:49,Label only,Set and Save on the workspace toolbar,D07.1,D07,Use explicit draft/publish semantics. Unshown Set behavior needs confirmation.
+EM-04,EveryMatrix CasinoEngine,p1 · 1:49 and 2:49,Shown / narrated,"DEFAULT tree, counts, Video Slots, New, Popular, Jackpots, NetEnt, automatic population, overrides, hide and freeze",D07.1 D07.2 D07.3,D07,Version rules and schedule; preview winning assignments and pins.
+EM-05,EveryMatrix CasinoEngine,p2 · 1:49,Shown,"Basic types Normal, New Games, Popular Games, Jackpot Games; 200-game cap; By Rounds / last 30 days",D07.2,D07,200 and 30 are demo values. Support a smaller deterministic QA fixture.
+EM-06,EveryMatrix CasinoEngine,p2 · 1:49,Shown,"All 15 types: 3D Slots, BINGO, Classic Slots, Crash Games, Jackpot Games, Live Dealer, Live Video Slots, Lottery, Mini Games, Scratch Cards, Table Games, Video Pokers, Video Slots, Virtual Sports, Other Games",D06.3 D07.2,"D06, D07","Use a versioned, extensible type mapping and select-all control."
+EM-07,EveryMatrix CasinoEngine,p2 · 1:49–1:54,Shown,"Assets, Icon, Background Image, Languages, Description; English Popular and blank Spanish",D05.2 D07.2 D07.3,"D05, D07",Define field-level fallback and asset variants.
+EM-08,EveryMatrix CasinoEngine,p2 · 1:49,Label only,Flags tab,D07.2,D07,Its flags and effects are unknown. Discover before assigning implementation.
+EM-09,EveryMatrix CasinoEngine,p2 · 2:00,Shown,"Scheduler, add/remove period, start/end date and time, OK and Close",D07.3,D07,Multiple windows and boundary tests are proposed. The recording does not confirm a save.
+EM-10,EveryMatrix CasinoEngine,p2 · 1:54 and 3:12,Shown / narrated,"DE, EN, EN-US, ES, ES-MX, FR, PT and PT-BR; artwork by game/lobby, aspect ratio and temporary themes",D05.2 D05.3 D07.3,"D05, D07","Keep locale fallback, theme dates and asset aspect settings explicit."
+EM-11,EveryMatrix CasinoEngine,p2 · 2:27 and 2:49,Narrated / slide,"Multiple lobbies by market, VIP/player type, channel, content and one-to-one recommendations",D07.3 D08.3,"D07, D08",Ship a deterministic fallback and eligibility check. Recommendation model/algorithm is unspecified.
+EM-12,EveryMatrix CasinoEngine,p3 · 2:05,Shown,"Casino selected; Sports, Live Sports, Live Casino, Virtuals and Tournaments navigation",D03.1 D08.2 D23.1 D12.4,"D03, D08, D12, D23",Show launch links only for enabled products.
+EM-13,EveryMatrix CasinoEngine,p3 · 2:05,Shown,"Lobby, My games, Video Slots, Jackpots, New Games, Scratch Cards and Table Games",D08.1 D08.2,D08,Use dynamic shelves and eligible counts.
+EM-14,EveryMatrix CasinoEngine,p3 · 2:05,Shown,"Game search, Play a random game, hover Start now!, horizontal shelves and themed collections",D08.1 D08.2 D08.3 D19.1,"D08, D19",Keep coming-soon previews and provider-enabled launch actions explicit.
+EM-15,EveryMatrix CasinoEngine,p3 · 2:05,Shown,"Promotions carousel and weekday offer cards including cashback, boosts and free spins",D05.1 D11.1 D11.3,"D05, D11","Claim buttons are visible. Conditions, accounting and rates are project configuration."
+EM-16,EveryMatrix CasinoEngine,p3 · 2:05,Shown / label,"Promotions, Loyalty, euro balance, XP, Recent Winners and Top Winners",D12.3 D12.4 D17.1,"D12, D17",Loyalty scoring and the Top Winners ranking basis need a project definition.
+EM-17,EveryMatrix CasinoEngine,p3 · 1:57 and 2:14,Narrated,"Round detail, completed gameplay replay, configured window, panic, transfers, real and fun mode",D19.1 D19.3 D20.1 D16.3,"D16, D19, D20","Check provider capability per control, including replay."
+EM-18,EveryMatrix CasinoEngine,p3 · 1:57,Narrated,Authenticity checks and merchandise prizes,D20.1 D12.5,"D12, D20",Merchandise has a proposed fulfillment workflow. Authenticity checking is a discovery item pending provider meaning.
+EM-19,EveryMatrix CasinoEngine,p4 · 2:14,Narrated,"Reality checks, session time limits, cross-vendor wagering limits and panic action",D16.1 D16.2 D16.3,D16,Centralize counters and retain a separate late-settlement path.
+EM-20,EveryMatrix CasinoEngine,p4 · 4:09,Narrated / slide,"Mandatory break, time limit, money limit, suspension, maintenance and closure notices",D16.3 D20.2,"D16, D20",Six game-window messages.
+EM-21,EveryMatrix CasinoEngine,p4 · 2:14 and 3:32,Narrated,"Customized daily reports and comparison of game positions, lobbies and audiences",D13.2 D13.3 D13.4,D13,The vendor does not define a placement formula. The metric dictionary proposes one.
+EM-22,EveryMatrix CasinoEngine,p4 · 3:54,Narrated,One or more configurable lobby instances for a bespoke front end,D27.2,D27,"Serve revisioned, eligible content by brand, market and audience."
+EM-23,EveryMatrix CasinoEngine,p4 · 1:25,Narrated,One supplier contact and operator-specific development requests,D22.1 D22.2 D03.3,"D03, D22",Route supplier incidents and service requests with an owner and reference.
+EM-N01,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Management Dashboard,D13.1 D13.3,D13,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N02,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Community,D08.4,D08,Vendor label only. Linked for discovery as a possible owner; equivalence and implementation scope are unconfirmed.
+EM-N03,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Players,D02.2,D02,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N04,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Settings,D01.3,D01,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N05,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Game Management,D06.2,D06,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N06,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,SlotMatrix Boosters,D11.2,D11,Vendor label only. Linked for discovery as a possible owner; equivalence and implementation scope are unconfirmed.
+EM-N07,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Vendors,D03.2 D06.3,"D03, D06",Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N08,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Shown,Lobby Management,D07.2,D07,Selected workspace. Category setup and scheduling are described elsewhere in the reference.
+EM-N09,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Tag Management,D06.3,D06,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N10,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Manage Translations,D05.2 D07.3,"D05, D07",Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N11,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Game Change Log,D06.2 D20.1,"D06, D20",Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N12,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Transaction Monitor,D18.2 D20.2,"D18, D20",Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N13,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,RTP Monitor,D20.3,D20,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N14,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Jackpot Balance,D20.3,D20,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N15,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Game Sessions,D20.1,D20,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N16,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Open Rounds Monitor,D20.2,D20,Vendor label only. Proposed internal destination; mechanics need confirmation.
+EM-N17,EveryMatrix CasinoEngine,"p1, sidebar at 1:49",Label only,Reports,D13.2,D13,Vendor label only. Proposed internal destination; mechanics need confirmation.
+NX-F01,NuxGame,PDF p2 · Feature detail r6,Video / promotional claim,Casino Games / Catalogue coverage,,,"Historical supplier scale, not a contracted catalogue volume."
+NX-F02,NuxGame,PDF p2 · Feature detail r7,Product documentation,Casino Games / Game formats,D06.3 D08.2,"D06, D08",Use the linked story for proposed behavior and acceptance.
+NX-F03,NuxGame,PDF p2 · Feature detail r8,Product documentation,Casino Games / Studio and title visibility,D06.4,D06,Use the linked story for proposed behavior and acceptance.
+NX-F04,NuxGame,PDF p2 · Feature detail r9,Product documentation,Casino Games / Market-specific placement,D07.3,D07,Use the linked story for proposed behavior and acceptance.
+NX-F05,NuxGame,PDF p2 · Feature detail r10,Product documentation,Casino Games / Game tags,D06.3,D06,Use the linked story for proposed behavior and acceptance.
+NX-F06,NuxGame,PDF p2 · Feature detail r11,Release note,Casino Games / Demo and bonus-buy indicators,D06.4 D19.1,"D06, D19",Use the linked story for proposed behavior and acceptance.
+NX-F07,NuxGame,PDF p3 · Feature detail r12,Product documentation,Back-Office / Player profile,D02.2 D14.2,"D02, D14",Use the linked story for proposed behavior and acceptance.
+NX-F08,NuxGame,PDF p3 · Feature detail r13,Product documentation,Back-Office / Live player activity,D02.2 D20.1,"D02, D20",Use the linked story for proposed behavior and acceptance.
+NX-F09,NuxGame,PDF p3 · Feature detail r14,Product documentation,Back-Office / Player segments,D09.2 D09.3,D09,Use the linked story for proposed behavior and acceptance.
+NX-F10,NuxGame,PDF p3 · Feature detail r15,Product documentation,Back-Office / Access control,D01.2,D01,Use the linked story for proposed behavior and acceptance.
+NX-F11,NuxGame,PDF p3 · Feature detail r16,Product documentation,Back-Office / Revenue and finance reports,D13.3 D21.1,"D13, D21",Use the linked story for proposed behavior and acceptance.
+NX-F12,NuxGame,PDF p3 · Feature detail r17,Product documentation,Back-Office / Campaign and partner reporting,D10.2 D13.2,"D10, D13",Use the linked story for proposed behavior and acceptance.
+NX-F13,NuxGame,PDF p3 · Feature detail r18,Product documentation,Back-Office / Reporting exports,D13.2,D13,Use the linked story for proposed behavior and acceptance.
+NX-F14,NuxGame,PDF p3 · Feature detail r19,Product documentation,Back-Office / Third-party integrations,D27.1 D27.3,D27,Use the linked story for proposed behavior and acceptance.
+NX-F15,NuxGame,PDF p5 · Feature detail r20,Product documentation,CMS / Site layout,D05.1 D05.3,D05,Use the linked story for proposed behavior and acceptance.
+NX-F16,NuxGame,PDF p5 · Feature detail r21,Product documentation,CMS / Banner builder,D05.1,D05,Use the linked story for proposed behavior and acceptance.
+NX-F17,NuxGame,PDF p5 · Feature detail r22,Product documentation,CMS / Site menus,D05.1,D05,Use the linked story for proposed behavior and acceptance.
+NX-F18,NuxGame,PDF p5 · Feature detail r23,Product documentation,CMS / Lobby builder and preview,D05.3 D07.3,"D05, D07",Use the linked story for proposed behavior and acceptance.
+NX-F19,NuxGame,PDF p6 · Feature detail r24,Release note,Bonus Engine / Welcome and deposit offers,D11.2,D11,Use the linked story for proposed behavior and acceptance.
+NX-F20,NuxGame,PDF p6 · Feature detail r25,Release note,Bonus Engine / Affiliate-issued bonus,D10.3 D11.2,"D10, D11",Use the linked story for proposed behavior and acceptance.
+NX-F21,NuxGame,PDF p6 · Feature detail r26,Product documentation,Bonus Engine / Free spins,D11.3,D11,Use the linked story for proposed behavior and acceptance.
+NX-F22,NuxGame,PDF p6 · Feature detail r27,Release note,Bonus Engine / Cashback calculation,D11.3,D11,Use the linked story for proposed behavior and acceptance.
+NX-F23,NuxGame,PDF p6 · Feature detail r28,Release note,Bonus Engine / Wagering and balance rules,D11.2 D17.2,"D11, D17",Use the linked story for proposed behavior and acceptance.
+NX-F24,NuxGame,PDF p6 · Feature detail r29,Product documentation,Bonus Engine / Campaign eligibility,D11.2 D09.2,"D09, D11",Use the linked story for proposed behavior and acceptance.
+NX-F25,NuxGame,PDF p6 · Feature detail r30,Product documentation,Bonus Engine / Campaign performance,D13.2 D13.3,D13,Use the linked story for proposed behavior and acceptance.
+NX-F26,NuxGame,PDF p7 · Feature detail r31,Product documentation,Gamification / Points and XP,D12.3,D12,Use the linked story for proposed behavior and acceptance.
+NX-F27,NuxGame,PDF p7 · Feature detail r32,Product documentation,Gamification / VIP tiers,D12.3,D12,Use the linked story for proposed behavior and acceptance.
+NX-F28,NuxGame,PDF p7 · Feature detail r33,Product documentation,Gamification / Missions and achievements,D12.1 D12.2,D12,Use the linked story for proposed behavior and acceptance.
+NX-F29,NuxGame,PDF p7 · Feature detail r34,Product documentation,Gamification / Tournaments and leaderboards,D12.4,D12,Use the linked story for proposed behavior and acceptance.
+NX-F30,NuxGame,PDF p7 · Feature detail r35,Product documentation,Gamification / Player-versus-player contests,D12.4,D12,Use the linked story for proposed behavior and acceptance.
+NX-F31,NuxGame,PDF p7 · Feature detail r36,Release note,Gamification / Reward shop and orders,D12.5,D12,Use the linked story for proposed behavior and acceptance.
+NX-F32,NuxGame,PDF p7 · Feature detail r37,Product documentation,Gamification / Prize wheel,D12.4,D12,Use the linked story for proposed behavior and acceptance.
+NX-F33,NuxGame,PDF p7 · Feature detail r38,Product documentation,Gamification / Referral rewards,D10.1 D12.3,"D10, D12",Use the linked story for proposed behavior and acceptance.
+NX-F34,NuxGame,PDF p7 · Feature detail r39,Product documentation,Gamification / Loyalty reporting,D12.3 D13.3,"D12, D13",Use the linked story for proposed behavior and acceptance.
+NX-F35,NuxGame,PDF p8 · Feature detail r40,Product documentation,Payments / Deposits and withdrawals,D18.2 D18.3,D18,Use the linked story for proposed behavior and acceptance.
+NX-F36,NuxGame,PDF p8 · Feature detail r41,Product documentation,Payments / Payment methods,D18.1,D18,Use the linked story for proposed behavior and acceptance.
+NX-F37,NuxGame,PDF p8 · Feature detail r42,Product documentation,Payments / Transaction status and history,D18.2 D18.3,D18,Use the linked story for proposed behavior and acceptance.
+NX-F38,NuxGame,PDF p8 · Feature detail r43,Release note,Payments / Multi-currency balances,D17.1 D17.3,D17,Use the linked story for proposed behavior and acceptance.
+NX-F39,NuxGame,PDF p8 · Feature detail r44,Release note,Payments / In-game currency conversion,D17.3 D19.2,"D17, D19",Use the linked story for proposed behavior and acceptance.
+NX-F40,NuxGame,PDF p8 · Feature detail r45,Product documentation,Payments / Payment routing,D18.1,D18,Use the linked story for proposed behavior and acceptance.
+NX-F41,NuxGame,PDF p9 · Feature detail r46,Product documentation,"KYC & AML, Antifraud / Document and age checks",D14.1 D14.2,D14,Use the linked story for proposed behavior and acceptance.
+NX-F42,NuxGame,PDF p9 · Feature detail r47,Product documentation,"KYC & AML, Antifraud / Facial match and liveness",D14.2,D14,Use the linked story for proposed behavior and acceptance.
+NX-F43,NuxGame,PDF p9 · Feature detail r48,Product documentation,"KYC & AML, Antifraud / AML screening",D15.2,D15,Use the linked story for proposed behavior and acceptance.
+NX-F44,NuxGame,PDF p9 · Feature detail r49,Product documentation,"KYC & AML, Antifraud / Fraud alerts",D15.1,D15,Use the linked story for proposed behavior and acceptance.
+NX-F45,NuxGame,PDF p9 · Feature detail r50,Product documentation,"KYC & AML, Antifraud / Case decisions and history",D14.2 D15.2,"D14, D15",Use the linked story for proposed behavior and acceptance.
+NX-F46,NuxGame,PDF p9 · Feature detail r51,Product documentation,"KYC & AML, Antifraud / Account restrictions and limits",D02.2 D15.3 D16.2,"D02, D15, D16",Use the linked story for proposed behavior and acceptance.
+NX-F47,NuxGame,PDF p10 · Feature detail r52,Product documentation,Turnkey Casino Software / New-brand launch,D01.3 D04.3 D03.2,"D01, D03, D04",Use the linked story for proposed behavior and acceptance.
+NX-F48,NuxGame,PDF p10 · Feature detail r53,Product documentation,Turnkey Casino Software / Market configuration,D01.3 D18.1,"D01, D18",Use the linked story for proposed behavior and acceptance.
+NX-F49,NuxGame,PDF p10 · Feature detail r54,Video / promotional claim,Crypto Casino / Crypto and Web3 support,D24.1,D24,The clip advertises 40+ cryptocurrencies. Select each asset/network separately; no volume target.
+NX-F50,NuxGame,PDF p10 · Feature detail r55,Product documentation,Crypto Casino / External wallets,D24.1,D24,Use the linked story for proposed behavior and acceptance.
+NX-F51,NuxGame,PDF p10 · Feature detail r56,Product documentation,Crypto Casino / Stablecoin balances,D24.2 D17.1,"D17, D24",Use the linked story for proposed behavior and acceptance.
+NX-F52,NuxGame,PDF p10 · Feature detail r57,Product documentation,Telegram Casino / In-chat navigation,D25.1 D25.2,D25,Use the linked story for proposed behavior and acceptance.
+NX-F53,NuxGame,PDF p10 · Feature detail r58,Product documentation,Telegram Casino / Onboarding and payments,D25.2,D25,Use the linked story for proposed behavior and acceptance.
+NX-F54,NuxGame,PDF p11 · Feature detail r59,Product documentation,Sweepstakes Casino / Two coin balances,D26.1,D26,Use the linked story for proposed behavior and acceptance.
+NX-F55,NuxGame,PDF p11 · Feature detail r60,Product documentation,Sweepstakes Casino / Alternative entry,D26.2,D26,Use the linked story for proposed behavior and acceptance.
+NX-F56,NuxGame,PDF p11 · Feature detail r61,Product documentation,Sweepstakes Casino / Prize redemption,D26.3,D26,Use the linked story for proposed behavior and acceptance.
+NX-F57,NuxGame,PDF p11 · Feature detail r62,Product documentation,Sweepstakes Casino / Coin packages and rewards,D26.2,D26,Use the linked story for proposed behavior and acceptance.
+NX-F58,NuxGame,PDF p12 · Feature detail r63,Product documentation,Casino API / Game launch and routing,D19.1,D19,Use the linked story for proposed behavior and acceptance.
+NX-F59,NuxGame,PDF p12 · Feature detail r64,Product documentation,Casino API / Wallet and round events,D19.2 D17.2,"D17, D19",Use the linked story for proposed behavior and acceptance.
+NX-F60,NuxGame,PDF p12 · Feature detail r65,Product documentation,Casino API / Callbacks and status checks,D19.2 D20.1,"D19, D20",Use the linked story for proposed behavior and acceptance.
+NX-F61,NuxGame,PDF p12 · Feature detail r66,Product documentation,Game Aggregator / Single catalogue connection,D06.3 D27.1,"D06, D27",Use the linked story for proposed behavior and acceptance.
+NX-F62,NuxGame,PDF p12 · Feature detail r67,Product documentation,Game Aggregator / Provider and game analytics,D13.3,D13,Use the linked story for proposed behavior and acceptance.
+NX-F63,NuxGame,PDF p12 · Feature detail r68,Product documentation,Game Aggregator / Revenue reconciliation,D21.1 D21.2,D21,Use the linked story for proposed behavior and acceptance.
+NX-M01,NuxGame,PDF p1 and video 0:24 · Modules r6,Illustrated / narrated,Casino Games,D06.3,D06,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M02,NuxGame,PDF p1 and video 0:25 · Modules r7,Illustrated / narrated,Back-Office,D01.3 D02.2,"D01, D02","Animated module, format or integration label. Detailed controls are documented separately."
+NX-M03,NuxGame,PDF p1 and video 0:26 · Modules r8,Illustrated / narrated,CMS,D05.1,D05,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M04,NuxGame,PDF p1 and video 0:27 · Modules r9,Illustrated / narrated,Bonus Engine,D11.2,D11,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M05,NuxGame,PDF p1 and video 0:28 · Modules r10,Illustrated / narrated,Gamification,D12.3,D12,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M06,NuxGame,PDF p1 and video 0:29 · Modules r11,Illustrated / narrated,Payments,D18.1,D18,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M07,NuxGame,PDF p1 and video 0:30 · Modules r12,Illustrated / narrated,"KYC & AML, Antifraud",D14.2 D15.1,"D14, D15","Animated module, format or integration label. Detailed controls are documented separately."
+NX-M08,NuxGame,PDF p1 and video 0:20 · Modules r13,Illustrated / narrated,Turnkey Casino Software,D04.3,D04,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M09,NuxGame,PDF p1 and video 0:43 · Modules r14,Illustrated / narrated,Crypto Casino,D24.1,D24,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M10,NuxGame,PDF p1 and video 0:48 · Modules r15,Illustrated / narrated,Telegram Casino,D25.1,D25,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M11,NuxGame,PDF p1 and video 0:50 · Modules r16,Illustrated / narrated,Sweepstakes Casino,D26.1,D26,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M12,NuxGame,PDF p1 and video 0:55 · Modules r17,Illustrated / narrated,Casino API,D19.1,D19,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M13,NuxGame,PDF p1 and video 0:55 · Modules r18,Illustrated / narrated,Game Aggregator,D06.3,D06,"Animated module, format or integration label. Detailed controls are documented separately."
+NX-M14,NuxGame,PDF p1 and video 1:05 · Modules r19,Illustrated / narrated,Book a Demo,,,Closing call to action; reference only.
+NX-N01,NuxGame,PDF p4 · Modules r25,Product documentation,Players,D02.2 D09.2,"D02, D09",Documented navigation section. The animation opens no back-office tabs.
+NX-N02,NuxGame,PDF p4 · Modules r26,Product documentation,Payments & Wallets,D17.1 D18.1,"D17, D18",Documented navigation section. The animation opens no back-office tabs.
+NX-N03,NuxGame,PDF p4 · Modules r27,Product documentation,Risk & KYC,D14.2 D15.2,"D14, D15",Documented navigation section. The animation opens no back-office tabs.
+NX-N04,NuxGame,PDF p4 · Modules r28,Product documentation,Reporting & GGR Tracking,D13.3 D21.1,"D13, D21",Documented navigation section. The animation opens no back-office tabs.
+NX-N05,NuxGame,PDF p4 · Modules r29,Product documentation,Content & Integrations,D06.3 D27.1,"D06, D27",Documented navigation section. The animation opens no back-office tabs.

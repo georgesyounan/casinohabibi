@@ -360,3 +360,12 @@
 #catalog-change-detail[hidden]{display:none}
 #catalog-source>label{margin-top:.65rem}
 #catalog-status button{margin:.3rem .5rem}
+
+.operator-view { display: grid; gap: .8rem; min-width: 0; }
+.operator-view > button { justify-self: start; }
+.operator-view .op-form { display: grid; gap: .7rem; max-width: 44rem; }
+.operator-view .op-form button { justify-self: start; }
+.operator-view .op-form label { min-width: 0; }
+.operator-view .op-form input, .operator-view .op-form select, .operator-view .op-form textarea { max-width: 100%; }
+.operator-view .op-reference, .operator-view .op-attachment, .operator-view .contact-card { overflow-wrap: anywhere; }
+.operator-view .op-attachment { white-space: pre-wrap; }
