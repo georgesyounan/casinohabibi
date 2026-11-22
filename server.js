@@ -1,5 +1,7 @@
 import { createPartnerLobby } from './lib/partner-lobby.js';
 import { createLobbyShelves } from './lib/lobby-shelves.js';
+import { createReviewDesk } from './lib/review-desk.js';
+import { createCashierDesk } from './lib/cashier-desk.js';
 import { createFinancePilot } from './lib/finance-pilot.js';
 import { createOperatorProducts } from './lib/operator-products.js';
 import { createOperatorServices } from './lib/operator-services.js';
@@ -294,6 +296,8 @@ const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 const partnerLobby=transaction(()=>createPartnerLobby(db,{fail,audit:staffAudit.record,encryptionKey}));
 const lobbyShelves = transaction(() => createLobbyShelves(db, { fail, audit: staffAudit.record }));
 const financePilot = transaction(() => createFinancePilot(db, { fail, audit: staffAudit.record }));
+const reviewDesk=transaction(()=>createReviewDesk(db,{fail,audit:staffAudit.record,createWallet:financePilot.cashier.open}));
+const cashierDesk=transaction(()=>createCashierDesk(db,{fail,audit:staffAudit.record,review:reviewDesk,ledger:financePilot.cashier}));
 const operatorProducts = transaction(() => createOperatorProducts(db, { fail, audit: staffAudit.record }));
 const operatorServices = transaction(() => createOperatorServices(db, { fail, audit: staffAudit.record }));
 const providerCatalog=transaction(()=>createProviderCatalog(db,{fail,audit:staffAudit.record,encryptKey:encryptProviderKey}));
@@ -782,6 +786,77 @@ async function api(req, res, path, tenantId, requestId) {
       return auditedChange(catalogueRoles,input,staff=>lobbyShelves.update(tenantId,staff,requestId,input),'publishCatalogue');
     }
     fail(404,'opMissing');
+  }
+  if (path === '/api/me/review-demo') {
+    if (!player) fail(401, 'signin');
+    const before = params.has('before') ? Number(params.get('before')) : undefined;
+    if (req.method === 'GET')
+      return transaction(() => reviewDesk.playerView(tenantId, player, before), { readOnly: true });
+    if (req.method === 'POST') {
+      const input = await body(req);
+      if (!input || typeof input !== 'object') fail(400, 'invalid');
+      return transaction(() => {
+        if (signedPlayer(req, tenantId) !== player) fail(401, 'signin');
+        return reviewDesk.playerEvidence(tenantId, player, input);
+      });
+    }
+    fail(404, 'opMissing');
+  }
+  if (path.startsWith('/api/admin/desk/')) {
+    const resource = path.slice('/api/admin/desk/'.length),
+      supportRead = req.method === 'GET' && ['subjects', 'subject'].includes(resource);
+    const roles = supportRead ? supportRoles : ['operator_admin'];
+    const staff = staffContext(req, tenantId, roles);
+    if (!adminEnabled) fail(503, 'adminDisabled');
+    if (req.method === 'GET')
+      return transaction(
+        () => {
+          const id = params.get('id'),
+            page = Number(params.get('page') || 1);
+          switch (resource) {
+            case 'subjects':
+              return reviewDesk.list(tenantId, params);
+            case 'subject': {
+              const record = reviewDesk.detail(
+                tenantId,
+                staff,
+                id,
+                params.has('before') ? Number(params.get('before')) : undefined,
+              );
+              if (staff.role !== 'operator_admin')
+                record.withdrawals = cashierDesk.supportSummary(tenantId, id);
+              return record;
+            }
+            case 'policies':
+              return { items: reviewDesk.settings(tenantId) };
+            case 'routes':
+              return { items: cashierDesk.routes(tenantId) };
+            case 'options':
+              return cashierDesk.options(tenantId, {
+                direction: params.get('direction'),
+                market: params.get('market'),
+                asset: params.get('asset'),
+                minor: Number(params.get('minor')),
+              });
+            case 'cashier':
+              return cashierDesk.detail(tenantId, id, page);
+            case 'intent':
+              return cashierDesk.intent(tenantId, id);
+            default:
+              fail(404, 'opMissing');
+          }
+        },
+        { readOnly: true },
+      );
+    if (req.method === 'POST' && ['review', 'cashier'].includes(resource)) {
+      const input = await body(req);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) fail(400, 'invalid');
+      const command = resource === 'review' ? reviewDesk.change : cashierDesk.change;
+      return auditedChange(['operator_admin'], input, (actor) =>
+        command(tenantId, actor, requestId, input),
+      );
+    }
+    fail(404, 'opMissing');
   }
   if (path.startsWith('/api/admin/operator/')) {
     const resource = path.slice('/api/admin/operator/'.length);
@@ -2134,6 +2209,7 @@ const assets = {
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/growth-player.js':['growth-player.js','text/javascript'],
   '/finance-pilot.js':['finance-pilot.js','text/javascript'],
+  '/review-desk.js':['review-desk.js','text/javascript'],
   '/partner-lobby.js':['partner-lobby.js','text/javascript'],
   '/lobby-shelves.js':['lobby-shelves.js','text/javascript'],
   '/operator-workflows.js':['operator-workflows.js','text/javascript'],

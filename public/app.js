@@ -1,3 +1,4 @@
+import { createReviewUi, reviewCopy } from './review-desk.js';
 import { createPartnerUi, partnerLobbyCopy } from './partner-lobby.js';
 import { createPublicShelf, createShelfEditor, shelfCopy } from './lobby-shelves.js';
 import { createPilotUi, pilotCopy } from './finance-pilot.js';
@@ -23,7 +24,7 @@ const currentRoute = location.pathname.startsWith(appPath('/'))
   ? location.pathname.slice(appBasePath.length) : location.pathname;
 const isAdminPage = currentRoute === '/admin';
 const copy = {
-  ...comingSoonCopy,...providerCatalogCopy,...operatorCopy,...pilotCopy,...shelfCopy,...partnerLobbyCopy,
+  ...comingSoonCopy,...providerCatalogCopy,...operatorCopy,...pilotCopy,...shelfCopy,...partnerLobbyCopy,...reviewCopy,
   ...playerAccessCopy,
   ...accountBreakCopy,
   ...discoveryCopy,...growthCopy,
@@ -530,7 +531,7 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const auditedMutation = data !== undefined && /^(admin\/(shelves\/change|operator\/|config|website-content|coming-soon|discovery\/|growth\/|community\/|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  const auditedMutation = data !== undefined && /^(admin\/(desk\/|shelves\/change|operator\/|config|website-content|coming-soon|discovery\/|growth\/|community\/|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
   const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
   const publication = (path === 'admin/website-content' || path === 'admin/coming-soon') &&
     ['publish', 'archive'].includes(data?.action);
@@ -1369,6 +1370,7 @@ function renderDialog() {
     return;
   }
   if (player.displayName) panel.append(element('p', t('welcomeBackName').replace('{name}', player.displayName), 'profile-greeting'));
+  reviewUi.player(panel,()=>player?.id);
   panel.append(element('p', player.email), element('p', `${t('emailStatusLabel')}: ${t(player.emailVerified ? 'emailVerifiedStatus' : 'emailUnverifiedStatus')}`), element('p', `${t('savedLanguageLabel')}: ${t(player.preferredLocale === 'fr-CA' ? 'frenchLanguage' : 'englishLanguage')}`), action(t('changeEmail'), () => openPanel('emailChange'), 'ghost'), element('h3', t('accountProfileTitle')));
   const displayNameLabel = element('label', t('displayName'));
   const displayNameInput = element('input');
@@ -1869,11 +1871,13 @@ const providerCatalogUi=createProviderCatalogUi({api,t,appPath,french:()=>Boolea
   openPanel:id=>adminWorkspace.open(id)});
 const operatorUi=createOperatorUi({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,
   staffId:()=>currentStaffId,canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue),open:id=>adminWorkspace.open('operator-'+id)});
+const reviewUi=createReviewUi({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,staffId:()=>currentStaffId,open:target=>adminWorkspace.open('review-'+target)});
 const partnerUi=createPartnerUi({api,t,french:()=>Boolean(language),appPath,staffId:()=>currentStaffId});
 const shelfEditor=createShelfEditor({api,t,french:()=>Boolean(language),staffId:()=>currentStaffId,canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue)});
 const publicShelf=createPublicShelf({api,appPath,french:()=>Boolean(language)});
 const pilotUi=createPilotUi({api,t,french:()=>Boolean(language),staffId:()=>currentStaffId});
 const adminLoaders = {
+  ...Object.fromEntries(['subjects','cashier','settings'].map(key=>['review-'+key,()=>reviewUi.load(key)])),
   'operator-clients':partnerUi.load,
   'operator-shelves':shelfEditor.load,
   'operator-pilot':pilotUi.load,
@@ -1963,6 +1967,7 @@ function render() {
   if(languageChanged&&adminWorkspace.isOpen('catalog-management'))providerCatalogUi.directory();
   if(languageChanged&&adminWorkspace.isOpen('catalog-history'))void providerCatalogUi.history();
   if(languageChanged&&adminWorkspace.isOpen('catalog-import'))providerCatalogUi.showSaved();
+  if(languageChanged&&currentStaffId) for(const key of ['subjects','cashier','settings']) if(adminWorkspace.isOpen('review-'+key))void reviewUi.load(key);
   if(languageChanged&&currentStaffId&&adminWorkspace.isOpen('operator-clients'))void partnerUi.load();
   if(languageChanged&&currentStaffId&&adminWorkspace.isOpen('operator-shelves'))void shelfEditor.load();
   if(languageChanged&&currentStaffId&&adminWorkspace.isOpen('operator-pilot'))void pilotUi.load();
@@ -2829,7 +2834,7 @@ $('#overview-export').addEventListener('click', exportOperatorOverview);
 
 function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
-  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)){supportQueue.clear();providerCatalogUi.clear();operatorUi.clear();pilotUi.clear();shelfEditor.clear();partnerUi.clear();}
+  if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)){supportQueue.clear();providerCatalogUi.clear();operatorUi.clear();pilotUi.clear();shelfEditor.clear();partnerUi.clear();reviewUi.clear();}
   currentStaffId = session.id;
   currentStaffRole = session.role;
   currentStaffPermissions = {...session.permissions,testCredits:Boolean(session.testCredits)};
