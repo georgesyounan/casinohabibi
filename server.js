@@ -13,6 +13,7 @@ import { createPublicPages, guideBody, pageHead, sitemapXml } from './lib/public
 import { createPublicationFollowup } from './lib/publication-followup.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
+import { createAccountBreaks } from './lib/account-breaks.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
 
 const appEnvironment = process.env.APP_ENV || 'development';
@@ -264,6 +265,7 @@ if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === '
 }
 db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 installComingSoon(db);
+const accountBreaks = createAccountBreaks(db, { fail, transaction });
 const savedTitles = createSavedTitles(db, { fail, transaction });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
@@ -643,7 +645,7 @@ function account(id, tenantId) {
     history: historyRows,
     historyNextCursor: hasMoreHistory ? historyRows.at(-1).id : null,
     favorites,
-    safety: { pausedUntil: safety.pause_until || null, coolingOffUntil: safety.cooling_off_until || null, excluded: Boolean(safety.excluded_at), dailyLimit: safety.daily_limit_cents ?? 2500, dailyWagered: dailyWagered(id, tenantId), sessionReminderMinutes: safety.session_reminder_minutes ?? 60 },
+    safety: { accountBreak: accountBreaks.at(tenantId, id), pausedUntil: safety.pause_until || null, coolingOffUntil: safety.cooling_off_until || null, excluded: Boolean(safety.excluded_at), dailyLimit: safety.daily_limit_cents ?? 2500, dailyWagered: dailyWagered(id, tenantId), sessionReminderMinutes: safety.session_reminder_minutes ?? 60 },
     marketingEmailConsent: Boolean(marketingConsent?.granted),
     supportReplies
   };
@@ -765,11 +767,16 @@ async function api(req, res, path, tenantId, requestId) {
     const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
     return playerAccess.search(tenantId, query);
   }
-  const playerRoute = path.match(/^\/api\/admin\/players\/([1-9]\d*)(?:\/(access|recovery))?$/);
+  const playerRoute = path.match(/^\/api\/admin\/players\/([1-9]\d*)(?:\/(access|recovery|break))?$/);
   if (playerRoute) {
     const staff = staffContext(req, tenantId, supportRoles);
     const id = Number(playerRoute[1]);
     if (!Number.isSafeInteger(id)) fail(400, 'invalid');
+    if (playerRoute[2] === 'break') {
+      if (req.method !== 'GET') fail(404, 'invalid');
+      playerAccess.get(tenantId, id);
+      return { accountBreak: accountBreaks.at(tenantId, id) };
+    }
     if (req.method === 'GET' && !playerRoute[2]) {
       const params = new URL(req.url, 'http://localhost').searchParams;
       const cursor = (name) => {
@@ -778,7 +785,7 @@ async function api(req, res, path, tenantId, requestId) {
         if (!Number.isSafeInteger(value) || value < 1) fail(400, 'invalid');
         return value;
       };
-      return { ...playerAccess.detail(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
+      return { ...playerAccess.detail(tenantId, id), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
     }
     if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
     const input = await body(req);
@@ -1369,7 +1376,7 @@ async function api(req, res, path, tenantId, requestId) {
       previewSaveHistory: comingSoon.playerSaves(tenantId, player),
       previewSaveActivity: savedTitles.history(tenantId, player, { limit: -1 }).entries,
       simulatedBalanceCents: balance(player, tenantId),
-      responsiblePlay: { dailyLimitCents: safety.dailyLimitCents ?? 2500, dailyWageredCents, dailyWagerDateUtc, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
+      responsiblePlay: { accountBreak: accountBreaks.at(tenantId, player), dailyLimitCents: safety.dailyLimitCents ?? 2500, dailyWageredCents, dailyWagerDateUtc, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
       consentHistory: consents,
       activity: transactions,
@@ -1503,7 +1510,13 @@ async function api(req, res, path, tenantId, requestId) {
       if (!notesByTicket.has(note.ticketId)) notesByTicket.set(note.ticketId, []);
       notesByTicket.get(note.ticketId).push(note);
     }
-    const items = attachSupportMessages(tickets.map((ticket) => ({ ...ticket, notes: notesByTicket.get(ticket.id) || [] })), tenantId, true);
+    const now = Date.now();
+    const items = attachSupportMessages(tickets.map((ticket) => ({
+      ...ticket, notes: notesByTicket.get(ticket.id) || [],
+      ...(ticket.category === 'responsible_play' && !ticket.isComplaint && {
+        accountBreak: ticket.playerPauseUntil > now || ticket.playerCoolingOffUntil > now ? accountBreaks.at(tenantId, ticket.playerId, now) : null
+      })
+    })), tenantId, true);
     const lastTicket = tickets.at(-1);
     return { tickets: items, total, counts, nextCursor: hasMore ? { updatedAt: lastTicket.updatedAt, id: lastTicket.id } : null };
   }
@@ -1602,38 +1615,34 @@ async function api(req, res, path, tenantId, requestId) {
     res.setHeader('Set-Cookie', `northplay=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
     return null;
   }
-  if (route === 'POST /api/safety/pause' || route === 'POST /api/safety/exclude') {
+  if (route === 'GET /api/safety/break') {
     if (!player) fail(401, 'signin');
-    const current = db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(player);
-    if (current?.excluded_at) fail(403, 'excluded');
-    const now = Date.now();
-    const pauseUntil = route.endsWith('/pause') ? now + 15 * 60 * 1000 : null;
-    transaction(() => {
-      db.prepare('INSERT INTO player_safety(player, pause_until, excluded_at) VALUES (?, ?, ?) ON CONFLICT(player) DO UPDATE SET pause_until = excluded.pause_until, excluded_at = coalesce(player_safety.excluded_at, excluded.excluded_at)').run(
-        player, pauseUntil, route.endsWith('/exclude') ? now : null
-      );
-      if (route.endsWith('/exclude')) db.prepare('DELETE FROM sessions WHERE player = ? AND tenant_id = ?').run(player, tenantId);
-    });
-    if (route.endsWith('/exclude')) res.setHeader('Set-Cookie', `northplay=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
-    return { pausedUntil: pauseUntil, excluded: route.endsWith('/exclude') };
+    return { accountBreak: accountBreaks.at(tenantId, player) };
   }
-  if (route === 'POST /api/safety/cooling-off') {
+  if (route === 'POST /api/safety/pause' || route === 'POST /api/safety/cooling-off') {
     if (!player) fail(401, 'signin');
-    const { days } = await body(req);
-    if (![1, 7, 30].includes(days)) fail(400, 'invalid');
-    const current = db.prepare('SELECT excluded_at AS excludedAt, cooling_off_until AS coolingOffUntil FROM player_safety WHERE player = ?').get(player) || {};
-    if (current.excludedAt) fail(403, 'excluded');
-    const now = Date.now();
-    const requestedUntil = now + days * 24 * 60 * 60 * 1000;
-    const until = Math.max(current.coolingOffUntil || 0, requestedUntil);
-    if (until > (current.coolingOffUntil || 0)) {
-      transaction(() => {
-        db.prepare('INSERT INTO player_safety(player, cooling_off_until) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET cooling_off_until = max(coalesce(player_safety.cooling_off_until, 0), excluded.cooling_off_until)').run(player, until);
-        const action = current.coolingOffUntil > now ? 'cooling_off_extended' : 'cooling_off_started';
-        db.prepare('INSERT INTO player_protection_events(tenant_id, player_id, action, duration_days, until_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(tenantId, player, action, days, until, now);
-      });
-    }
-    return account(player, tenantId);
+    const quick = route.endsWith('/pause');
+    const days = quick ? 0 : (await body(req)).days;
+    if (!quick && ![1, 7, 30].includes(days)) fail(400, 'invalid');
+    return transaction(() => {
+      req.assertPlayerSession();
+      const key = req.headers['x-request-id']?.toLowerCase() === requestId ? requestId : null;
+      accountBreaks.start(tenantId, player, quick ? 15 : days * 1440, key);
+      const result = account(player, tenantId);
+      return quick ? result.safety : result;
+    });
+  }
+  if (route === 'POST /api/safety/exclude') {
+    if (!player) fail(401, 'signin');
+    transaction(() => {
+      req.assertPlayerSession();
+      const current = db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(player);
+      if (current?.excluded_at) fail(403, 'excluded');
+      db.prepare('INSERT INTO player_safety(player, excluded_at) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET pause_until = NULL, excluded_at = excluded.excluded_at').run(player, Date.now());
+      db.prepare('DELETE FROM sessions WHERE player = ? AND tenant_id = ?').run(player, tenantId);
+    });
+    res.setHeader('Set-Cookie', `northplay=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
+    return { pausedUntil: null, excluded: true };
   }
   if (route === 'POST /api/safety/limit') {
     if (!player) fail(401, 'signin');
@@ -1813,6 +1822,7 @@ const assets = {
   '/website-content.js': ['website-content.js', 'text/javascript'],
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
+  '/account-break.js': ['account-break.js', 'text/javascript'],
   '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
   '/hero.webp': ['hero.webp', 'image/webp'],

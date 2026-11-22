@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import { createAccountBreaks } from '../lib/account-breaks.js';
 import { createSavedTitles } from '../lib/saved-titles.js';
 import { reportPeriod } from '../lib/dashboard.js';
 import { collectionKey, matchesCatalogue } from '../public/catalog.js';
@@ -503,6 +504,7 @@ test('player access across devices, recovery delivery, brand isolation and revoc
   await otherBrand('admin/login', creds, 'localhost');
   assert.deepEqual((await otherBrand('admin/players?q=player', undefined, 'localhost')).data, []);
   assert.equal((await otherBrand(route, undefined, 'localhost')).status, 404);
+  assert.equal((await otherBrand(route + '/break', undefined, 'localhost')).status, 404);
 
   const deliveryKey = { 'X-Request-ID': randomUUID() };
   const attempts = await Promise.all(Array.from({ length: 2 }, () => support(route + '/recovery', {}, undefined, deliveryKey)));
@@ -558,6 +560,138 @@ test('player access across devices, recovery delivery, brand isolation and revoc
 const cardDraft = (title, extra = {}) => ({
   action: 'save', version: 0, category: 'table', titleEn: title, titleFr: title + ' FR', studio: '',
   descriptionEn: '', descriptionFr: '', artwork: '', altEn: '', altFr: '', featuredRank: 0, ...extra
+});
+
+test('a timed break propagates to independent player and support sessions and marks saved activity at its event time', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const [laptop, phone, admin, content, guest] = Array.from({ length: 5 }, () => client(base));
+  await register(laptop);
+  const id = (await phone('login', playerCredentials)).data.id;
+  assert.equal((await laptop('safety/break')).data.accountBreak, null);
+  assert.equal((await guest('safety/break')).status, 401);
+  assert.equal((await guest('safety/pause', {})).status, 401);
+  await admin('admin/login', staffCredentials);
+  const writer = { email: 'editor@example.test', password: 'example-editor-password' };
+  await admin('admin/staff', { ...writer, role: 'operator_content' });
+  await content('admin/login', writer);
+  const detail = 'admin/players/' + id;
+  assert.equal((await content(detail)).status, 403);
+  assert.equal((await content(detail + '/break')).status, 403);
+  const card = (await admin('admin/coming-soon', cardDraft('Lunar Garden'))).data.title;
+  await admin('admin/coming-soon', { action: 'publish', version: card.version, slug: card.slug });
+  const shelf = 'me/saved/' + card.id;
+  const first = await laptop(shelf, undefined, undefined, {}, 'PUT');
+  await laptop(shelf, undefined, undefined, {}, 'DELETE');
+
+  const key = { 'X-Request-ID': randomUUID() };
+  const attempts = await Promise.all([laptop('safety/pause', {}, undefined, key), phone('safety/pause', {}, undefined, key)]);
+  assert.ok(attempts.every(({status}) => status === 200));
+  const period = attempts[0].data.accountBreak;
+  assert.deepEqual(attempts[1].data.accountBreak, period);
+  assert.equal(period.endsAt - period.startedAt, 15 * 60_000);
+  assert.equal(attempts[0].data.dailyLimit, 2500);
+  assert.deepEqual((await phone('account')).data.safety.accountBreak, period);
+  assert.deepEqual((await admin(detail)).data.accountBreak, period);
+  assert.equal((await laptop('safety/cooling-off', {days: 1}, undefined, key)).status, 409);
+  assert.equal((await phone('safety/cooling-off', {days: 2})).status, 400);
+  const bet = { game: 'gold', wager: 100, requestId: randomUUID() };
+  assert.equal((await phone('play', bet)).data.error, 'paused');
+
+  const both = await Promise.all([1, 7].map(days => phone('safety/cooling-off', {days})));
+  assert.ok(both.every(({status}) => status === 200));
+  const extended = (await laptop('safety/break')).data.accountBreak;
+  assert.equal(extended.startedAt, period.startedAt);
+  assert.ok(extended.endsAt >= period.startedAt + 7 * 86400_000);
+  assert.deepEqual((await phone('safety/pause', {}, undefined, key)).data.accountBreak, extended);
+  assert.deepEqual((await phone('safety/cooling-off', {days: 1})).data.safety.accountBreak, extended);
+  assert.deepEqual((await admin(detail)).data.accountBreak, extended);
+  assert.deepEqual((await admin(detail + '/break')).data, { accountBreak: extended });
+  for (const category of ['responsible_play', 'account']) {
+    assert.equal((await phone('support', { category, message: 'Please confirm the account status.' })).status, 200);
+  }
+  const tickets = (await admin('admin/support')).data.tickets;
+  assert.deepEqual(tickets.find(ticket => ticket.category === 'responsible_play').accountBreak, extended);
+  assert.equal(tickets.find(ticket => ticket.category === 'account').accountBreak, undefined);
+  assert.equal((await fetch(base + '/coming-soon/' + card.slug)).status, 200);
+  const saved = await phone(shelf, undefined, undefined, {}, 'PUT');
+  assert.equal(saved.data.saved, true);
+  const exported = (await laptop('account/export')).data;
+  assert.deepEqual(exported.responsiblePlay.accountBreak, extended);
+  assert.equal(exported.previewSaveActivity.find(entry => entry.id === first.data.activityId).duringAccountBreak, false);
+  assert.equal(exported.previewSaveActivity.find(entry => entry.id === saved.data.activityId).duringAccountBreak, true);
+  const db = new DatabaseSync(database);
+  try {
+    assert.equal(db.prepare('SELECT count(*) AS n FROM player_account_breaks WHERE request_id = ?').get(key['X-Request-ID']).n, 1);
+  } finally { db.close(); }
+  const reset = await phone('password-reset/request', { email: playerCredentials.email, locale: 'fr-CA' });
+  assert.equal(reset.status, 200);
+  const password = 'replacement-break-password';
+  assert.equal((await laptop('password-reset/complete', { token: new URL(reset.data.resetUrl).searchParams.get('reset'), password })).status, 200);
+  assert.deepEqual((await phone('login', { email: playerCredentials.email, password })).data.safety.accountBreak, extended);
+  assert.equal((await phone('safety/exclude', {})).status, 200);
+  assert.equal((await phone('safety/break')).status, 401);
+  assert.equal((await laptop('login', { email: playerCredentials.email, password })).data.error, 'excluded');
+});
+
+test('legacy protection windows migrate once, keep their boundaries and isolate brands and players', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`PRAGMA foreign_keys = ON;
+      CREATE TABLE tenants(id TEXT PRIMARY KEY);
+      CREATE TABLE players(id INTEGER PRIMARY KEY, tenant_id TEXT);
+      CREATE TABLE player_safety(player INTEGER PRIMARY KEY, pause_until INTEGER, cooling_off_until INTEGER, excluded_at INTEGER);
+      CREATE TABLE player_protection_events(tenant_id TEXT, player_id INTEGER, action TEXT, duration_days INTEGER, until_at INTEGER, created_at INTEGER);
+      INSERT INTO tenants VALUES('one'),('two');
+      INSERT INTO players VALUES(1,'one'),(2,'two'),(3,'one');
+    `);
+    const begin = Date.now() - 5 * 86_400_000;
+    const firstEnd = begin + 86_400_000;
+    const secondStart = begin + 86_400_000 * 2;
+    const end = secondStart + 7 * 86_400_000;
+    const legacy = db.prepare("INSERT INTO player_protection_events VALUES('one',1,?,?,?,?)");
+    legacy.run('cooling_off_started', 1, firstEnd, begin);
+    legacy.run('cooling_off_started', 1, secondStart + 86_400_000, secondStart);
+    legacy.run('cooling_off_extended', 7, end + 1000, secondStart + 1000);
+    const lastQuick = secondStart + 900_000 + 10;
+    db.prepare('INSERT INTO player_safety VALUES(1,?,?,NULL),(2,NULL,?,NULL)').run(lastQuick, end + 1000, end);
+    const transaction = fn => { db.exec('BEGIN'); try { const v = fn(); db.exec('COMMIT'); return v; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+    const deps = { transaction, fail: assert.fail };
+    const periods = createAccountBreaks(db, deps);
+    assert.equal(periods.at('one', 1, begin - 1), null);
+    assert.deepEqual({ ...periods.at('one', 1, begin) }, { startedAt: begin, endsAt: firstEnd });
+    assert.equal(periods.at('one', 1, firstEnd), null);
+    const active = { startedAt: secondStart, endsAt: end + 1000 };
+    assert.deepEqual({ ...periods.at('one', 1) }, active);
+    assert.equal(periods.at('one', 1, active.endsAt), null);
+    assert.equal(periods.at('two', 1), null);
+    assert.equal(periods.at('one', 3), null);
+    assert.deepEqual({ ...periods.at('two', 2) }, { startedAt: null, endsAt: end });
+    assert.equal(periods.at('two', 2, begin), null);
+    transaction(() => periods.start('one', 3, 15, 'test-request', begin));
+    assert.equal(periods.at('one', 3, begin + 900_000 - 1).startedAt, begin);
+    assert.equal(periods.at('one', 3, begin + 900_000), null);
+    transaction(() => periods.start('one', 3, 15, 'test-request', end));
+    assert.equal(periods.at('one', 3, end), null);
+
+    db.exec(`CREATE TABLE coming_soon_titles(tenant_id TEXT, id INTEGER, slug TEXT, state TEXT, PRIMARY KEY(tenant_id,id));
+      INSERT INTO coming_soon_titles VALUES('one',5,'lunar-garden','published');
+      CREATE TABLE player_favorites(player_id INTEGER, tenant_id TEXT, favorite_key TEXT, created_at INTEGER, PRIMARY KEY(player_id,tenant_id,favorite_key));
+      CREATE TABLE coming_soon_saves(id INTEGER PRIMARY KEY, tenant_id TEXT, player_id INTEGER, title_id INTEGER, created_at INTEGER, UNIQUE(tenant_id,player_id,title_id))`);
+    const shelf = createSavedTitles(db, deps);
+    const put = (time, key) => transaction(() => shelf.set('one', 3, 'coming-soon:5', true, time, key));
+    const during = put(begin, 'original-save');
+    transaction(() => shelf.set('one', 3, 'coming-soon:5', false, begin + 1, null));
+    const after = put(begin + 900_000, 'new-save');
+    assert.equal(put(end, 'original-save').activityId, during.activityId);
+    const facts = shelf.history('one', 3).entries;
+    assert.equal(facts.find(row => row.id === during.activityId).duringAccountBreak, true);
+    assert.equal(facts.find(row => row.id === after.activityId).duringAccountBreak, false);
+
+    const count = () => db.prepare('SELECT count(*) AS n FROM player_account_breaks').get().n;
+    const before = count();
+    assert.deepEqual({ ...createAccountBreaks(db, deps).at('one', 1) }, active);
+    assert.equal(count(), before);
+  } finally { db.close(); }
 });
 
 test('protected catalogue previews and published market and language restrictions', async (t) => {
