@@ -2561,3 +2561,86 @@ test('published demo rounds retain their source, enforce availability and accoun
   await checked(phone, 'safety/pause', {});
   assert.equal((await laptop('play', { ...spin, previewSlug: other.slug, requestId: randomUUID() })).data.error, 'paused');
 });
+test('a scoped title report reconciles with round receipts, the player history, and a linked support case', async (t) => {
+  const { base, database } = await startSandbox(t);
+  const [admin, support, editor, a, b, fixture] = Array.from({ length: 6 }, () => client(base));
+  const pageHtml = await (await fetch(base + '/admin')).text();
+  for (const id of ['overview-round-report', 'player-round-list', 'player-reward-details', 'player-reward-list']) {
+    assert.ok(pageHtml.includes('id="' + id + '"'), id);
+  }
+  await checked(admin, 'admin/login', staffCredentials);
+  for (const [role, who] of [['operator_support', support], ['operator_content', editor]]) {
+    const creds = { email: role + '@example.test', password: 'operator-test-password' };
+    await checked(admin, 'admin/staff', { ...creds, role });
+    await checked(who, 'admin/login', creds);
+  }
+  const aid = await growthAccount(a, 'lantern-player');
+  const bid = await growthAccount(b, 'souk-player');
+  const fixtureId = await growthAccount(fixture, 'fixture-player');
+  const issue = async (name, options = {}) => {
+    const input = cardDraft(name, { category: 'slots', demoGame: 'gold', ...options });
+    const saved = (await checked(admin, 'admin/coming-soon', input)).title;
+    return (await checked(admin, 'admin/coming-soon', { action: 'publish', slug: saved.slug, version: saved.version })).title;
+  };
+  const original = await issue('Lanterns');
+  const idle = await issue('The unplayed souk');
+  const play = (who, input = {}) => checked(who, 'play', { game: 'gold', wager: 100, requestId: randomUUID(), ...input });
+  await play(a);
+  const source = { previewSlug: original.slug, locale: 'fr-CA' };
+  const first = { ...source, requestId: randomUUID() };
+  const oldRound = (await play(a, first)).history[0];
+  await play(a, first);
+  for (let n = 0; n < 10; n++) await play(a, source);
+  const renamed = await issue('After dark', { slug: original.slug, version: original.version });
+  const latest = (await play(b, source)).history[0];
+  await checked(admin, 'admin/coming-soon', { action: 'archive', slug: original.slug, version: renamed.version });
+  const db = new DatabaseSync(database);
+  let foreignRound;
+  try {
+    db.prepare('UPDATE players SET report_fixture=1 WHERE id=?').run(fixtureId);
+    db.prepare("INSERT INTO ledger(player,game,wager,amount,created_at,outcome,tenant_id) VALUES(?,'gold',500,-500,?,'historic text','sandbox')").run(fixtureId,Date.now());
+    db.prepare("INSERT INTO ledger(player,game,wager,amount,created_at,outcome,tenant_id) VALUES(?,'gold',100,-100,0,NULL,'sandbox')").run(aid);
+    db.prepare("INSERT INTO tenants VALUES('elsewhere','elsewhere','Another brand','active',?)").run(Date.now());
+    const foreign = db.prepare("INSERT INTO players(email,password,tenant_id,email_verified) VALUES('local@example.invalid','unused','elsewhere',1)").run().lastInsertRowid;
+    foreignRound = Number(db.prepare("INSERT INTO ledger(player,game,wager,amount,created_at,tenant_id) VALUES(?,'gold',100,-100,?,'elsewhere')").run(foreign,Date.now()).lastInsertRowid);
+  } finally { db.close(); }
+  const report = await checked(support, 'admin/overview?scope=site&days=7');
+  assert.equal(report.demoRoundsInPeriod, 13);
+  assert.equal(report.demoRoundsByGame.find(x => x.game === 'gold').rounds, 13);
+  const grouped = report.demoRoundsByTitle;
+  assert.equal(grouped.reduce((sum,row) => sum + row.rounds, 0), 13);
+  assert.equal(grouped.reduce((sum,row) => sum + row.wagered_cents, 0), report.simulatedWagersCentsInPeriod);
+  const featured = grouped.find(x => x.preview?.slug === original.slug);
+  assert.deepEqual([featured.preview.titleEn, featured.rounds, featured.active_players, featured.wagered_cents], ['After dark',12,2,1200]);
+  assert.equal(grouped.find(row => row.source === 'game:gold').rounds, 1);
+  assert.equal(grouped.find(row => row.preview?.slug === idle.slug).rounds, 0);
+  assert.equal((await checked(admin,'admin/overview?scope=test')).demoRoundsByTitle.find(row => row.source === 'game:gold').rounds,1);
+  const params = new URLSearchParams({ metric:'rounds', source:featured.source, from:report.from, to:report.to, asOf:report.generatedAt, scope:'site', zone:report.reportingTimeZone });
+  const path = 'admin/overview/records?' + params;
+  assert.equal((await editor(path)).status,403);
+  assert.equal((await admin(path+'&brand=elsewhere')).status,403);
+  const list = await checked(support,path);
+  assert.equal(list.total,12);assert.equal(list.entries.length,10);assert.equal(list.entries[0].id,latest.id);
+  const rest = await checked(support,path+'&before='+list.nextCursor);
+  assert.equal(rest.entries.length,2);assert.equal(rest.nextCursor,null);assert.equal(rest.entries.at(-1).id,oldRound.id);
+  const ref = 'round-' + oldRound.id, playerPath = 'admin/players/' + aid;
+  assert.deepEqual((await checked(support,'admin/players?q='+ref)).map(x=>x.id),[aid]);
+  assert.deepEqual(await checked(support,'admin/players?q=round-'+foreignRound),[]);
+  assert.equal((await editor(playerPath+'?round='+oldRound.id)).status,403);
+  const page = (await checked(support,playerPath)).rounds;
+  assert.equal(page.entries.length,5);
+  const page2 = (await checked(support,playerPath+'?beforeRound='+page.nextCursor)).rounds;
+  assert.ok(page2.entries.every(row=>row.id<page.nextCursor));
+  assert.deepEqual((await checked(support,'admin/players/'+bid+'?round='+oldRound.id)).rounds.entries,[]);
+  const exact = (await checked(support,playerPath+'?round='+oldRound.id)).rounds.entries;
+  assert.deepEqual(exact,[oldRound]);assert.equal(JSON.parse(exact[0].outcome).preview.titleEn,'Lanterns');
+  const ticket = { category:'game', message:'Please help me understand this demo round.', reference:ref };
+  assert.equal((await b('support',ticket)).status,404);
+  assert.deepEqual(await checked(b,'support'),[]);
+  assert.equal((await a('support',{...ticket,reference:'round-'+foreignRound})).status,404);
+  const sent = await checked(a,'support',ticket);
+  assert.equal((await checked(support,'admin/support')).tickets.find(e=>e.id===sent.id).reference,ref);
+  const exported = await checked(a,'account/export');
+  assert.ok(exported.activity.some(e=>e.id===oldRound.id && e.outcome===oldRound.outcome));
+  assert.equal(exported.supportRequests.find(e=>e.id===sent.id).reference,ref);
+});

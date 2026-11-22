@@ -349,3 +349,8 @@ dialog::backdrop{background:#090e0bd9}
 .demo-round-cover{display:block;width:100%;height:clamp(5rem,18vh,8.5rem);object-fit:cover;border-radius:.65rem}
 .demo-round-error:empty{display:none}
 .demo-round-error{color:var(--text);border-left:3px solid var(--gold);padding-left:.7rem}
+
+.round-reference{display:inline-block;margin-inline:.45rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.round-support-link{background:transparent;border:0;color:var(--green);padding:.3rem .2rem;text-decoration:underline;text-underline-offset:.16em}
+.overview-title-search{display:block;max-width:25rem;margin-block:.75rem}
+.overview-title-search input{display:block;width:100%}

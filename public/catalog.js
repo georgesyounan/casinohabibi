@@ -15,6 +15,12 @@ export function roundPreview(outcome) {
   }
 }
 
+export function demoTitle(gameId, preview, locale) {
+  const french = locale === 'fr-CA';
+  return preview ? (french ? preview.titleFr : preview.titleEn) :
+    (games.find(game => game.id === gameId)?.name[Number(french)] ?? gameId);
+}
+
 export const catalogueCategories = {
   slots: ['Slots', 'Machines à sous'],
   table: ['Table games', 'Jeux de table'],

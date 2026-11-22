@@ -142,6 +142,29 @@
               <div id="followup-pages" class="actions" hidden><button type="button" id="followup-prev" class="ghost" data-copy="playerPrevious"></button><button type="button" id="followup-next" class="ghost" data-copy="playerNext"></button></div>
             </div>
           </details>
+          <details class="admin-disclosure" id="overview-round-report" hidden>
+            <summary id="overview-game-heading" data-copy="overviewGameBreakdown"></summary>
+            <div class="admin-detail-body">
+              <label class="overview-title-search"><span data-copy="reportTitleSearch"></span>
+                <input type="search" id="overview-title-search" maxlength="120" autocomplete="off"></label>
+              <div class="audit-table-wrap" role="region" aria-labelledby="overview-game-heading" tabindex="0">
+                <table id="overview-game-table" aria-labelledby="overview-game-heading">
+                  <thead><tr>
+                    <th scope="col" data-copy="overviewGameName"></th><th scope="col" data-copy="overviewGameRounds"></th>
+                    <th scope="col" data-copy="overviewGameShare"></th><th scope="col" data-copy="overviewGameActivePlayers"></th>
+                    <th scope="col" data-copy="overviewGameWagered"></th>
+                  </tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <p role="status" id="overview-title-empty" data-copy="reportNoTitles" hidden></p>
+              <nav class="actions" id="overview-title-pages" aria-labelledby="overview-game-heading" hidden>
+                <button type="button" class="ghost" id="overview-title-prev" data-copy="playerPrevious"></button>
+                <span id="overview-title-page" aria-live="polite"></span>
+                <button type="button" class="ghost" id="overview-title-next" data-copy="playerNext"></button>
+              </nav>
+            </div>
+          </details>
           <details class="admin-disclosure"><summary data-copy="reportBrandSetup"></summary>
           <div class="admin-readiness"><div class="catalog-readiness"><strong data-copy="overviewBrandingStatus"></strong><span id="overview-branding-readiness">—</span><a class="readiness-link" data-roles="operator_admin,operator_content" href="#casino-settings" data-copy="goToCasinoSettings"></a><small data-copy="overviewBrandingNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewCatalogStatus"></strong><span id="overview-catalog-readiness">—</span><a id="catalog-readiness-link" class="readiness-link" data-roles="operator_admin,operator_provider" href="#catalog-management" data-copy="goToCatalogManagement"></a><small data-copy="overviewCatalogNote"></small></div><div class="catalog-readiness"><strong data-copy="overviewMfaStatus"></strong><span id="overview-mfa-readiness">—</span><a class="readiness-link" href="#mfa-settings" data-copy="goToMfa"></a><small data-copy="overviewMfaNote"></small></div></div>
           </details>
@@ -158,7 +181,7 @@
                 <div><dt data-copy="overviewWagered"></dt><dd id="overview-wagered">—</dd></div>
                 <div><dt data-copy="overviewCatalog"></dt><dd id="overview-catalog">—</dd></div>
               </dl>
-              <section class="overview-activity"><h3 data-copy="overviewActivityChart"></h3><p data-copy="overviewActivityHelp"></p><div id="overview-activity-chart" class="overview-activity-chart" role="img"></div><p id="overview-activity-summary" class="overview-activity-summary"></p><details><summary data-copy="overviewActivityDetails"></summary><ul id="overview-activity-values"></ul></details></section><section class="overview-game-activity"><h3 id="overview-game-heading" data-copy="overviewGameBreakdown"></h3><div class="audit-table-wrap" role="region" aria-labelledby="overview-game-heading" tabindex="0"><table id="overview-game-table" aria-labelledby="overview-game-heading"><thead><tr><th scope="col" data-copy="overviewGameName"></th><th scope="col" data-copy="overviewGameRounds"></th><th scope="col" data-copy="overviewGameShare"></th><th scope="col" data-copy="overviewGameActivePlayers"></th><th scope="col" data-copy="overviewGameWagered"></th></tr></thead><tbody></tbody></table></div></section>
+              <section class="overview-activity"><h3 data-copy="overviewActivityChart"></h3><p data-copy="overviewActivityHelp"></p><div id="overview-activity-chart" class="overview-activity-chart" role="img"></div><p id="overview-activity-summary" class="overview-activity-summary"></p><details><summary data-copy="overviewActivityDetails"></summary><ul id="overview-activity-values"></ul></details></section>
             </div>
           </details>
         </section>
@@ -294,6 +317,12 @@
               </form>
               <p role="status" id="player-action-status"></p>
               <details id="player-event-details"><summary data-copy="playerAccessHistory"></summary><ol id="player-events"></ol></details>
+              <details id="player-reward-details" hidden><summary data-copy="playerRewardHistory"></summary><ul id="player-reward-list"></ul></details>
+              <details id="player-round-details"><summary data-copy="playerRounds"></summary>
+                <ol id="player-round-list" class="history"></ol><p id="player-round-status" role="status"></p>
+                <div id="player-round-pages" class="actions" hidden><button type="button" id="player-round-prev" class="ghost" data-copy="playerPrevious"></button>
+                  <span id="player-round-page" aria-live="polite"></span><button type="button" id="player-round-next" class="ghost" data-copy="playerNext"></button></div>
+              </details>
               <details id="player-activity-details"><summary data-copy="playerFavoriteHistory"></summary><ol id="player-favorite-events"></ol><button type="button" class="ghost" id="player-more-activity" data-copy="playerOlder" hidden></button></details>
             </section>
             <h3 data-copy="playerSaveHistory"></h3>
