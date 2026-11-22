@@ -13,6 +13,7 @@ import test from 'node:test';
 import { createSavedTitles } from '../lib/saved-titles.js';
 import { reportPeriod } from '../lib/dashboard.js';
 import { collectionKey, matchesCatalogue } from '../public/catalog.js';
+import { sitemapXml } from '../lib/public-pages.js';
 
 const staffCredentials = { email: 'admin@example.test', password: 'example-staff-password' };
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
@@ -1079,6 +1080,129 @@ test('website content keeps drafts private, publishes single bilingual revisions
   );
   assert.equal((await guest('help/fr-guide')).status, 404);
   assert.equal((await guest('website-content')).data.help.length, 0);
+});
+
+test('published guide translations preserve old links, private drafts, collections and tenant-specific indexing', async (t) => {
+  const mount = '/casinohabibi';
+  const { base, database } = await startSandbox(t, { appBasePath: mount });
+  const site = base + mount, owner = client(site), editor = client(site), guest = client(site);
+  await owner('admin/login', staffCredentials);
+  const creds = { email: 'writer@example.test', password: 'draft-author-password' };
+  assert.equal((await owner('admin/staff', { ...creds, role: 'operator_content' })).status, 200);
+  await editor('admin/login', creds);
+  for (const [name, extra, publish] of [
+    ['Night Train', {}, true], ['Quiet Draft', {}, false], ['Another Market', { displayMarket: 'JP' }, true],
+    ['French Only', { locales: ['fr-CA'] }, true]
+  ]) {
+    const card = (await owner('admin/coming-soon', cardDraft(name, {
+      collectionEn: 'Night routes', collectionFr: 'Trains de nuit', ...extra
+    }))).data.title;
+    if (publish) assert.equal((await owner('admin/coming-soon', { action: 'publish', slug: card.slug, version: card.version })).status, 200);
+  }
+  const endpoint = 'admin/website-content', id = 'night-guide';
+  const guide = { titleEn: 'Night guide', titleFr: 'Guide des trains', bodyEn: 'How to find previews.',
+    bodyFr: 'Les fiches de la collection.', artwork: '', target: '', altEn: '', altFr: '', linkEn: '', linkFr: '' };
+  const change = (actor, action, slug, version, content, headers) =>
+    actor(endpoint, { kind: 'help', action, slug, version, ...(content && { content }) }, undefined, headers);
+  const page = (address, language = 'fr') => fetch(site + '/help/' + address + '?lang=' + language, { redirect: 'manual' });
+  const map = async () => (await fetch(site + '/sitemap.xml')).text();
+  const refs = () => owner('admin/publication-followup?state=open');
+  assert.equal((await change(owner, 'save', id, 0, guide)).status, 200);
+  assert.equal((await change(owner, 'publish', id, 1)).status, 200);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  // A publication made before localized addresses existed has no history rows.
+  db.prepare('DELETE FROM website_guide_addresses WHERE record_slug=?').run(id);
+  assert.equal((await page(id)).status, 200);
+  const edited = { ...guide, addressFr: 'trains-de-nuit', addressEn: 'night-trains', seoTitleFr: 'Trains & gares',
+    seoDescriptionFr: 'Les stations <historiques> et leurs "fiches".', collection: 'night routes' };
+  assert.equal((await change(editor, 'save', id, 2, edited)).status, 200);
+  assert.equal((await page(edited.addressFr)).status, 404);
+  assert.doesNotMatch(await map(), /trains-de-nuit/);
+  assert.equal((await change(editor, 'publish', id, 3)).status, 403);
+  const first = await change(owner, 'publish', id, 3);
+  assert.ok(first.data.auditId);
+  const previous = await page(id);
+  assert.equal(previous.status, 301);
+  assert.equal(previous.headers.get('location'), mount + '/help/trains-de-nuit?lang=fr');
+  const live = await page('trains-de-nuit'), html = await live.text();
+  assert.equal(live.status, 200);
+  const oldHead = await fetch(site + '/help/' + id + '?lang=fr', { method: 'HEAD', redirect: 'manual' });
+  assert.equal(oldHead.status, 301);
+  assert.equal(oldHead.headers.get('location'), previous.headers.get('location'));
+  assert.equal(await oldHead.text(), '');
+  assert.equal((await fetch(site + '/help/night-trains?lang=toString', { redirect: 'manual' })).status, 302);
+  assert.match(html, /<html lang="fr-CA"/);
+  assert.match(html, /<title>Trains &amp; gares · [^<]+<\/title>/);
+  assert.match(html, /Les stations &lt;historiques&gt; et leurs &quot;fiches&quot;/);
+  assert.ok(html.includes('rel="canonical" href="' + site + '/help/trains-de-nuit?lang=fr"'));
+  assert.ok(html.includes('hreflang="en-CA" href="' + site + '/help/night-trains?lang=en"'));
+  assert.match(html, /<h1>Guide des trains<\/h1>/);
+  assert.match(html, /href="[^"]*coming-soon\/night-train\?lang=fr&amp;locale=fr-CA"/);
+  assert.doesNotMatch(html, /coming-soon\/(quiet-draft|another-market)/);
+  const published = (await guest('help/trains-de-nuit?locale=fr-CA')).data;
+  assert.equal(published.slug, id);
+  assert.equal(published.collection.length, 2);
+  assert.equal((await guest('help/night-trains?locale=en-CA')).data.collection.length, 1);
+  const sitemap = await map();
+  const mapHead = await fetch(site + '/sitemap.xml', { method: 'HEAD' });
+  assert.equal(mapHead.status, 200);
+  assert.match(mapHead.headers.get('content-type'), /application\/xml/);
+  assert.equal(await mapHead.text(), '');
+  assert.match(sitemap, /<loc>[^<]*\/help\/trains-de-nuit\?lang=fr<\/loc>/);
+  assert.match(sitemap, /<loc>[^<]*\/coming-soon\/french-only\?lang=fr&amp;locale=fr-CA<\/loc>/);
+  assert.doesNotMatch(sitemap, /french-only\?lang=en|quiet-draft|another-market|night-guide|\/admin/);
+  assert.equal((await fetch(site + '/admin')).headers.get('x-robots-tag'), 'noindex');
+  assert.equal((await page('unknown-guide')).headers.get('x-robots-tag'), 'noindex');
+  // A legacy editor changes the body without sending the newer fields.
+  assert.equal((await change(owner, 'save', id, 4, { ...guide, bodyFr: 'Texte mis à jour.' })).status, 200);
+  assert.equal((await owner(endpoint + '/help/' + id)).data.content.addressFr, edited.addressFr);
+  const next = { ...edited, addressFr: 'derniere-gare' };
+  assert.equal((await change(owner, 'save', id, 5, next)).status, 200);
+  const receipt = { 'X-Request-ID': randomUUID() };
+  const renamed = await change(owner, 'publish', id, 6, undefined, receipt);
+  assert.deepEqual((await change(owner, 'publish', id, 6, undefined, receipt)).data, renamed.data);
+  for (const old of [id, 'trains-de-nuit']) {
+    const response = await page(old);
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), mount + '/help/derniere-gare?lang=fr');
+    assert.equal((await fetch(base + response.headers.get('location'), { redirect: 'manual' })).status, 200);
+  }
+  assert.equal((await change(owner, 'save', 'other-guide', 0, { ...guide, addressFr: 'trains-de-nuit' })).status, 200);
+  assert.equal((await change(owner, 'publish', 'other-guide', 1)).data.error, 'siteAddressTaken');
+  assert.ok((await refs()).data.items.some((r) => r.reason === 'siteAddressTaken' && r.record.endsWith('/other-guide')));
+  assert.equal((await change(owner, 'save', 'trains-de-nuit', 0, guide)).data.error, 'siteAddressTaken');
+  assert.equal((await change(owner, 'save', id, 7, { ...next, indexable: false })).status, 200);
+  assert.match(await map(), /derniere-gare/);
+  assert.equal((await change(owner, 'publish', id, 8)).status, 200);
+  assert.equal((await page('derniere-gare')).headers.get('x-robots-tag'), 'noindex');
+  assert.doesNotMatch(await map(), /night-trains|derniere-gare/);
+  assert.equal((await page('derniere-gare')).status, 200);
+  assert.equal((await change(owner, 'save', id, 9, { ...next, indexable: true })).status, 200);
+  assert.equal((await change(owner, 'publish', id, 10)).status, 200);
+  assert.match(await map(), /derniere-gare/);
+  db.exec("INSERT INTO tenants VALUES('other','other','Another Brand','active',1); UPDATE tenant_domains SET tenant_id='other' WHERE host='localhost'");
+  const alternate = new URL(site + '/sitemap.xml'); alternate.hostname = 'localhost';
+  assert.doesNotMatch(await (await fetch(alternate)).text(), /night-train|derniere-gare/);
+  assert.equal((await guest('help/derniere-gare?locale=fr-CA', undefined, 'localhost')).status, 404);
+  assert.equal((await change(owner, 'archive', id, 11)).status, 200);
+  assert.doesNotMatch(await map(), /derniere-gare|night-trains\?lang=en/);
+  for (const old of [id, 'trains-de-nuit', 'derniere-gare']) assert.equal((await page(old)).status, 404);
+  assert.equal((await owner(endpoint + '/help/' + id)).data.history[0].action, 'website_content_archived');
+});
+
+test('large sitemaps split complete language groups across numbered maps', () => {
+  const groups = Array.from({ length: 4001 }, (_, i) => [
+    { locale: 'en-CA', href: '/casinohabibi/help/p-' + i + '?lang=en' },
+    { locale: 'fr-CA', href: '/casinohabibi/help/p-' + i + '?lang=fr' }
+  ]);
+  const origin = 'https://brand.example', mount = '/casinohabibi';
+  assert.ok(sitemapXml(groups, origin, mount).includes(origin + mount + '/sitemap-2.xml'));
+  const last = sitemapXml(groups, origin, mount, 2);
+  assert.equal((last.match(/<url>/g) || []).length, 2);
+  assert.match(last, /p-4000\?lang=fr/);
+  assert.doesNotMatch(last, /p-3999/);
+  assert.equal(sitemapXml(groups, origin, mount, 3), null);
 });
 
 test('website publication survives request chunk boundaries, concurrent edits and an audited transaction retry', { timeout: 20_000 }, async (t) => {

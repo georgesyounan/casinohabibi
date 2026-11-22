@@ -428,7 +428,7 @@
             </div>
             <form id="site-editor" hidden>
               <div class="admin-page-heading"><h4 id="site-editor-heading" tabindex="-1"></h4><button id="site-close" type="button" class="ghost" data-copy="siteBackList"></button></div>
-              <p id="site-revision" class="report-context"></p>
+              <div class="site-revision-links"><p id="site-revision" class="report-context"></p><a id="site-open-live" target="_blank" rel="noopener" data-copy="siteOpenLive" hidden></a></div>
               <fieldset id="site-fields" class="site-fields">
                 <legend class="admin-visually-hidden" data-copy="siteEditor"></legend>
                 <div class="admin-form-grid">
@@ -437,6 +437,19 @@
                 </div>
                 <label><span data-copy="siteTitle"></span><input name="heading" maxlength="120"></label>
                 <label><span data-copy="siteBody"></span><textarea name="body" rows="4"></textarea></label>
+                <details id="site-search-settings" class="admin-disclosure">
+                  <summary data-copy="siteSearchSettings"></summary>
+                  <div class="site-fields site-detail-body">
+                    <label><span data-copy="sitePublicAddress"></span><input name="publicAddress" maxlength="64" pattern="[a-z0-9]+(-[a-z0-9]+)*" dir="ltr" autocomplete="off"><small data-copy="siteRedirectHint"></small></label>
+                    <label><span data-copy="siteSearchTitle"></span><input name="seoTitle" maxlength="120"></label>
+                    <label><span data-copy="siteSearchDescription"></span><textarea name="seoDescription" rows="2" maxlength="240"></textarea></label>
+                    <label class="admin-check"><input type="checkbox" name="indexable" checked><span data-copy="siteAllowIndex"></span></label>
+                    <div class="guide-snippet" role="group" aria-labelledby="guide-snippet-label">
+                      <span id="guide-snippet-label" data-copy="siteSearchPreview"></span>
+                      <small id="guide-snippet-url" dir="ltr"></small><strong id="guide-snippet-title"></strong><p id="guide-snippet-description"></p>
+                    </div>
+                  </div>
+                </details>
                 <details id="site-options" class="admin-disclosure">
                   <summary data-copy="siteImageAndLink"></summary>
                   <div class="site-fields site-detail-body">
@@ -445,6 +458,7 @@
                     <label id="site-alt-field" hidden><span data-copy="siteImageDescription"></span><input name="alt" maxlength="200"></label>
                     <label><span data-copy="siteDestination"></span><select name="target"></select></label>
                     <label id="site-link-field" hidden><span data-copy="siteLinkLabel"></span><input name="link" maxlength="80"></label>
+                    <label id="site-collection-field" hidden><span data-copy="siteCollection"></span><select name="collection"></select></label>
                   </div>
                 </details>
                 <details id="site-preview" class="admin-disclosure"><summary data-copy="sitePreview"></summary><div id="site-preview-body" class="site-detail-body"></div></details>
