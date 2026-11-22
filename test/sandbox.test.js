@@ -2943,3 +2943,115 @@ test('referral decisions stay searchable and reconcile with the private player f
   assert.deepEqual((await checked(owner,'growth/partner?links=1&asOf='+before.asOf)).report,before);
   assert.doesNotMatch(JSON.stringify(fresh),/second-account|operator_support|distincts/);
 });
+test('sample catalog previews are read-only and a validated import produces a tenant-scoped, replayable receipt',async t=>{
+  const {base,database}=await startSandbox(t),admin=client(base),provider=client(base),support=client(base);
+  await checked(admin,'admin/login',staffCredentials);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const size=table=>db.prepare('SELECT count(*) AS n FROM '+table).get().n;
+  const before=['providers','provider_events','game_catalog','staff_events'].map(size);
+  const draft=await checked(admin,'providers/catalog/sample');
+  assert.equal(draft.preview.counts.added,4);assert.deepEqual(['providers','provider_events','game_catalog','staff_events'].map(size),before);
+  await checked(admin,'providers',{name:draft.name,key:'only-a-test-owner-key'});
+  const key=()=>db.prepare('SELECT encrypted_key FROM providers WHERE name=?').get(draft.name).encrypted_key;
+  const original=key();
+  const collision=await admin('providers/catalog',{name:draft.name,games:draft.games,sample:true,expectedRevision:draft.preview.revision});
+  assert.equal(collision.status,409);assert.ok(key()===original);assert.equal(size('game_catalog'),0);
+  const demo=await checked(admin,'providers/catalog/sample');assert.notEqual(demo.name,draft.name);
+  for(const [role,who] of [['operator_provider',provider],['operator_support',support]]){
+    const creds={email:role+'@example.test',password:'catalog-private-fixture'};
+    await checked(admin,'admin/staff',{...creds,role,publishCatalogue:false});
+    await checked(who,'admin/login',creds);
+  }
+  assert.equal((await support('providers/catalog/sample')).status,403);
+  assert.equal((await provider('providers/catalog/sample')).status,200);
+  const candidate={name:demo.name,games:demo.games,sample:true,expectedRevision:demo.preview.revision};
+  assert.equal((await provider('providers/catalog',candidate)).status,403);
+  assert.equal((await admin('providers/catalog',{...candidate,games:demo.games.slice(0,3)})).status,409);
+  const bad=await admin('providers/catalog/preview',{name:demo.name,sample:true,games:[demo.games[0],demo.games[0]]});
+  assert.equal(bad.status,400);assert.equal(bad.data.error,'catalogGameDuplicate');
+  const headers={'X-Request-ID':randomUUID()};
+  const result=await checked(admin,'providers/catalog',candidate,undefined,headers);
+  assert.deepEqual(await checked(admin,'providers/catalog',candidate,undefined,headers),result);
+  assert.equal((await checked(admin,'games')).length,4);assert.equal(size('provider_catalog_imports'),1);
+  const receipt=await checked(provider,'providers/catalog/imports/'+result.auditId);
+  assert.deepEqual(receipt.entries,demo.preview.entries);assert.deepEqual(receipt.counts,demo.preview.counts);assert.equal(receipt.actor,null);
+  assert.equal((await checked(admin,'providers/catalog/imports/'+result.auditId)).actor,staffCredentials.email);
+  assert.equal((await checked(provider,'providers/catalog/imports?q='+encodeURIComponent(staffCredentials.email))).total,0);
+  assert.equal((await checked(provider,'providers/catalog/imports?q=import-'+result.auditId)).total,1);
+  assert.equal((await support('providers/catalog/imports/'+result.auditId)).status,403);
+  assert.equal((await client(base)('providers/catalog/listings')).status,401);
+  assert.ok(key()===original);
+  const repeat=await checked(admin,'providers/catalog/sample');assert.equal(repeat.name,demo.name);assert.equal(repeat.preview.counts.unchanged,4);
+  await checked(admin,'providers',{name:demo.name,key:'replaced-only-in-private-test'});
+  assert.notEqual((await checked(admin,'providers/catalog/sample')).name,demo.name);
+  assert.equal((await admin('providers/catalog',{...candidate,expectedRevision:repeat.preview.revision})).status,409);
+});
+
+test('staff visibility survives provider edits, removals and returns and matches the public lobby and saved favorites',async t=>{
+  const {base,database}=await startSandbox(t),staff=client(base),guest=client(base),name='Atelier Nord';
+  await checked(staff,'admin/login',staffCredentials);await checked(staff,'providers',{name,key:'local-sample'});
+  await growthAccount(guest,'catalog-favorites');
+  const alpha={externalId:'alpha',titleEn:'Moon',titleFr:'Lune',category:'slots'};
+  const beta={externalId:'beta',titleEn:'Harbor',titleFr:'Port',category:'table'};
+  const make=games=>checked(staff,'providers/catalog/preview',{name,games});
+  async function sync(games){const p=await make(games);return checked(staff,'providers/catalog',{name,games,expectedRevision:p.revision});}
+  const listing=async id=>(await checked(staff,'providers/catalog/listings?q='+id)).items[0];
+  const publicIds=async()=>(await checked(guest,'games')).map(g=>g.externalId).sort();
+  await sync([alpha,beta]);const favorite='provider:'+name+':alpha';
+  await checked(guest,'account/favorites',{favorites:[favorite]});
+  const cached=await make([alpha]),first=await listing('alpha');
+  const toggle={name,externalId:'alpha',version:first.version,enabled:false};
+  await checked(staff,'providers/catalog/status',toggle);
+  assert.equal((await staff('providers/catalog/status',{...toggle,enabled:true})).status,409);
+  assert.equal((await staff('providers/catalog',{name,games:[alpha],expectedRevision:cached.revision})).status,409);
+  assert.deepEqual(await publicIds(),['beta']);assert.deepEqual((await checked(guest,'account')).favorites,[]);
+  const changed={...alpha,titleFr:'Lune d’été'};
+  const edit=await sync([changed,beta]);assert.deepEqual([edit.counts.updated,edit.counts.held],[1,1]);
+  const record=await checked(staff,'providers/catalog/imports/'+edit.auditId);
+  assert.deepEqual([record.entries[0].before.titleFr,record.entries[0].after.titleFr,record.entries[0].after.hidden],['Lune','Lune d’été',true]);
+  assert.equal((await checked(staff,'providers/catalog/listings?filter=hidden&category=slots&q=ete%20nord')).total,1);
+  const removal=await sync([beta]);assert.equal(removal.counts.removed,1);
+  assert.equal((await checked(staff,'providers/catalog/listings?filter=missing')).items[0].externalId,'alpha');
+  assert.equal((await staff('providers/catalog/status',{name,externalId:'alpha',enabled:true})).status,409);
+  const returned=await sync([changed,beta]);assert.deepEqual([returned.counts.returned,returned.counts.held],[1,1]);
+  assert.deepEqual(await publicIds(),['beta']);
+  await checked(staff,'providers/catalog/status',{name,externalId:'alpha',enabled:true,version:(await listing('alpha')).version});
+  assert.deepEqual(await publicIds(),['alpha','beta']);assert.deepEqual((await checked(guest,'account')).favorites,[favorite]);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  db.exec(`INSERT INTO tenants(id,slug,name,status,created_at) VALUES('catalog-other','catalog-other','Other studio','active',1);
+    UPDATE tenant_domains SET tenant_id='catalog-other' WHERE host='localhost';
+    INSERT INTO tenant_staff_memberships(tenant_id,staff_id,role,status,created_at) SELECT 'catalog-other',staff_id,'operator_admin','active',1 FROM tenant_staff_memberships WHERE tenant_id='sandbox' AND role='operator_admin'`);
+  const other=client(base);await checked(other,'admin/login',staffCredentials,'localhost');
+  assert.equal((await checked(other,'providers/catalog/imports',undefined,'localhost')).total,0);
+  assert.equal((await other('providers/catalog/imports/'+edit.auditId,undefined,'localhost')).status,404);
+  assert.equal((await checked(other,'providers/catalog/listings?q=alpha',undefined,'localhost')).total,0);
+});
+
+test('legacy provider history restores manual hides and searches the catalog beyond the former two-thousand-row limit',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'legacy-provider-catalog-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  let legacyAudit;
+  await t.test('prepare an earlier saved catalog',async child=>{
+    const {base,database}=await startSandbox(child,{dataDirectory:dir}),staff=client(base);
+    await checked(staff,'admin/login',staffCredentials);await checked(staff,'providers',{name:'Heritage',key:'legacy-test'});
+    const db=new DatabaseSync(database);
+    try{
+      const actor=db.prepare('SELECT id FROM staff_accounts WHERE email=?').get(staffCredentials.email).id;
+      const provider=db.prepare("SELECT id FROM providers WHERE name='Heritage'").get().id;
+      const add=db.prepare("INSERT INTO game_catalog(tenant_id,provider_id,provider,external_id,title_en,title_fr,category,enabled) VALUES('sandbox',?,'Heritage',?,?,?,'slots',?)");
+      db.exec('BEGIN IMMEDIATE');add.run(provider,'missing','Older','Ancienne',0);add.run(provider,'hidden','Manual','Manuelle',0);
+      for(let i=0;i<2001;i++)add.run(provider,'entry-'+i,'Preview '+i,i===2000?'Étoile recherchée':'Aperçu '+i,1);
+      const event=db.prepare("INSERT INTO staff_events(tenant_id,actor_id,action,target,created_at) VALUES('sandbox',?,?,?,?)");
+      legacyAudit=Number(event.run(actor,'provider_catalog_synced','Heritage',1).lastInsertRowid);
+      event.run(actor,'catalog_listing_disabled','Heritage:hidden',2);db.exec('COMMIT');
+    }finally{db.close();}
+  });
+  const {base}=await startSandbox(t,{dataDirectory:dir}),staff=client(base);await checked(staff,'admin/login',staffCredentials);
+  const all=await checked(staff,'providers/catalog/listings');assert.deepEqual([all.total,all.items.length,all.pages],[2003,8,251]);
+  assert.equal((await checked(staff,'providers/catalog/listings?page=251')).items.length,3);
+  assert.equal((await checked(staff,'providers/catalog/listings?q=etoile%20recherchee')).items[0].externalId,'entry-2000');
+  assert.equal((await checked(staff,'providers/catalog/listings?filter=hidden')).items[0].externalId,'hidden');
+  assert.equal((await checked(staff,'providers/catalog/listings?filter=missing')).items[0].externalId,'missing');
+  const audit=await checked(staff,'providers/catalog/imports/'+legacyAudit);assert.equal(audit.counts,null);assert.deepEqual(audit.entries,[]);
+  assert.equal((await staff('providers/catalog/listings?page=0')).status,400);
+});

@@ -350,3 +350,13 @@
 #followup-list li { display: grid; gap: .35rem; padding: .9rem 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 #followup-list li p { margin: 0; }
 #followup-list .followup-title { color: var(--green); font-weight: 700; justify-self: start; }
+
+.provider-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));align-items:end;gap:.7rem}
+.provider-filters label,.catalog-comparison dd,.provider-record{min-width:0;overflow-wrap:anywhere}
+.catalog-comparison{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.35rem .8rem;margin:.5rem 0}
+.catalog-comparison dt{color:var(--muted)}
+.catalog-comparison dd{margin:0}
+#catalog-history-body,#catalog-change-detail{display:grid;gap:.7rem}
+#catalog-change-detail[hidden]{display:none}
+#catalog-source>label{margin-top:.65rem}
+#catalog-status button{margin:.3rem .5rem}
