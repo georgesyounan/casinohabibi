@@ -18,6 +18,7 @@ export function uiKit(french) {
   function field(form,name,title,options={}) {
     const label=el('label',title), input=el(options.items?'select':options.multiline?'textarea':'input');
     input.name=name;
+    if(options.items)input.setAttribute('aria-label',title);
     if(options.items) for(const [value,text] of options.items){const o=el('option',text);o.value=value;input.append(o);}
     else if(!options.multiline) input.type=options.type||'text';
     if(options.value!=null) input.value=options.value;
@@ -72,7 +73,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     if(playerId!==activePlayer){
       const params=new URLSearchParams(location.search);
       profileGroup=null;previewRewards=false;focusClaim=null;Object.assign(inboxState,{q:'',filter:'all',page:1});
-      selected=params.has('listInvite')?'community':params.get('inbox')==='1'?'inbox':'quests';
+      selected=params.has('listInvite')?'community':params.get('inbox')==='1'?'inbox':params.get('partner')==='1'?'partner':'quests';
       activePlayer=playerId;
     }
   }
@@ -94,6 +95,10 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     const tabNames=[['quests',l('Quests','Quêtes')],['rewards',l('Rewards','Récompenses')],['profile',l('My profile','Mon profil')],['inbox',l('Inbox','Messages')],['preferences',l('Contact preferences','Préférences')]];
     if(extensions.community)tabNames.push(['community',l('Shared lists','Listes partagées')]);
     if(data.partner&&extensions.partner)tabNames.push(['partner',l('Partner portal','Portail partenaire')]);
+    if(selected==='partner'&&!data.partner){
+      selected='quests';
+      message.textContent=l('The partner portal requires an active partner account.','Le portail partenaire nécessite un compte partenaire actif.');
+    }
     root.replaceChildren();tabs(root,tabNames,selected,select);root.append(message);
     const body=el('div','','discovery-body');root.append(body);
     if(selected==='partner'&&data.partner){await extensions.partner(body,playerId);return;}

@@ -320,7 +320,7 @@ const workflowAuditLabels={
   discovery_save:['Quest or offer draft saved','Brouillon de quête ou d’offre enregistré'],discovery_publish:['Quest or offer published','Quête ou offre publiée'],discovery_archive:['Quest or offer archived','Quête ou offre archivée'],
   campaign_save:['Campaign draft saved','Brouillon de campagne enregistré'],campaign_schedule:['Campaign scheduled','Campagne planifiée'],campaign_cancel:['Campaign cancelled','Campagne annulée'],campaign_dispatch:['Delivery run requested','Traitement des envois demandé'],
   partner_saved:['Partner saved','Partenaire enregistré'],placement_save:['Placement draft saved','Brouillon de publicité enregistré'],placement_publish:['Placement published','Publicité publiée'],placement_pause:['Placement paused','Publicité suspendue'],
-  poll_open:['Poll opened','Sondage ouvert'],poll_publishResults:['Poll results published','Résultats du sondage publiés'],referral_reviewed:['Referral reviewed','Parrainage vérifié'],campaign_spend:['Campaign spend recorded','Dépenses de campagne enregistrées'],
+  partner_link_saved:['Partner link updated','Lien partenaire mis à jour'],poll_open:['Poll opened','Sondage ouvert'],poll_publishResults:['Poll results published','Résultats du sondage publiés'],referral_reviewed:['Referral reviewed','Parrainage vérifié'],campaign_spend:['Campaign spend recorded','Dépenses de campagne enregistrées'],
   experiment_started:['Experiment started','Expérience démarrée'],experiment_closed:['Enrollment closed','Inscriptions terminées'],demo_credit_grant:['Test credits granted','Crédits de test octroyés'],demo_credit_debit:['Test credits debited','Crédits de test débités'],demo_credit_reverse:['Test credit entry reversed','Écriture de test contrepassée']
 };
 function auditActionLabel(action) {
@@ -1820,7 +1820,7 @@ function supportHref(key,id) {
 const supportQueue=createSupportQueue({api,t,element,action,renderCase:renderStaffCase,
   formatDate:at=>new Date(at).toLocaleString(language?'fr-CA':'en-CA')});
 let latestOverview = null;
-const playerAccessUi = createPlayerAccessUi({ api, t, element, action, supportHref,
+const playerAccessUi = createPlayerAccessUi({ api, t, element, action, supportHref, appPath,
   renderRound: entry => historyEntryElement(entry, false),
   canManage: () => currentStaffPermissions.managePlayerAccess, locale: () => language ? 'fr-CA' : 'en-CA' });
 const comingSoonUi = createComingSoonUi({
@@ -1839,7 +1839,7 @@ const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, lo
   canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
 
 const growthPlayer=createGrowthPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter});
-const growthAdmin=createGrowthAdmin({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,publish:()=>currentStaffPermissions.publishWebsite});
+const growthAdmin=createGrowthAdmin({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,appPath,openPlayer:id=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(id);},publish:()=>currentStaffPermissions.publishWebsite});
 const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter,extensions:growthPlayer});
 const discoveryAdmin=createDiscoveryAdmin({api,t,supportHref,appPath,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
   openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
@@ -3307,7 +3307,7 @@ if (!isAdminPage) {
   if (resetToken) openPanel('passwordReset');
   else if (verifyToken) openPanel('emailVerification');
   else if (emailChangeToken) openPanel('emailChange');
-  else if(currentRoute==='/' && (new URLSearchParams(location.search).get('inbox')==='1' || new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
+  else if(currentRoute==='/' && (new URLSearchParams(location.search).get('partner')==='1' || new URLSearchParams(location.search).get('inbox')==='1' || new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
     if(!player)afterSignIn='discovery';
     openPanel(player?'discovery':'signin');
   }

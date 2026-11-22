@@ -1,7 +1,10 @@
+import { referralExample, partnerDirectory, managePartnerLinks, referralReviews, showLinkReport, linkReportRows } from './referral-views.js';
 import { uiKit } from './discovery.js';
 import { reportRows, downloadReport } from './growth-player.js';
-export function createGrowthAdmin({ api, t, french, role, publish }) {
-  const { el, l, local, field, button, pages, date } = uiKit(french);
+export function createGrowthAdmin({ api, t, french, role, publish, appPath, openPlayer }) {
+  const ui=uiKit(french);
+  const { el, l, local, field, button, pages, date } = ui;
+  const urlFor=path=>location.origin+appPath(path+'?lang='+(french()?'fr':'en'));
   const get = (path) => api('admin/growth' + path, undefined, 'GET'),
     post = (key, input) => api('admin/growth/' + key, input);
   const localInput = (ms) => {
@@ -166,7 +169,7 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
           (f) => {
             inp(f, 'name', l('Partner name', 'Nom du partenaire'), { value: p?.name, maxLength: 120 });
             inp(f, 'code', l('Signup code', 'Code de parrainage'), { value: p?.code, maxLength: 48 });
-            numeric(f, 'player', l('Verified account ID', 'Numéro du compte vérifié'), p?.owner);
+            inp(f, 'player', l('Verified account ID or email', 'Numéro ou courriel du compte vérifié'), {value:p?.email||p?.owner,maxLength:254});
             opts(
               f,
               'active',
@@ -183,7 +186,7 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
               id: p?.id,
               code: d.code.trim().toLowerCase(),
               name: d.name,
-              playerId: Number(d.player),
+              ...(/^\d+$/.test(d.player.trim().replace(/^player-/,''))?{playerId:Number(d.player.trim().replace(/^player-/,''))}:{playerEmail:d.player.trim()}),
               active: d.active === '1'
             });
             await reload();
@@ -323,8 +326,10 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
         (d) => display(d)
       );
       body.append(filters, box);
+      referralExample(body,ui);
       async function display(d) {
         const params = new URLSearchParams(Object.entries(d).filter(([, v]) => v !== ''));
+        if(params.has('partner'))params.set('links','1');
         const r = await get('/report?' + params);
         const rows = reportRows(r, l);
         box.replaceChildren(
@@ -344,6 +349,7 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
         const list = el('dl', '', 'growth-metrics');
         for (const [label, value] of rows.slice(3)) list.append(el('dt', label), el('dd', value));
         box.append(list);
+        showLinkReport(box,r,ui,urlFor);
         const more = el('details');
         more.append(el('summary', l('Break down by signup source', 'Ventiler par source d’inscription')));
         const sources = {
@@ -429,7 +435,7 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
         }
         box.append(
           btn(l('Export these figures', 'Exporter ces chiffres'), () =>
-            downloadReport('acquisition-' + r.period.from + '.csv', rows)
+            downloadReport('acquisition-' + r.period.from + '.csv', [...rows,...linkReportRows(r,l)])
           )
         );
       }
@@ -605,20 +611,17 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
         l('No movements.', 'Aucun mouvement.')
       );
     }
+    if(key==='partners'){
+      partnerDirectory(body,{ui,t,get,edit:partnerEditor,manage:p=>managePartnerLinks(body,p,{ui,t,get,post,back:reload,urlFor})});
+      return;
+    }
+    if(key==='review'){
+      referralReviews(body,{ui,t,get,post,openPlayer});return;
+    }
     await run(async () => {
-      state = await get(key === 'placements' ? '?view=placements' : '');
+      state = await get(key === 'placements' ? '?view=placements' : key === 'report' ? '?view=report' : '');
       if (!target.contains(body)) return;
-      if (key === 'partners') {
-        body.append(btn(l('New partner', 'Nouveau partenaire'), () => partnerEditor(null), false));
-        lst(
-          state.partners,
-          (p) =>
-            btn(p.name + ' · ' + p.code + (p.active ? '' : ' · ' + l('Inactive', 'Inactif')), () =>
-              partnerEditor(p)
-            ),
-          l('No partners.', 'Aucun partenaire.')
-        );
-      } else if (key === 'placements') placementList();
+      if (key === 'placements') placementList();
       else if (key === 'report') await report();
       else if (key === 'experiments') {
         body.append(btn(l('New experiment', 'Nouvelle expérience'), experimentEditor, false));
@@ -643,39 +646,7 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
           l('No experiments.', 'Aucune expérience.')
         );
       } else if (key === 'polls') polls();
-      else if (key === 'review') {
-        lst(
-          state.pending,
-          (r) => {
-            const n = el('article', '', 'discovery-card');
-            n.append(
-              el('strong', l('Account', 'Compte') + ' #' + r.player),
-              el(
-                'p',
-                r.flag === 'self'
-                  ? l('Self-referral', 'Auto-parrainage')
-                  : l('Possible duplicate', 'Doublon possible')
-              ),
-              form(
-                l('Record decision', 'Enregistrer la décision'),
-                (f) => {
-                  opts(f, 'decision', l('Decision', 'Décision'), [
-                    ['valid', l('Eligible', 'Admissible')],
-                    ['ineligible', l('Ineligible', 'Non admissible')]
-                  ]);
-                  inp(f, 'reason', l('Reason', 'Motif'), { maxLength: 240 });
-                },
-                async (d) => {
-                  await post('review', { playerId: r.player, ...d });
-                  await reload();
-                }
-              )
-            );
-            return n;
-          },
-          l('No referrals awaiting review.', 'Aucun parrainage en attente de vérification.')
-        );
-      } else if (key === 'credits' && state.testCredits)
+      else if (key === 'credits' && state.testCredits)
         body.append(
           form(
             l('Open test ledger', 'Ouvrir le registre de test'),

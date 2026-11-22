@@ -1,3 +1,4 @@
+import { referralDetails } from './referral-views.js';
 import { showBreakPeriod } from './account-break.js';
 
 export const playerAccessCopy = {
@@ -43,7 +44,7 @@ export const playerAccessCopy = {
   recoveryDeliveryUnavailable: ['Email delivery is unavailable. Try again later.', 'L’envoi de courriels est indisponible. Réessayez plus tard.']
 };
 
-export function createPlayerAccessUi({ api, t, element, action, canManage, locale, renderRound, supportHref }) {
+export function createPlayerAccessUi({ api, t, element, action, canManage, locale, renderRound, supportHref, appPath }) {
   const byId = (id) => document.getElementById(id);
   const form = byId('coming-soon-save-search');
   const record = byId('player-record');
@@ -102,6 +103,18 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-record-summary').textContent = ['player-' + player.id, t(suspended ? 'playerSuspendedState' : 'playerActive'),
       t(player.emailVerified ? 'playerVerified' : 'playerUnverified'), t('playerSessions') + ' · ' + player.activeSessions].join('　|　');
     renderBreak();
+    const referral=byId('player-referral-details'),content=byId('player-referral-content');
+    referral.hidden=!player.referral;
+    content.replaceChildren();
+    if(player.referral){
+      const l=(en,fr)=>locale()==='fr-CA'?fr:en;
+      referralDetails(content,player.referral,{el:element,l,date:ms=>new Date(ms).toLocaleString(locale())});
+      if(player.referral.flag){
+        const link=element('a',l('View referral review','Voir la vérification du parrainage'));
+        link.href=appPath('/admin?'+new URLSearchParams({lang:l('en','fr'),referralPlayer:String(player.id)})+'#growth-review');
+        content.append(link);
+      }
+    }
     const cases=player.supportCases;
     byId('player-case-count').textContent=t('supportPlayerCases')+' · '+cases.total;
     byId('player-case-list').replaceChildren(...cases.tickets.map(ticket=>{
@@ -170,6 +183,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-round-status').textContent = '';
     byId('player-round-details').open = false;
     byId('player-case-details').open = false;
+    byId('player-referral-details').open = false;
     byId('player-reward-details').open = false;
     byId('player-event-details').open = false;
     byId('player-activity-details').open = false;

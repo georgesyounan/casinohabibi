@@ -2836,3 +2836,110 @@ test('the player inbox finds older bilingual messages and original reward receip
   await checked(alice,'discovery/read',{id:oldest});
   first=await checked(alice,inbox+'?filter=unread');assert.equal(first.unread,1);assert.equal(first.total,1);
 });
+async function followReferral(base,path,jar=new Map()) {
+  const response=await fetch(base+path,{redirect:'manual',headers:{Cookie:[...jar].map(([k,v])=>k+'='+v).join('; ')}});
+  for (const cookie of response.headers.getSetCookie()){
+    const [name,value]=cookie.split(';')[0].split('=');jar.set(name,value);
+  }
+  return response;
+}
+
+test('campaign links attribute visits and first saves to the right partner across redirects, codes and link changes',async t=>{
+  const {base}=await startSandbox(t,{appBasePath:'/casinohabibi'});
+  const url=base+'/casinohabibi',staff=client(url),alice=client(url),ben=client(url);
+  await checked(staff,'admin/login',staffCredentials);
+  await growthAccount(alice,'link-alice');const benId=await growthAccount(ben,'link-ben');
+  const A=(await checked(staff,'admin/growth/partner',{name:'Studio Québec',code:'studio-nord',playerEmail:'LINK-ALICE@example.test'})).id;
+  const B=(await checked(staff,'admin/growth/partner',{name:'Studio Sud',code:'studio-sud',playerId:benId})).id;
+  const manage=(data)=>checked(staff,'admin/growth/link',{partnerId:A,...data});
+  const first=await manage({version:0,name:'Infolettre été',active:true});
+  const second=await manage({version:0,name:'Réseaux',active:true});
+  assert.equal((await staff('admin/growth/link',{partnerId:A,version:0,name:'Infolettre Été',active:true})).status,409);
+  assert.equal((await checked(staff,'admin/growth/partners?q=quebec')).items[0].linkCount,2);
+  assert.equal((await checked(staff,'admin/growth/partners?q=link-ben%40example.test')).items[0].id,B);
+  const links=(await checked(staff,'admin/growth/partners/'+A+'/links')).links;
+  const path=id=>links.find(row=>row.id===id).path;
+  const card=await growthPreview(staff,'Private Vista');
+  const ad=(await checked(staff,'admin/growth/placement',{action:'save',version:0,slug:'private-vista',spec:{
+    titleEn:'Vista',titleFr:'Vue',textEn:'',textFr:'',start:Date.now()-360000,end:Date.now()+week,preview:card.slug,currency:'CAD',budget:0,partner:A
+  }})).id;
+  await checked(staff,'admin/growth/placement',{action:'publish',id:ad,version:1});
+  const jar=new Map();
+  for(const p of [path(first.id),path(first.id),path(second.id),path(second.id),'/go/private-vista']){
+    assert.equal((await followReferral(url,p+'?lang=fr',jar)).status,302);
+  }
+  const nick=client(url,jar);
+  const nickId=await growthAccount(nick,'named-vista');
+  const save=who=>checked(who,'me/saved/'+card.id,undefined,undefined,{},'PUT');
+  await save(nick);await save(nick);
+  assert.equal((await checked(staff,'admin/players/'+nickId)).referral.linkName,'Réseaux');
+  const override=new Map();await followReferral(url,path(first.id),override);
+  const routed=client(url,override);await growthAccount(routed,'overridden-link',{referralCode:'studio-sud'});await save(routed);
+  const main=new Map();await followReferral(url,'/r/studio-nord',main);
+  const legacy=client(url,main);await growthAccount(legacy,'main-link');await save(legacy);
+  await manage({id:first.id,version:1,name:'Bulletin du lundi',active:false});
+  assert.equal((await staff('admin/growth/link',{partnerId:A,id:first.id,version:1,name:'Stale',active:true})).status,409);
+  assert.equal((await followReferral(url,path(first.id))).status,404);
+  assert.equal((await followReferral(url,'/r/studio-nord/missing')).status,404);
+  const r=(await checked(alice,'growth/partner?links=1&partner='+B)).report;
+  const row=id=>r.links.find(x=>x.id===id);
+  assert.equal(row(first.id).path,'/r/studio-nord/infolettre-ete');
+  assert.deepEqual([row(first.id).visits,row(first.id).signups,row(first.id).active],[2,0,false]);
+  assert.deepEqual([row(second.id).visits,row(second.id).signups,row(second.id).qualified],[2,1,1]);
+  assert.deepEqual([row(null).visits,row(null).qualified],[1,1]);
+  for(const k of ['visits','signups','verified','qualified','pending'])assert.equal(r.links.reduce((a,x)=>a+x[k],0),r[k]);
+  const report=await checked(staff,'admin/growth/report?scope=site&links=1&partner='+A+'&asOf='+r.asOf);
+  assert.deepEqual(report.links,r.links);
+  assert.doesNotMatch(JSON.stringify(r),/example\.test|playerId|review-|Bulletin du mardi/);
+  const other=(await checked(ben,'growth/partner?links=1&partner='+A)).report.links;
+  assert.equal(other.length,1);assert.deepEqual([other[0].id,other[0].visits,other[0].qualified],[null,0,1]);
+  assert.ok((await checked(staff,'admin/growth/report?scope=test&links=1&partner='+A)).links.every(x=>!x.visits&&!x.signups));
+  const filtered=await checked(staff,'admin/growth/report?scope=site&links=1&partner='+A+'&placement='+ad);
+  assert.equal(filtered.visits,1);assert.equal(filtered.links.find(x=>x.id===second.id).qualified,1);
+  assert.equal((await nick('admin/growth/partners')).status,401);
+  assert.equal((await nick('growth/partner?links=1')).status,403);
+  assert.equal((await staff('admin/growth/link',{partnerId:B,id:first.id,version:2,name:'Wrong partner',active:true})).status,404);
+  await manage({id:first.id,version:2,name:'Bulletin du lundi',active:true});
+  assert.equal((await followReferral(url,path(first.id))).status,302);
+});
+
+test('referral decisions stay searchable and reconcile with the private player file and frozen partner reports',async t=>{
+  const {base}=await startSandbox(t),admin=client(base),support=client(base),editor=client(base),owner=client(base);
+  await checked(admin,'admin/login',staffCredentials);
+  for(const [role,who] of [['operator_support',support],['operator_content',editor]]){
+    const creds={email:role+'@example.test',password:'private-staff-password'};
+    await checked(admin,'admin/staff',{...creds,role});await checked(who,'admin/login',creds);
+  }
+  const ownerId=await growthAccount(owner,'review-owner');
+  const p=(await checked(admin,'admin/growth/partner',{name:'Groupe Nord',code:'northern',playerId:ownerId})).id;
+  const link=(await checked(admin,'admin/growth/link',{partnerId:p,version:0,name:'Lancement',active:true})).id;
+  const card=await growthPreview(admin,'Account Window'),jar=new Map();
+  await followReferral(base,'/r/northern/lancement',jar);
+  await growthAccount(client(base,jar),'original-account');
+  const duplicate=client(base,new Map([['habibi_ref',jar.get('habibi_ref')]]));
+  const id=await growthAccount(duplicate,'second-account');
+  await checked(duplicate,'me/saved/'+card.id,undefined,undefined,{},'PUT');
+  const before=(await checked(owner,'growth/partner?links=1')).report;
+  assert.equal(before.pending,1);assert.deepEqual([before.links.find(r=>r.id===link).pending,before.qualified],[1,0]);
+  const pending=await checked(support,'admin/growth/reviews?q=player-'+id);
+  assert.equal(pending.total,1);assert.deepEqual([pending.items[0].flag,pending.items[0].linkName],['duplicate','Lancement']);
+  assert.equal((await editor('admin/growth/reviews')).status,403);
+  assert.equal((await support('admin/growth/partners')).status,403);
+  assert.equal((await owner('admin/growth/reviews')).status,401);
+  assert.equal((await support('admin/growth/review',{playerId:id,decision:'valid',reason:' '})).status,400);
+  const reason='Deux joueurs distincts, dossier vérifié';
+  const {auditId}=await checked(support,'admin/growth/review',{playerId:id,decision:'valid',reason});
+  assert.equal((await support('admin/growth/review',{playerId:id,decision:'ineligible',reason})).status,409);
+  assert.equal((await checked(admin,'admin/growth/reviews?filter=pending')).total,0);
+  for(const q of ['review-'+auditId,'player-'+id,'verifie','second-account','lancement']){
+    const result=await checked(support,'admin/growth/reviews?filter=all&q='+encodeURIComponent(q));
+    assert.equal(result.total,1);assert.equal(result.items[0].reason,reason);assert.equal(result.items[0].decidedBy,'operator_support@example.test');
+  }
+  assert.equal((await checked(support,'admin/growth/reviews?filter=ineligible')).total,0);
+  const profile=(await checked(support,'admin/players/'+id)).referral;
+  assert.equal(profile.decisionId,auditId);assert.equal(profile.review,'valid');
+  const fresh=(await checked(owner,'growth/partner?links=1')).report;
+  assert.deepEqual([fresh.qualified,fresh.pending,fresh.links.find(r=>r.id===link).qualified],[1,0,1]);
+  assert.deepEqual((await checked(owner,'growth/partner?links=1&asOf='+before.asOf)).report,before);
+  assert.doesNotMatch(JSON.stringify(fresh),/second-account|operator_support|distincts/);
+});

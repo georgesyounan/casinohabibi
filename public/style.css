@@ -374,3 +374,9 @@ dialog::backdrop{background:#090e0bd9}
 .contact-fieldset legend{font-weight:650;padding-inline:.3rem}
 .contact-fieldset textarea{font:inherit;min-height:5rem}
 .contact-preview{grid-column:1/-1}
+
+.referral-share{display:flex;align-items:flex-end;flex-wrap:wrap;gap:.5rem;margin:.6rem 0}
+.referral-share label{flex:1 1 15rem;min-width:0}
+.referral-share input{width:100%;box-sizing:border-box}
+.referral-statement,.referral-statement details{min-width:0}
+.referral-statement summary,#player-referral-content dd,.contact-list .discovery-card{overflow-wrap:anywhere}
