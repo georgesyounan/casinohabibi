@@ -12,10 +12,17 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer}) {
     const error=e=>{status.textContent=t(e.message);};
     try{
       if(kind==='report'){await report();return;}
-      const result=await api('admin/discovery/'+kind,undefined,'GET');
+      const result=await api('admin/discovery/'+kind+(kind==='programs'?'?withCatalogue=1':''),undefined,'GET');
       if(gen!==generation)return;
       const isProgram=kind==='programs';
-      const items=isProgram?result:result.items;
+      const items=result.items;
+      if(isProgram&&result.previewCount<3&&result.threeSaveQuest){
+        const note=el('aside','','discovery-card');
+        note.append(el('p',result.enabled?l(`${result.previewCount} of 3 previews are available for the three-save quest.`,`${result.previewCount} ${result.previewCount>1?'fiches disponibles':'fiche disponible'} sur 3 pour la quête des favoris.`):
+          l('Enable Coming Soon in the lobby to make catalogue quests available.','Activez la section À venir dans le hall pour rendre les quêtes du catalogue accessibles.')));
+        const a=el('a',result.enabled?l('Manage Coming Soon previews','Gérer les fiches à venir'):l('Edit lobby settings','Modifier les paramètres du hall'),'discovery-link');
+        a.href=result.enabled?'#coming-soon-admin':'#website-lobby';note.append(a);body.append(note);
+      }
       const list=el('div'),editor=el('div');body.append(button(isProgram?l('New quest or offer','Créer une quête ou une offre'):l('New campaign','Créer une campagne'),()=>edit(null)),list,editor);
       if(!isProgram && publish())body.prepend(button(l('Process due deliveries','Traiter les envois dus'),async()=>{
         try{await api('admin/discovery/dispatch',{});await load(kind);}catch(e){error(e);}

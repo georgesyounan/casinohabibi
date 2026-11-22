@@ -66,7 +66,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     const gen=++generation;
     root.replaceChildren(el('p',l('Loading…','Chargement…')));
     let data;
-    try{data=await api('discovery',undefined,'GET');}catch(e){if(gen===generation)root.replaceChildren(el('p',t(e.message)));return;}
+    try{data=await api('discovery?locale='+(french()?'fr-CA':'en-CA'),undefined,'GET');}catch(e){if(gen===generation)root.replaceChildren(el('p',t(e.message)));return;}
     if(gen!==generation||!root.isConnected)return;
     const message=el('p','','discovery-feedback');message.setAttribute('role','status');
     let busy=false;
@@ -83,7 +83,8 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     const body=el('div','','discovery-body');root.append(body);
     if(selected==='partner'&&data.partner){await extensions.partner(body,playerId);return;}
     if(selected==='community'){await extensions.community(body,playerId);return;}
-    const link=(label,path)=>{const a=el('a',label,'discovery-link');a.href=appPath(path);return a;};
+    const link=(label,path)=>{const a=el('a',label,'discovery-link');a.href=appPath(path);
+      if(a.hash)a.addEventListener('click',e=>{if(!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey)a.closest('dialog')?.close();});return a;};
     const post=(p,x)=>api('discovery/'+p,x);
     function card(item) {
       const {spec:s,award}=item,card=el('article','','discovery-card'),header=el('div','','discovery-line');
@@ -92,6 +93,13 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
         card.append(el('p',tasks()[s.template]));
         const progress=el('progress');progress.value=item.marks.length;progress.max=item.goal;progress.setAttribute('aria-label',l('Quest progress','Progression'));
         card.append(progress,el('small',`${item.marks.length} / ${item.goal}`));
+        if(item.catalogue?.missing && ['available','enrolled'].includes(item.state)){
+          const {visible,missing}=item.catalogue;
+          const text=!visible?l('The first Coming Soon previews will appear here when published.','Les premières fiches « À venir » apparaîtront ici dès leur publication.'):
+            missing===1?l('One more preview needs to be published to finish this quest.','Une fiche supplémentaire doit être publiée pour terminer cette quête.'):
+            l(`${missing} more previews need to be published to finish this quest.`,`${missing} fiches supplémentaires doivent être publiées pour terminer cette quête.`);
+          card.append(el('p',text,'discovery-catalogue-status'));
+        }
         if(item.state==='available')card.append(button(l('Join quest','Participer'),()=>run(()=>post('join',{id:item.id}))));
         if(item.state==='enrolled'){
           if(['Q02','Q03','Q06'].includes(s.template))card.append(link(l('Open guide','Ouvrir le guide'),'/help/'+s.target+'?lang='+ (french()?'fr':'en')));
@@ -110,7 +118,9 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
           else if(s.template==='Q06')for(const key of s.collection.split('|').map(x=>x.trim())){
             card.append(button(key,()=>run(async()=>{await post('visit',{kind:'collection',key});location.href=appPath('/?collection='+encodeURIComponent(key)+'#games');}),true));
           }else if(s.template==='Q09' && item.previews)for(const preview of item.previews)card.append(link(local(preview,'title'),'/coming-soon/'+preview.slug+'?lang='+(french()?'fr':'en')));
-          else card.append(link(l('Browse catalogue','Voir le catalogue'),'/'+'#games'));
+          else if(item.catalogue){
+            if(item.catalogue.remaining)card.append(link(l('See Coming Soon previews','Voir les fiches à venir'),'/?lang='+(french()?'fr':'en')+'#coming-soon'));
+          }else card.append(link(l('Browse catalogue','Voir le catalogue'),'/'+'#games'));
         }
         if(award)card.append(el('small',l('Completion','Quête terminée')+' · grant-'+award.grantId+' · '+date(award.grantedAt)));
       }
