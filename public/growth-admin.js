@@ -58,7 +58,11 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
     function back() {
       body.replaceChildren(btn(l('Back', 'Retour'), reload));
     }
-    const previewName = l('Preview slug', 'Identifiant de la fiche');
+    function catalogueLink(root) {
+      const a = el('a', l('Manage Coming Soon previews', 'Gérer les fiches à venir'), 'discovery-link');
+      a.href = '#coming-soon-admin';
+      root.append(a);
+    }
     const isoTitle = l('Your local time', 'Heure de cet appareil');
     function placementEditor(p) {
       back();
@@ -84,7 +88,30 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
                 required: k.startsWith('title'),
                 maxLength: k.startsWith('title') ? 120 : 360
               });
-            inp(f, 'preview', previewName, { value: s.preview || '', placeholder: 'casino-night' });
+            const choices = state.previewOptions.map((x) => [x.slug, local(x, 'title')]);
+            const custom = '!draft';
+            const selected = opts(
+              f,
+              'previewSelection',
+              l('Destination preview', 'Fiche de destination'),
+              [...choices, [custom, l('Enter a draft destination', 'Saisir une destination de brouillon')]],
+              choices.some(([slug]) => slug === s.preview)
+                ? s.preview
+                : s.preview
+                  ? custom
+                  : choices[0]?.[0] || custom
+            );
+            const slug = inp(f, 'preview', l('Preview address (slug)', 'Identifiant de la fiche'), {
+              value: s.preview || '',
+              maxLength: 64
+            });
+            function syncDestination() {
+              const draft = selected.value === custom;
+              slug.closest('label').hidden = !draft;
+              if (!draft) slug.value = selected.value;
+            }
+            selected.onchange = syncDestination;
+            syncDestination();
             opts(
               f,
               'partner',
@@ -191,6 +218,20 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
       );
     }
     function placementList() {
+      if (!state.previewOptions.length) {
+        const note = el('aside', '', 'discovery-card');
+        note.append(
+          el(
+            'p',
+            l(
+              'Publish a Coming Soon preview before activating an ad. You can prepare its draft now.',
+              'Publiez une fiche À venir pour activer une publicité. Vous pouvez déjà préparer le brouillon.'
+            )
+          )
+        );
+        catalogueLink(note);
+        body.append(note);
+      }
       body.append(btn(l('New placement', 'Nouvelle publicité'), () => placementEditor(null), false));
       lst(
         state.placements,
@@ -565,7 +606,7 @@ export function createGrowthAdmin({ api, t, french, role, publish }) {
       );
     }
     await run(async () => {
-      state = await get('');
+      state = await get(key === 'placements' ? '?view=placements' : '');
       if (!target.contains(body)) return;
       if (key === 'partners') {
         body.append(btn(l('New partner', 'Nouveau partenaire'), () => partnerEditor(null), false));

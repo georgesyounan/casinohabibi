@@ -770,7 +770,9 @@ async function api(req, res, path, tenantId, requestId) {
   if(route==='GET /api/admin/growth'){
     const staff=staffContext(req,tenantId,['operator_admin','operator_content','operator_support']);
     const all=growth.staff(tenantId);
-    return {partners:staff.role==='operator_admin'?all.partners:[],placements:websiteRoles.includes(staff.role)?all.placements:[],
+    const previewOptions=params.get('view')==='placements'&&websiteRoles.includes(staff.role)&&comingSoonEnabled(tenantId)
+      ?comingSoon.previewOptions(tenantId,catalogueAudience(tenantId)):[];
+    return {previewOptions,partners:staff.role==='operator_admin'?all.partners:[],placements:websiteRoles.includes(staff.role)?all.placements:[],
       filters:all.placements.map(({id,slug})=>({id,slug})),partnerFilters:all.partners.map(({id,name})=>({id,name})),
       pending:supportRoles.includes(staff.role)?all.pending:[],experiments:staff.role==='operator_admin'?all.experiments:[],polls:websiteRoles.includes(staff.role)?community.polls(tenantId):[],testCredits:staff.role==='operator_admin'&&testCredits.available(tenantId)};
   }
@@ -789,7 +791,15 @@ async function api(req, res, path, tenantId, requestId) {
     if(key==='credits')testCredits.requireTest(tenantId,input.playerId);
     return auditedChange(roles,input,actor=>handlers[key](tenantId,actor.id,requestId,input),key==='poll'||(key==='placement'&&input.action!=='save')?'publishWebsite':undefined);
   }
-  if (route==='GET /api/admin/discovery/programs') { staffContext(req,tenantId,websiteRoles); return rewards.staff(tenantId); }
+  if (route==='GET /api/admin/discovery/programs') {
+    staffContext(req,tenantId,websiteRoles);
+    const items=rewards.staff(tenantId);
+    if(params.get('withCatalogue')!=='1')return items;
+    const enabled=comingSoonEnabled(tenantId);
+    const threeSaveQuest=Boolean(db.prepare(`SELECT 1 FROM discovery_programs p JOIN discovery_versions v ON v.program=p.id AND v.version=p.live
+      WHERE p.tenant_id=? AND p.archived=0 AND json_extract(v.spec,'$.template')='Q01' LIMIT 1`).get(tenantId));
+    return {items,enabled,threeSaveQuest,previewCount:enabled?comingSoon.keys(tenantId,catalogueAudience(tenantId)).length:0};
+  }
   if (route==='GET /api/admin/discovery/campaigns') { staffContext(req,tenantId,websiteRoles); return {items:communications.staff(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone || 'UTC'}; }
   if (route==='POST /api/admin/discovery/programs' || route==='POST /api/admin/discovery/campaigns') {
     staffContext(req,tenantId,websiteRoles);
@@ -816,6 +826,16 @@ async function api(req, res, path, tenantId, requestId) {
     if(!player) fail(401,'signin');
     return transaction(()=>{
       const state=rewards.state(tenantId,player);
+      const catalogueQuests=state.items.filter(i=>['Q01','Q04'].includes(i.spec.template) && !i.award);
+      if(catalogueQuests.length){
+        const keys=comingSoonEnabled(tenantId)?comingSoon.keys(tenantId,catalogueAudience(tenantId,catalogueLocale)):[];
+        const steps=keys.map(key=>'title-'+key.slice('coming-soon:'.length));
+        for(const item of catalogueQuests){
+          const done=new Set(item.marks.map(mark=>mark.step));
+          const remaining=steps.filter(step=>!done.has(step)).length;
+          item.catalogue={visible:steps.length,remaining,missing:Math.max(0,item.goal-done.size-remaining)};
+        }
+      }
       for(const item of state.items.filter(i=>i.spec.template==='Q09')) {
         item.previews=item.spec.pair.map(id=>db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenantId,id))
           .map(r=>r&&discoveryDestination(tenantId,'/coming-soon/'+r.slug)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));

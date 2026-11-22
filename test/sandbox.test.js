@@ -1843,3 +1843,21 @@ test('isolated demo credits grant debit reverse and retry exactly once, respect 
   assert.equal((await staff('admin/growth/credits?player='+pid)).data.balance,20);
   assert.equal((await live('admin/growth/credits',input('grant',100))).status,403);
 });
+test('catalogue quests explain the live supply by language, retain archived progress and give staff current destinations',async t=>{
+  const {base}=await startSandbox(t),admin=client(base),user=client(base);await admin('admin/login',staffCredentials);await register(user);
+  const item=async locale=>(await user('discovery?locale='+locale)).data.items.find(i=>i.spec.template==='Q01');
+  const status=async()=> (await admin('admin/discovery/programs?withCatalogue=1')).data;
+  const zero=await item('fr-CA');assert.deepEqual(zero.catalogue,{visible:0,remaining:0,missing:3});assert.equal((await status()).threeSaveQuest,true);
+  assert.ok(Array.isArray((await admin('admin/discovery/programs')).data));await user('discovery/join',{id:zero.id});
+  const first=await growthPreview(admin,'Spring Coast');
+  assert.equal((await item('fr-CA')).catalogue.missing,2);await user('me/saved/'+first.id,undefined,undefined,{},'PUT');
+  const archive=await admin('admin/coming-soon',{action:'archive',slug:first.slug,version:2});assert.equal(archive.status,200);
+  const draft=(await admin('admin/coming-soon',cardDraft('French Collection',{locales:['fr-CA']}))).data.title;
+  await admin('admin/coming-soon',{action:'publish',slug:draft.slug,version:draft.version});
+  assert.deepEqual((await item('fr-CA')).catalogue,{visible:1,remaining:1,missing:1});
+  assert.deepEqual((await item('en-CA')).catalogue,{visible:0,remaining:0,missing:2});
+  await growthPreview(admin,'Winter Coast');
+  assert.equal((await item('fr-CA')).catalogue.missing,0);assert.equal((await status()).previewCount,2);
+  const options=(await admin('admin/growth?view=placements')).data.previewOptions;
+  assert.equal(options.length,2);assert.equal(options.some(x=>x.slug===first.slug),false);assert.equal(options.find(x=>x.slug===draft.slug).titleFr,'French Collection FR');
+});
