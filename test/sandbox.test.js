@@ -1861,3 +1861,662 @@ test('catalogue quests explain the live supply by language, retain archived prog
   const options=(await admin('admin/growth?view=placements')).data.previewOptions;
   assert.equal(options.length,2);assert.equal(options.some(x=>x.slug===first.slug),false);assert.equal(options.find(x=>x.slug===draft.slug).titleFr,'French Collection FR');
 });
+
+async function checked(who, path, input, host, headers, method) {
+  const result = await who(path, input, host, headers, method);
+  assert.equal(result.status, 200, `${path} ${JSON.stringify(result.data).slice(0, 160)}`);
+  return result.data;
+}
+async function editorialFixture(staff, slug = 'field-notes') {
+  const content = {
+    titleEn: 'Field notes',
+    titleFr: 'Carnet du soir',
+    bodyEn: 'Read the collected previews.',
+    bodyFr: 'Découvrez les fiches de la collection.',
+    artwork: '',
+    altEn: '',
+    altFr: '',
+    linkEn: '',
+    linkFr: '',
+    target: '',
+    addressEn: 'night-notes',
+    addressFr: 'carnet-du-soir',
+    collection: 'night trains'
+  };
+  await checked(staff, 'admin/website-content', { kind: 'help', slug, version: 0, action: 'save', content });
+  await checked(staff, 'admin/website-content', { kind: 'help', slug, version: 1, action: 'publish' });
+  return content;
+}
+async function questFixture(staff, template, overrides = {}) {
+  const spec = {
+    template,
+    titleEn: template,
+    titleFr: template,
+    itemEn: 'Souvenir',
+    itemFr: 'Souvenir',
+    slot: 'badge',
+    color: 'gold',
+    startsAt: 0,
+    endsAt: null,
+    claimUntil: null,
+    stock: null,
+    collection: '',
+    target: '',
+    pair: [],
+    ...overrides
+  };
+  const draft = await checked(staff, 'admin/discovery/programs', { action: 'save', version: 0, spec });
+  await checked(staff, 'admin/discovery/programs', { action: 'publish', id: draft.id, version: draft.version });
+  return draft.id;
+}
+test('handoff: a localized guide, two real collection pages, the saved shelf and all nine quests yield the same receipts on two devices', async (t) => {
+  const { base } = await startSandbox(t, { appBasePath: '/casinohabibi' }),
+    site = base + '/casinohabibi';
+  const phoneJar = new Map(),
+    phone = client(site, phoneJar),
+    desktop = client(site),
+    staff = client(site),
+    owner = client(site);
+  await checked(staff, 'admin/login', staffCredentials);
+  await register(phone);
+  await checked(desktop, 'login', playerCredentials);
+  await growthAccount(owner, 'organizer-bridge');
+  const cards = [];
+  for (const [name, en, fr] of [
+    ['Night Shifts', 'Night trains', 'Trains de nuit'],
+    ['Garden Party', 'Spring garden', 'Jardin de printemps'],
+    ['Weekend Rail', 'Night trains', 'Trains de nuit']
+  ]) {
+    const c = (await checked(staff, 'admin/coming-soon', cardDraft(name, { collectionEn: en, collectionFr: fr })))
+      .title;
+    await checked(staff, 'admin/coming-soon', { action: 'publish', slug: c.slug, version: c.version });
+    cards.push(c);
+  }
+  const guide = await editorialFixture(staff),
+    programs = {},
+    args = {
+      Q02: { target: 'carnet-du-soir', collection: 'Trains de nuit' },
+      Q03: { target: 'night-notes' },
+      Q06: { target: 'field-notes', collection: 'Night trains|Jardin de printemps' },
+      Q09: { pair: [cards[0].id, cards[2].id] }
+    };
+  for (const n of ['Q01', 'Q02', 'Q03', 'Q04', 'Q05', 'Q06', 'Q07', 'Q08', 'Q09']) {
+    programs[n] = await questFixture(staff, n, args[n]);
+    await checked(phone, 'discovery/join', { id: programs[n] });
+  }
+  const getItem = async (n) =>
+    (await checked(desktop, 'discovery?locale=fr-CA')).items.find((i) => i.id === programs[n]);
+  const html = async (path, method = 'GET') =>
+    fetch(site + path, {
+      method,
+      redirect: 'manual',
+      headers: { Cookie: [...phoneJar].map(([k, v]) => k + '=' + v).join('; ') }
+    });
+  const path = '/help/carnet-du-soir?lang=fr';
+  assert.deepEqual(
+    (await getItem('Q02')).collections.map((c) => c.titleFr),
+    ['Trains de nuit']
+  );
+  assert.equal((await html(path, 'HEAD')).status, 200);
+  assert.equal((await getItem('Q02')).marks.length, 0);
+  assert.equal((await html('/help/field-notes?lang=fr')).status, 301);
+  assert.equal((await getItem('Q02')).marks.length, 0);
+  assert.match(await (await html(path)).text(), /Carnet du soir/);
+  assert.equal(
+    (await getItem('Q02')).marks.length,
+    1,
+    'opening the actual server-rendered guide must register the read'
+  );
+  await checked(phone, 'discovery/visit', { kind: 'guideAck', key: 'carnet-du-soir' });
+  await html('/?lang=fr&category=favorites');
+  assert.equal((await getItem('Q03')).marks.length, 2);
+  await html('/?lang=fr&collection=night%20trains');
+  await html('/?lang=fr&collection=night%20trains');
+  await html('/?lang=fr&collection=spring%20garden');
+  await html(path);
+  assert.equal((await getItem('Q06')).marks.length, 3);
+  const ids = [];
+  for (const c of cards) {
+    await checked(phone, 'coming-soon/' + c.slug + '?locale=fr-CA');
+    ids.push((await checked(phone, 'me/saved/' + c.id, undefined, undefined, {}, 'PUT')).activityId);
+  }
+  await checked(phone, 'discovery/visit', { kind: 'activity', key: ids[0] });
+  await checked(phone, 'discovery/visit', { kind: 'activity', key: ids[1] });
+  await checked(desktop, 'discovery/visit', { kind: 'activityAck', key: ids[1] });
+  const lists = [];
+  for (const name of ['Books', 'Movies']) {
+    const list = (await checked(owner, 'community/create', { name })).id;
+    lists.push(list);
+    const { token } = await checked(owner, 'community/invite', { id: list });
+    await checked(phone, 'community/join', { token });
+  }
+  await checked(desktop, 'community/add', { id: lists[1], kind: 'preview', value: cards[0].slug });
+  const polls = [];
+  for (const name of ['Autumn', 'Winter']) {
+    const p = await checked(staff, 'admin/growth/poll', {
+      action: 'open',
+      titleEn: name,
+      titleFr: name,
+      options: [
+        { titleEn: 'A', titleFr: 'A' },
+        { titleEn: 'B', titleFr: 'B' }
+      ]
+    });
+    await checked(phone, 'community/vote', { id: p.id, choice: 1 });
+    polls.push(p.id);
+  }
+  await checked(staff, 'admin/growth/poll', { action: 'publishResults', id: polls[1] });
+  await checked(desktop, 'community/result', { id: polls[1] });
+  for (const n of Object.keys(programs)) assert.equal((await getItem(n)).state, 'claimable', n);
+  const receipts = await checked(desktop, 'discovery/claim', { ids: Object.values(programs) });
+  assert.equal(new Set(receipts.receipts.map((r) => r.claimId)).size, 9);
+  assert.deepEqual(
+    (await checked(phone, 'discovery/claim', { ids: Object.values(programs) })).receipts,
+    receipts.receipts
+  );
+  const renamed = { ...guide, addressFr: 'carnet-de-nuit' };
+  await checked(staff, 'admin/website-content', {
+    kind: 'help',
+    slug: 'field-notes',
+    version: 2,
+    action: 'save',
+    content: renamed
+  });
+  await checked(staff, 'admin/website-content', {
+    kind: 'help',
+    slug: 'field-notes',
+    version: 3,
+    action: 'publish'
+  });
+  assert.equal((await html(path)).status, 301);
+});
+test('handoff: a claim reference follows the player to the support inbox, staff report and personal export', async (t) => {
+  const { base } = await startSandbox(t),
+    staff = client(base),
+    person = client(base),
+    other = client(base);
+  await checked(staff, 'admin/login', staffCredentials);
+  await register(person);
+  await growthAccount(other, 'support-neighbor');
+  const id = await questFixture(staff, 'offer');
+  const { receipts } = await checked(person, 'discovery/claim', { ids: [id] });
+  const ref = 'claim-' + receipts[0].claimId;
+  const ticket = await checked(person, 'support', {
+    category: 'account',
+    message: 'Please check the cosmetic on this receipt.',
+    reference: ref
+  });
+  const staffTicket = (await checked(staff, 'admin/support')).tickets.find((i) => i.id === ticket.id);
+  assert.equal(staffTicket.reference, ref);
+  assert.equal((await checked(person, 'support')).find((i) => i.id === ticket.id).reference, ref);
+  const exported = await checked(person, 'account/export');
+  assert.equal(exported.supportRequests.find((i) => i.id === ticket.id)?.reference, ref);
+  assert.equal(
+    exported.discovery.items.some((i) => !i.startedAt && !i.award),
+    false
+  );
+  assert.equal((await checked(other, 'account/export')).supportRequests.length, 0);
+  assert.equal((await checked(staff, 'admin/discovery/report?scope=site&metric=cases')).list[0].reference, ref);
+});
+test('handoff: revoking all promotional emails updates each topic on the other device; opting in to one topic leaves the others unsubscribed', async (t) => {
+  const { base } = await startSandbox(t),
+    phone = client(base),
+    laptop = client(base);
+  await register(phone);
+  await checked(laptop, 'login', playerCredentials);
+  const pref = (topic) => ({ topic, channel: 'email', granted: true });
+  for (const topic of ['collections', 'rewards']) await checked(phone, 'discovery/preferences', pref(topic));
+  await checked(phone, 'discovery/preferences', { topic: 'announcements', channel: 'inbox', granted: true });
+  assert.equal((await checked(laptop, 'account')).marketingEmailConsent, true);
+  await checked(laptop, 'account/consents', { marketingEmail: false });
+  const choices = async () => (await checked(phone, 'discovery')).choices;
+  assert.deepEqual(
+    (await choices()).filter((c) => c.channel === 'email' && c.granted),
+    []
+  );
+  assert.equal((await choices()).find((c) => c.channel === 'inbox' && c.topic === 'announcements').granted, true);
+  await checked(phone, 'discovery/preferences', pref('rewards'));
+  assert.deepEqual(
+    (await choices()).filter((c) => c.channel === 'email' && c.granted).map((c) => c.topic),
+    ['rewards']
+  );
+  assert.ok(
+    (await checked(laptop, 'password-reset/request', { email: playerCredentials.email, locale: 'fr-CA' })).resetUrl
+  );
+});
+test('handoff: the participation deadline closes an undated-claim free offer and blocks late quest enrolment', async (t) => {
+  const { base } = await startSandbox(t),
+    staff = client(base),
+    p = client(base);
+  await checked(staff, 'admin/login', staffCredentials);
+  await register(p);
+  const past = Date.now() - 60000;
+  const offer = await questFixture(staff, 'offer', { endsAt: past });
+  assert.equal((await checked(p, 'discovery/claim', { ids: [offer] })).receipts[0].state, 'expired');
+  const quest = await questFixture(staff, 'Q01', { claimUntil: Date.now() + 900 });
+  await new Promise((r) => setTimeout(r, 940));
+  assert.equal((await p('discovery/join', { id: quest })).status, 409);
+});
+test('handoff: banners, partner creatives and an inbox message land on an eligible published page in the reader’s language', async (t) => {
+  const { base } = await startSandbox(t, { appBasePath: '/casinohabibi' }),
+    site = base + '/casinohabibi',
+    staff = client(site),
+    jar = new Map(),
+    p = client(site, jar),
+    publicUser = client(site);
+  await checked(staff, 'admin/login', staffCredentials);
+  const pid = await growthAccount(p, 'fr-creator', { locale: 'fr-CA' });
+  const { id: partner } = await checked(staff, 'admin/growth/partner', {
+    name: 'Studio FR',
+    code: 'studio-fr',
+    playerId: pid
+  });
+  const draft = (
+    await checked(
+      staff,
+      'admin/coming-soon',
+      cardDraft('Only French', {
+        locales: ['fr-CA'],
+        collectionEn: 'Night trains',
+        collectionFr: 'Trains de nuit'
+      })
+    )
+  ).title;
+  await checked(staff, 'admin/coming-soon', { action: 'publish', slug: draft.slug, version: draft.version });
+  await editorialFixture(staff);
+  const bilingual = await growthPreview(staff, 'Both languages'),
+    pair = await questFixture(staff, 'Q09', { pair: [draft.id, bilingual.id] });
+  const previews = async (lang) =>
+    (await checked(p, 'discovery?locale=' + lang)).items.find((i) => i.id === pair).previews.map((x) => x.slug);
+  assert.deepEqual(await previews('en-CA'), [bilingual.slug]);
+  assert.deepEqual(await previews('fr-CA'), [draft.slug, bilingual.slug]);
+  const english = (await checked(staff, 'admin/coming-soon', cardDraft('Only English', { locales: ['en-CA'] })))
+    .title;
+  await checked(staff, 'admin/coming-soon', { action: 'publish', slug: english.slug, version: english.version });
+  const pairedSpec = (await checked(staff, 'admin/discovery/programs')).find((i) => i.id === pair).spec;
+  const impossible = await checked(staff, 'admin/discovery/programs', {
+    action: 'save',
+    version: 0,
+    spec: { ...pairedSpec, pair: [draft.id, english.id] }
+  });
+  assert.equal(
+    (
+      await staff('admin/discovery/programs', {
+        action: 'publish',
+        id: impossible.id,
+        version: impossible.version
+      })
+    ).status,
+    409
+  );
+  const b = await checked(staff, 'admin/growth/placement', {
+    action: 'save',
+    version: 0,
+    slug: 'studio-spot',
+    spec: {
+      titleEn: 'Studio',
+      titleFr: 'Studio',
+      textEn: '',
+      textFr: '',
+      start: 0,
+      end: Date.now() + week,
+      preview: draft.slug,
+      currency: 'CAD',
+      budget: 100,
+      partner
+    }
+  });
+  await checked(staff, 'admin/growth/placement', { action: 'publish', id: b.id, version: b.version });
+  assert.equal((await checked(publicUser, 'growth/banner?locale=en-CA')).banner, null);
+  assert.equal((await checked(publicUser, 'growth/banner?locale=fr-CA')).banner.slug, 'studio-spot');
+  assert.equal((await checked(p, 'growth/partner?locale=en-CA')).creatives.length, 0);
+  const link = await fetch(site + '/go/studio-spot', { redirect: 'manual' });
+  assert.equal(link.status, 302);
+  assert.match(link.headers.get('Location'), /\?lang=fr/);
+  assert.equal((await fetch(base + link.headers.get('location'))).status, 200);
+  await checked(p, 'discovery/preferences', { topic: 'collections', channel: 'inbox', granted: true });
+  const message = await checked(staff, 'admin/discovery/campaigns', {
+    action: 'save',
+    version: 0,
+    spec: {
+      topic: 'collections',
+      channel: 'inbox',
+      subjectEn: 'New guide',
+      subjectFr: 'Nouveau guide',
+      textEn: 'Read',
+      textFr: 'Lire',
+      quietStart: 0,
+      quietEnd: 0,
+      localTime: '2025-01-15T12:00',
+      destination: '/help/night-notes'
+    }
+  });
+  await checked(staff, 'admin/discovery/campaigns', {
+    action: 'schedule',
+    id: message.id,
+    version: message.version
+  });
+  await checked(staff, 'admin/discovery/dispatch', {});
+  const fr = (await checked(p, 'discovery?locale=fr-CA')).messages[0];
+  assert.equal(fr.destination, '/help/carnet-du-soir?lang=fr');
+  const en = (await checked(p, 'discovery?locale=en-CA')).messages[0];
+  assert.equal(en.destination, '/help/night-notes?lang=en');
+  assert.match(await (await fetch(site + fr.destination)).text(), /Carnet du soir/);
+  await checked(staff, 'admin/website-content', {
+    kind: 'help',
+    slug: 'field-notes',
+    action: 'archive',
+    version: 2
+  });
+  assert.equal((await checked(p, 'discovery?locale=fr-CA')).messages[0].destination, null);
+});
+test('handoff: the authorized publisher can trace their own quest, poll and placement actions in the existing brand audit', async (t) => {
+  const { base } = await startSandbox(t),
+    admin = client(base),
+    publisher = client(base),
+    peer = client(base);
+  await checked(admin, 'admin/login', staffCredentials);
+  const creds = { email: 'author-bridge@example.test', password: 'private-publisher-password' },
+    other = { email: 'reviewer-bridge@example.test', password: 'private-reviewer-password' };
+  for (const ident of [creds, other])
+    await checked(admin, 'admin/staff', {
+      ...ident,
+      role: 'operator_content',
+      publishWebsite: true,
+      reason: 'Private acceptance publisher'
+    });
+  await checked(publisher, 'admin/login', creds);
+  await checked(peer, 'admin/login', other);
+  await questFixture(publisher, 'offer');
+  const card = await growthPreview(admin, 'Evening Garden');
+  const d = await checked(publisher, 'admin/growth/placement', {
+    action: 'save',
+    version: 0,
+    slug: 'audit-link',
+    spec: {
+      titleEn: 'Garden',
+      titleFr: 'Jardin',
+      textEn: '',
+      textFr: '',
+      start: 0,
+      end: Date.now() + week,
+      preview: card.slug,
+      currency: 'CAD',
+      budget: 0
+    }
+  });
+  await checked(publisher, 'admin/growth/placement', { action: 'publish', id: d.id, version: d.version });
+  await checked(publisher, 'admin/growth/poll', {
+    action: 'open',
+    titleEn: 'Garden',
+    titleFr: 'Jardin',
+    options: [
+      { titleEn: 'A', titleFr: 'A' },
+      { titleEn: 'B', titleFr: 'B' }
+    ]
+  });
+  const events = await checked(publisher, 'admin/audit');
+  for (const action of ['discovery_publish', 'placement_publish', 'poll_open'])
+    assert.ok(
+      events.events.some((e) => e.action === action),
+      action
+    );
+  assert.equal(
+    (await checked(peer, 'admin/audit')).events.some((e) => e.actor === creds.email),
+    false
+  );
+});
+test('recovery preserves guide evidence, entitlements, support, campaign delivery, community, attribution, experiments and test credit receipts', async (t) => {
+  const encryptionKey = randomBytes(32).toString('hex'),
+    source = await startSandbox(t, { encryptionKey, testCredits: true });
+  const staff = client(source.base),
+    phone = client(source.base),
+    organizer = client(source.base);
+  await checked(staff, 'admin/login', staffCredentials);
+  const fixture = new DatabaseSync(source.database);
+  try {
+    fixture.exec("INSERT INTO report_fixture_tenants VALUES('sandbox')");
+  } finally {
+    fixture.close();
+  }
+  const affiliateId = await growthAccount(organizer, 'snapshot-organizer');
+  await checked(staff, 'admin/growth/partner', {
+    name: 'Reading club',
+    code: 'reading-club',
+    playerId: affiliateId
+  });
+  const playerId = await growthAccount(phone, 'snapshot-reader', {
+    referralCode: 'reading-club',
+    locale: 'fr-CA'
+  });
+  const mark = new DatabaseSync(source.database);
+  try {
+    mark.prepare('UPDATE players SET report_fixture=1 WHERE id IN (?,?)').run(playerId, affiliateId);
+  } finally {
+    mark.close();
+  }
+  const card = (
+    await checked(
+      staff,
+      'admin/coming-soon',
+      cardDraft('Sleeper train', { collectionEn: 'Night trains', collectionFr: 'Trains de nuit' })
+    )
+  ).title;
+  await checked(staff, 'admin/coming-soon', { action: 'publish', slug: card.slug, version: card.version });
+  await editorialFixture(staff);
+  const now = Date.now(),
+    placement = await checked(staff, 'admin/growth/placement', {
+      action: 'save',
+      version: 0,
+      slug: 'reading-preview',
+      spec: {
+        titleEn: 'Sleeper',
+        titleFr: 'Train de nuit',
+        textEn: 'New preview',
+        textFr: 'Nouvelle fiche',
+        start: now - 60000,
+        end: now + week,
+        preview: card.slug,
+        currency: 'CAD',
+        budget: 0
+      }
+    });
+  await checked(staff, 'admin/growth/placement', { action: 'publish', id: placement.id, version: 1 });
+  const experiment = await checked(staff, 'admin/growth/experiment', {
+    placement: placement.id,
+    name: 'Reading group',
+    start: now - 60000,
+    end: now + week,
+    days: 7,
+    holdout: 50
+  });
+  await checked(phone, 'growth/banner?locale=fr-CA');
+  const enrollment = await questFixture(staff, 'Q03', { target: 'carnet-du-soir' });
+  await checked(phone, 'discovery/join', { id: enrollment });
+  await checked(phone, 'help/carnet-du-soir?locale=fr-CA');
+  const offer = await questFixture(staff, 'offer', {
+    slot: 'theme',
+    itemEn: 'Train ticket',
+    itemFr: 'Billet de train'
+  });
+  const award = (await checked(phone, 'discovery/claim', { ids: [offer] })).receipts[0];
+  await checked(phone, 'discovery/equip', { slot: 'theme', claimId: award.claimId });
+  const reference = 'claim-' + award.claimId;
+  const ticket = await checked(phone, 'support', {
+    category: 'account',
+    message: 'Please check this train ticket receipt.',
+    reference
+  });
+  const list = (await checked(organizer, 'community/create', { name: 'Train club' })).id;
+  await checked(phone, 'community/join', {
+    token: (await checked(organizer, 'community/invite', { id: list })).token
+  });
+  await checked(phone, 'community/add', { id: list, kind: 'preview', value: card.slug });
+  const poll = (
+    await checked(staff, 'admin/growth/poll', {
+      action: 'open',
+      titleEn: 'Next train',
+      titleFr: 'Prochain train',
+      options: [
+        { titleEn: 'Night', titleFr: 'Nuit' },
+        { titleEn: 'Day', titleFr: 'Jour' }
+      ]
+    })
+  ).id;
+  await checked(phone, 'community/vote', { id: poll, choice: 1 });
+  await checked(staff, 'admin/growth/poll', { action: 'publishResults', id: poll });
+  await checked(phone, 'me/saved/' + card.id, undefined, undefined, {}, 'PUT');
+  const preference = { topic: 'collections', channel: 'inbox', granted: true };
+  await checked(phone, 'discovery/preferences', preference);
+  const campaign = await checked(staff, 'admin/discovery/campaigns', {
+    action: 'save',
+    version: 0,
+    spec: {
+      ...preference,
+      subjectEn: 'Travel',
+      subjectFr: 'Voyage',
+      textEn: 'New preview',
+      textFr: 'Nouvelle fiche',
+      destination: '/help/field-notes',
+      localTime: '2025-01-15T12:00',
+      quietStart: 0,
+      quietEnd: 0
+    }
+  });
+  await checked(staff, 'admin/discovery/campaigns', { id: campaign.id, action: 'schedule', version: 1 });
+  await checked(staff, 'admin/discovery/dispatch', {});
+  const credit = { playerId, kind: 'debit', amount: 20, reason: 'Test-only seat reservation' },
+    request = { 'X-Request-ID': randomUUID() };
+  await checked(staff, 'admin/growth/credits', {
+    playerId,
+    kind: 'grant',
+    amount: 100,
+    reason: 'Test-only allowance'
+  });
+  const debit = await checked(staff, 'admin/growth/credits', credit, undefined, request);
+  await checked(staff, 'admin/growth/credits', {
+    playerId,
+    kind: 'reverse',
+    original: debit.id,
+    reason: 'Test-only cancellation'
+  });
+  const ledger = await checked(staff, 'admin/growth/credits?player=' + playerId);
+  const asOf = Date.now(),
+    partnerPath = 'growth/partner?asOf=' + asOf,
+    partner = await checked(organizer, partnerPath);
+  const reportPath = 'admin/growth/report?scope=test&days=90&asOf=' + asOf;
+  const report = await checked(staff, reportPath);
+  const root = await mkdtemp(join(tmpdir(), 'casino-cross-module-restore-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const op = (...args) =>
+    JSON.parse(
+      execFileSync(process.execPath, ['scripts/db-ops.js', ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, APP_ENV: 'development', DATA_DIR: dirname(source.database) }
+      })
+    );
+  const snapshot = join(root, 'snapshot.sqlite'),
+    destination = join(root, 'restored'),
+    hash = op('backup', snapshot).sha256;
+  assert.equal(op('verify', snapshot).sha256, hash);
+  assert.equal(op('prepare-restore', snapshot, destination).sourceSha256, hash);
+  await checked(phone, 'discovery/equip', { slot: 'theme', claimId: null });
+  await checked(organizer, 'community/remove', { id: list, playerId });
+  assert.equal((await phone('community?id=' + list)).status, 404);
+  await t.test('resume the same player journey in a separately restored service', async (t) => {
+    const restored = await startSandbox(t, { dataDirectory: destination, encryptionKey, testCredits: true });
+    const member = client(restored.base),
+      admin = client(restored.base),
+      affiliate = client(restored.base);
+    await checked(admin, 'admin/login', staffCredentials);
+    for (const [user, email] of [
+      [member, 'snapshot-reader'],
+      [affiliate, 'snapshot-organizer']
+    ])
+      await checked(user, 'login', { email: email + '@example.test', password: 'private-fixture-password' });
+    const state = await checked(member, 'discovery?locale=fr-CA');
+    assert.equal(state.items.find((i) => i.id === enrollment).guide.visited, true);
+    assert.equal(state.equipped.theme, award.claimId);
+    assert.deepEqual((await checked(member, 'discovery/claim', { ids: [offer] })).receipts, [award]);
+    assert.equal(state.messages.filter((m) => m.subjectFr === 'Voyage').length, 1);
+    assert.match(state.messages.find((m) => m.subjectFr === 'Voyage').destination, /carnet-du-soir\?lang=fr/);
+    assert.equal(
+      (await checked(member, 'account/export')).supportRequests.find((r) => r.id === ticket.id).reference,
+      reference
+    );
+    assert.equal(
+      (await checked(admin, 'admin/support')).tickets.find((r) => r.id === ticket.id).reference,
+      reference
+    );
+    assert.equal((await checked(member, 'community?id=' + list)).entries.length, 1);
+    assert.deepEqual((await checked(member, 'community/result', { id: poll })).counts, [0, 1]);
+    assert.deepEqual((await checked(affiliate, partnerPath)).report, partner.report);
+    assert.deepEqual(await checked(admin, reportPath), report);
+    assert.deepEqual(await checked(admin, 'admin/growth/credits', credit, undefined, request), debit);
+    assert.equal(ledger.balance, 100);
+    assert.equal(ledger.entries.length, 3);
+    assert.deepEqual(await checked(admin, 'admin/growth/credits?player=' + playerId), ledger);
+    await checked(member, 'discovery/visit', { kind: 'guideAck', key: 'carnet-du-soir', locale: 'fr-CA' });
+    await checked(member, 'discovery/visit', { kind: 'shelf' });
+    const completed = (await checked(member, 'discovery/claim', { ids: [enrollment] })).receipts[0];
+    assert.ok(completed.claimId && completed.claimId !== award.claimId);
+    const db = new DatabaseSync(restored.database, { readOnly: true });
+    try {
+      assert.equal(
+        db
+          .prepare('SELECT count(*) AS n FROM growth_assignments WHERE experiment=? AND player=?')
+          .get(experiment.id, playerId).n,
+        1
+      );
+      assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+      assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+    } finally {
+      db.close();
+    }
+  });
+});
+test('cosmetic collections preserve the earned edition and restrict equipment to the owner across sessions', async (t) => {
+  const { base } = await startSandbox(t),
+    admin = client(base),
+    phone = client(base),
+    desktop = client(base),
+    visitor = client(base);
+  await checked(admin, 'admin/login', staffCredentials);
+  await register(phone);
+  await checked(desktop, 'login', playerCredentials);
+  await growthAccount(visitor, 'inventory-outsider');
+  const group = { rewardCollectionEn: 'First edition', rewardCollectionFr: 'Première édition' };
+  const id = await questFixture(admin, 'offer', { slot: 'theme', ...group }),
+    receipt = (await checked(phone, 'discovery/claim', { ids: [id] })).receipts[0];
+  await checked(phone, 'discovery/equip', { slot: 'theme', claimId: receipt.claimId });
+  const original = (await checked(admin, 'admin/discovery/programs')).find((p) => p.id === id);
+  assert.equal(
+    (
+      await admin('admin/discovery/programs', {
+        id,
+        version: original.version,
+        action: 'save',
+        spec: { ...original.spec, rewardCollectionFr: '' }
+      })
+    ).status,
+    400
+  );
+  const draft = await checked(admin, 'admin/discovery/programs', {
+    id,
+    version: original.version,
+    action: 'save',
+    spec: { ...original.spec, rewardCollectionEn: 'Winter', rewardCollectionFr: 'Hiver' }
+  });
+  await checked(admin, 'admin/discovery/programs', { id, version: draft.version, action: 'publish' });
+  const mine = await checked(desktop, 'discovery');
+  assert.equal(mine.items.find((i) => i.id === id).spec.rewardCollectionFr, group.rewardCollectionFr);
+  assert.equal(mine.equipped.theme, receipt.claimId);
+  const preview = (await checked(visitor, 'discovery')).items.find((i) => i.id === id);
+  assert.equal(preview.spec.rewardCollectionFr, 'Hiver');
+  assert.equal(preview.award, null);
+  assert.equal((await visitor('discovery/equip', { slot: 'theme', claimId: receipt.claimId })).status, 403);
+  assert.equal(
+    (await checked(desktop, 'account/export')).discovery.items.find((i) => i.id === id).spec.rewardCollectionEn,
+    group.rewardCollectionEn
+  );
+});
