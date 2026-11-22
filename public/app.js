@@ -161,6 +161,7 @@ const copy = {
   tenantPreviewTitle: ['Brand preview', 'Aperçu de la marque'], tenantPreviewHelp: ['Live preview of the settings in this form. Save the draft, then publish it for players to see.', 'Aperçu en direct des paramètres de ce formulaire. Enregistrez le brouillon, puis publiez-le pour que les joueurs le voient.'],
   previewBrandPlaceholder: ['Your casino name', 'Le nom de votre casino'], previewEmailPlaceholder: ['No support email set', 'Aucun courriel de soutien défini'],
   supportStatusTotals: ['All requests · {open} open · {answered} answered · {closed} closed','Toutes les demandes · {open} ouvertes · {answered} répondues · {closed} fermées'],
+  contactInbox: ['Messages and reward receipts','Messages et reçus de récompense'],
   supportMoreFilters: ['More filters', 'Autres filtres'],
   supportResultRange: ['Requests {start}–{end} of {total}', 'Demandes {start} à {end} sur {total}'],
   supportAllCases: ['View all requests', 'Voir toutes les demandes'],
@@ -1608,7 +1609,7 @@ function renderDialog() {
   panel.append(reminderForm);
   const supportReplies = player.supportReplies || 0;
   const supportLabel = supportReplies ? t('supportNewReplies').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(supportReplies)) : t('supportTitle');
-  panel.append(action(supportLabel, openSupportCenter, 'ghost'), element('h3', t('safety')),
+  panel.append(action(t('contactInbox'),()=>{discoveryPlayer.openTab('inbox',player.id);openPanel('discovery');},'ghost'), action(supportLabel, openSupportCenter, 'ghost'), element('h3', t('safety')),
     action(t('exclude'), async () => {
       if (!window.confirm(t('confirmExclude'))) return;
       await api('safety/exclude', {});
@@ -1840,7 +1841,7 @@ const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, lo
 const growthPlayer=createGrowthPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter});
 const growthAdmin=createGrowthAdmin({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,publish:()=>currentStaffPermissions.publishWebsite});
 const discoveryPlayer=createDiscoveryPlayer({api,t,french:()=>Boolean(language),appPath,openSupport:openSupportCenter,extensions:growthPlayer});
-const discoveryAdmin=createDiscoveryAdmin({api,t,supportHref,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
+const discoveryAdmin=createDiscoveryAdmin({api,t,supportHref,appPath,french:()=>Boolean(language),publish:()=>currentStaffPermissions.publishWebsite,
   openPlayer(ref){adminWorkspace.open('coming-soon-saves');const f=$('#coming-soon-save-search');f.elements.query.value=ref;f.requestSubmit();}});
 const adminLoaders = {
   ...Object.fromEntries(['partners','placements','report','review','experiments','polls','credits'].map(key=>['growth-'+key,()=>growthAdmin.load(key)])),
@@ -3306,7 +3307,7 @@ if (!isAdminPage) {
   if (resetToken) openPanel('passwordReset');
   else if (verifyToken) openPanel('emailVerification');
   else if (emailChangeToken) openPanel('emailChange');
-  else if(currentRoute==='/' && (new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
+  else if(currentRoute==='/' && (new URLSearchParams(location.search).get('inbox')==='1' || new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
     if(!player)afterSignIn='discovery';
     openPanel(player?'discovery':'signin');
   }

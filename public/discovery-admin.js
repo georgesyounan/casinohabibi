@@ -1,10 +1,14 @@
+import { createContactList, campaignLabels, campaignLanguage, audiencePreview, campaignResults } from './contact-views.js';
 import { uiKit } from './discovery.js';
 const templates=['offer','Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09'];
 const toLocal=t=>{if(!t)return '';const d=new Date(t);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
-export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHref}) {
-  const {l,el,button,field,pages,date,local}=uiKit(french);
+export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHref,appPath}) {
+  const ui=uiKit(french);
+  const {l,el,button,field,pages,date,local}=ui;
+  const campaignList={q:'',filter:'all',page:1};
+  const campaignParams=p=>new URLSearchParams({view:'list',q:p.q,status:p.filter,page:p.page});
   let generation=0;
-  async function load(kind){
+  async function load(kind,focusId){
     const gen=++generation, root=document.getElementById('engagement-'+kind+'-body');
     if(!root)return;
     const status=el('p','','discovery-feedback');status.setAttribute('role','status');
@@ -12,7 +16,7 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
     const error=e=>{status.textContent=t(e.message);};
     try{
       if(kind==='report'){await report();return;}
-      const result=await api('admin/discovery/'+kind+(kind==='programs'?'?withCatalogue=1':''),undefined,'GET');
+      const result=await api('admin/discovery/'+kind+'?'+(kind==='programs'?'withCatalogue=1':campaignParams(campaignList)),undefined,'GET');
       if(gen!==generation)return;
       const isProgram=kind==='programs';
       const items=result.items;
@@ -23,23 +27,27 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
         const a=el('a',result.enabled?l('Manage Coming Soon previews','Gérer les fiches à venir'):l('Edit lobby settings','Modifier les paramètres du hall'),'discovery-link');
         a.href=result.enabled?'#coming-soon-admin':'#website-lobby';note.append(a);body.append(note);
       }
-      const list=el('div'),editor=el('div');body.append(button(isProgram?l('New quest or offer','Créer une quête ou une offre'):l('New campaign','Créer une campagne'),()=>edit(null)),list,editor);
-      if(!isProgram && publish())body.prepend(button(l('Process due deliveries','Traiter les envois dus'),async()=>{
+      const list=el('div'),editor=el('div'),tools=el('div','','discovery-actions');
+      body.append(tools,list,editor);
+      tools.append(button(isProgram?l('New quest or offer','Créer une quête ou une offre'):l('New campaign','Créer une campagne'),()=>edit(null)));
+      if(!isProgram && publish())tools.append(button(l('Process due deliveries','Traiter les envois dus'),async()=>{
         try{await api('admin/discovery/dispatch',{});await load(kind);}catch(e){error(e);}
       },true));
+      let selection=0;
       let busy=false;
       async function editAction(row,action,spec){
         if(busy)return;busy=true;
         try{
-          await api('admin/discovery/'+kind,{id:row?.id,version:row?.version||0,action,...(spec&&{spec})});
-          await load(kind);
-        }catch(e){error(e);}finally{busy=false;}
+          const saved=await api('admin/discovery/'+kind,{id:row?.id,version:row?.version||0,action,...(spec&&{spec})});
+          if(!row && !isProgram)Object.assign(campaignList,{q:'',filter:'all',page:1});
+          if(gen===generation)await load(kind,isProgram?undefined:saved.id);
+        }catch(e){if(gen===generation)error(e);}finally{busy=false;}
       }
       function edit(row){
-        editor.replaceChildren();list.hidden=true;
+        ++selection;editor.replaceChildren();list.hidden=true;tools.hidden=true;status.textContent='';
         const form=el('form','','discovery-editor'),s=row?.spec||{};
         const head=el('h3',row?local(s,isProgram?'title':'subject'):isProgram?l('New programme','Nouveau programme'):l('Draft campaign','Brouillon de campagne'));
-        head.tabIndex=-1;editor.append(head,button(l('Back to list','Retour à la liste'),()=>{editor.replaceChildren();list.hidden=false;},true),form);head.focus();
+        head.tabIndex=-1;editor.append(head,button(l('Back to list','Retour à la liste'),()=>{++selection;editor.replaceChildren();list.hidden=false;tools.hidden=false;},true),form);head.focus();
         const controls={};
         const input=(key,label,options={})=>controls[key]=field(form,key,label,{value:s[key],...options});
         const labels=items=>items.map(([k,en,fr])=>[k,l(en,fr)]);
@@ -82,6 +90,7 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
         }else{
           input('topic',l('Topic','Sujet'),{items:labels([['collections','Collections','Collections'],['rewards','Rewards','Récompenses'],['announcements','Site news','Nouvelles du site']]),value:s.topic||'collections'});
           input('channel',l('Channel','Canal'),{items:labels([['inbox','Site inbox','Messagerie du site'],['email','Email','Courriel']]),value:s.channel||'inbox'});
+          input('audienceLocale',l('Audience language','Langue de l’audience'),{items:['all','fr-CA','en-CA'].map(v=>[v,campaignLanguage(v,l)]),value:s.audienceLocale||'all'});
           for(const [key,en,fr,multi] of [['subjectEn','English subject','Objet en anglais'],['subjectFr','French subject','Objet en français'],['textEn','English message','Message en anglais',true],['textFr','French message','Message en français',true]])
             input(key,l(en,fr),{multiline:multi,required:true,maxLength:multi?1800:120});
           input('destination',l('Published destination (optional)','Destination publiée (facultative)'),{placeholder:'/coming-soon/…'});
@@ -90,6 +99,7 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
           input('quietEnd',l('Quiet hours end (0–23)','Fin des heures silencieuses (0–23)'),{type:'number',min:0,max:23,required:true,value:s.quietEnd??8});
         }
         function values(){
+          if(!isProgram && row && row.status!=='draft')return s;
           const v=Object.fromEntries(new FormData(form));
           if(!isProgram)return {...v,quietStart:Number(v.quietStart),quietEnd:Number(v.quietEnd)};
           for(const k of ['startsAt','endsAt','claimUntil'])v[k]=v[k]?new Date(v[k]).getTime():k==='startsAt'?0:null;
@@ -103,9 +113,44 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
         }
         const preview=el('details','', 'admin-disclosure'),summary=el('summary',l('Preview','Aperçu')),sample=el('div');
         preview.append(summary,sample);form.append(preview);
-        function previewNow(){const v=values();sample.replaceChildren(el('h4',local(v,isProgram?'title':'subject')),el('p',local(v,isProgram?'item':'text'),isProgram?'cosmetic cosmetic-'+v.color:''));}
+        let sampleLocale=french()?'Fr':'En';
+        if(!isProgram){
+          const languages=el('div','','discovery-actions');
+          for (const [key,title] of [['Fr','Français'],['En','English']]) {
+            const choose=button(title,()=>{sampleLocale=key;previewNow();},true);
+            choose.dataset.locale=key;languages.append(choose);
+          }
+          preview.insertBefore(languages,sample);
+        }
+        function previewNow(){
+          const v=values();
+          const title=isProgram?local(v,'title'):v['subject'+sampleLocale];
+          const body=isProgram?local(v,'item'):v['text'+sampleLocale];
+          sample.replaceChildren(el('h4',title),el('p',body,isProgram?'cosmetic cosmetic-'+v.color:''));
+          for (const b of preview.querySelectorAll('[data-locale]')) b.setAttribute('aria-pressed',String(b.dataset.locale===sampleLocale));
+        }
         preview.addEventListener('toggle',previewNow);form.addEventListener('input',previewNow);
         const enabled=isProgram||!row||row.status==='draft';
+        if(!isProgram){
+          const group=(title,keys)=>{
+            const section=el('fieldset','','contact-fieldset');
+            section.append(el('legend',title));
+            for (const key of keys)section.append(controls[key].closest('label'));
+            form.insertBefore(section,preview);
+          };
+          group(l('Audience and channel','Audience et canal'),['topic','channel','audienceLocale']);
+          group('Français',['subjectFr','textFr']);group('English',['subjectEn','textEn']);
+          group(l('Link and schedule','Lien et horaire'),['destination','localTime','quietStart','quietEnd']);
+          if(enabled)audiencePreview(form,{api,t,ui,values,appPath});
+          else {
+            const settings=el('details','','admin-disclosure');
+            settings.append(el('summary',l('Campaign settings','Paramètres de la campagne')));
+            form.before(settings);settings.append(form);
+            editor.insertBefore(preview,settings);
+            editor.insertBefore(campaignResults(row,ui),preview);
+          }
+          if(row)head.after(el('p',['campaign-'+row.id,campaignLabels(l)[row.status],campaignLanguage(s.audienceLocale,l)].join(' · ')));
+        }
         if(enabled){const save=el('button',l('Save draft','Enregistrer le brouillon'));save.type='submit';form.append(save);}
         else for(const c of Object.values(controls))c.disabled=true;
         form.addEventListener('submit',e=>{e.preventDefault();if(enabled)void editAction(row,'save',values());});
@@ -120,17 +165,41 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
         }
         const original=JSON.stringify(values());
       }
-      const statuses={draft:l('Draft','Brouillon'),scheduled:l('Scheduled','Planifiée'),cancelled:l('Cancelled','Annulée'),queued:l('Queued','En attente'),suppressed:l('Suppressed','Envoi bloqué'),delivered:l('Delivered','Livrée'),failed:l('Failed','Échec'),sending:l('Sending','En cours')};
-      const reasons={quietHours:l('quiet hours','heures silencieuses'),accountBreak:l('account break','pause de compte'),optedOut:l('opted out','désabonnement'),contactPause:l('topic paused','sujet en pause'),mailUnavailable:l('mail unavailable','courriel indisponible'),deliveryUnconfirmed:l('delivery unconfirmed','livraison non confirmée'),destinationArchived:l('destination unavailable','destination indisponible'),accountUnavailable:l('account unavailable','compte indisponible'),cancelled:l('cancelled','annulé')};
-      pages(list,items,row=>{
-        const n=el('article','','discovery-card');n.append(button(local(row.spec,isProgram?'title':'subject'),()=>edit(row),true));
-        n.append(el('small',isProgram?(row.archived?l('Archived','Archivée'):row.live?(row.version===row.live?l('Published','Publiée'):l('Unpublished changes','Modifications en brouillon')):statuses.draft):statuses[row.status]));
-        if(!isProgram){
-          n.append(el('small',row.spec.localTime.replace('T',' ')+' · '+row.spec.zone));
-          for(const r of row.outcomes)n.append(el('small',`${statuses[r.state]||r.state} · ${r.count}${r.reason?' · '+(reasons[r.reason]||r.reason):''}`));
+      const labels=campaignLabels(l);
+      if (isProgram) {
+        pages(list,items,row=>{
+          const n=el('article','','discovery-card');
+          n.append(button(local(row.spec,'title'),()=>edit(row),true));
+          n.append(el('small',row.archived?l('Archived','Archivée'):row.live?(row.version===row.live?l('Published','Publiée'):l('Unpublished changes','Modifications en brouillon')):labels.draft));
+          return n;
+        },l('No drafts or published items.','Aucune publication ou brouillon.'));
+      } else {
+        createContactList(list,{ui,t,state:campaignList,initial:result,
+          searchLabel:l('Campaign title or number','Titre ou numéro de campagne'),filterLabel:l('Status','État'),
+          filters:[['all',l('All statuses','Tous les états')],...['draft','scheduled','cancelled'].map(k=>[k,labels[k]])],
+          empty:l('No campaigns match.','Aucune campagne correspondante.'),
+          summary:r=>l('Campaigns','Campagnes')+' · '+r.total,
+          load:params=>api('admin/discovery/campaigns?'+campaignParams(Object.fromEntries(params)),undefined,'GET'),
+          draw(row){
+            const card=el('article','','discovery-card');
+            const open=button(local(row,'subject'),async()=>{
+              const current=++selection;open.disabled=true;
+              try {
+                const detail=await api('admin/discovery/campaigns/'+row.id,undefined,'GET');
+                if(gen===generation && current===selection && open.isConnected)edit(detail);
+              } catch(e){if(gen===generation && current===selection)error(e);}
+              finally {open.disabled=false;}
+            },true);
+            card.append(open,el('small',['campaign-'+row.id,labels[row.status],row.channel==='email'?l('Email','Courriel'):l('Site inbox','Messagerie du site'),
+              row.localTime.replace('T',' '),row.zone].join(' · ')));
+            return card;
+          }
+        });
+        if (focusId) {
+          const chosen=await api('admin/discovery/campaigns/'+focusId,undefined,'GET');
+          if(gen===generation)edit(chosen);
         }
-        return n;
-      },l('No drafts or published items.','Aucune publication ou brouillon.'));
+      }
     }catch(e){if(gen===generation)error(e);}
     async function report(){
       const form=el('form','','discovery-filters');body.append(form);

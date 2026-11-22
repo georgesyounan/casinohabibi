@@ -1,3 +1,4 @@
+import { createContactList } from './contact-views.js';
 export const discoveryCopy={
   discovery:['Discovery & rewards','Découverte et récompenses'],discoveryAdmin:['Quests & rewards','Quêtes et récompenses'],
   campaignAdmin:['Communications','Communications'],discoveryReports:['Reward reports','Rapports de récompenses'],
@@ -47,8 +48,10 @@ export function uiKit(french) {
   return {l,el,button,field,pages,tabs,date,local};
 }
 export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensions={}}) {
-  const {l,el,button,field,pages,tabs,date,local}=uiKit(french);
-  let profileGroup=null,previewRewards=false;
+  const ui=uiKit(french);
+  const {l,el,button,field,pages,tabs,date,local}=ui;
+  let profileGroup=null,previewRewards=false,focusClaim=null;
+  const inboxState={q:'',filter:'all',page:1};
   let selected='quests',generation=0,activePlayer,focusQuest=Number(new URLSearchParams(location.search).get('quest'));
   const labels=()=>({available:l('Open to join','Inscription ouverte'),enrolled:l('In progress','En cours'),claimable:l('Ready to claim','À réclamer'),
     claimed:l('Claimed','Réclamée'),archived:l('Archived','Archivée'),scheduled:l('Upcoming','À venir'),expired:l('Expired','Expirée'),
@@ -65,12 +68,20 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     Q08:l('Open one of your saved activities and acknowledge its reference.','Ouvrez une activité de vos favoris et confirmez sa référence.'),
     Q09:l('Open both previews in the featured pair.','Ouvrez les deux fiches du duo sélectionné.')});
   function cosmetic(s){const n=el('span',local(s,'item'),'cosmetic cosmetic-'+s.color+' cosmetic-'+s.slot);n.title=slots()[s.slot];return n;}
+  function switchPlayer(playerId) {
+    if(playerId!==activePlayer){
+      const params=new URLSearchParams(location.search);
+      profileGroup=null;previewRewards=false;focusClaim=null;Object.assign(inboxState,{q:'',filter:'all',page:1});
+      selected=params.has('listInvite')?'community':params.get('inbox')==='1'?'inbox':'quests';
+      activePlayer=playerId;
+    }
+  }
   async function render(root,playerId) {
-    if(playerId!==activePlayer){profileGroup=null;previewRewards=false;selected=new URLSearchParams(location.search).has('listInvite')?'community':'quests';activePlayer=playerId;}
+    switchPlayer(playerId);
     const gen=++generation;
     root.replaceChildren(el('p',l('Loading…','Chargement…')));
     let data;
-    try{data=await api('discovery?locale='+(french()?'fr-CA':'en-CA'),undefined,'GET');}catch(e){if(gen===generation)root.replaceChildren(el('p',t(e.message)));return;}
+    try{data=await api('discovery?view=summary&locale='+(french()?'fr-CA':'en-CA'),undefined,'GET');}catch(e){if(gen===generation)root.replaceChildren(el('p',t(e.message)));return;}
     if(gen!==generation||!root.isConnected)return;
     const message=el('p','','discovery-feedback');message.setAttribute('role','status');
     let busy=false;
@@ -189,7 +200,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
             groupBody.append(show);
           }
           const grid=el('div');groupBody.append(grid);
-          pages(grid,previewRewards&&remaining.length?remaining:owned,card,l('No items collected yet.','Aucun article obtenu pour le moment.'));
+          pages(grid,previewRewards&&remaining.length?remaining:owned,card,l('No items collected yet.','Aucun article obtenu pour le moment.'),6,owned.findIndex(i=>i.award?.claimId===focusClaim));
         }
         picker?.addEventListener('change',()=>{previewRewards=false;drawGroup();});drawGroup();return;
       }
@@ -202,14 +213,37 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
       pages(list,items,card,l('No items here yet.','Aucun article pour le moment.'),6,selected==='quests'?items.findIndex(i=>i.id===focusQuest):0);return;
     }
     if(selected==='inbox'){
-      const items=[...data.messages.map(m=>({...m,at:m.deliveredAt})),...data.items.filter(i=>i.award?.claimId).map(i=>({at:i.award.claimedAt,item:i}))].sort((a,b)=>b.at-a.at);
-      pages(body,items,m=>{
-        const n=el('article','','discovery-card');
-        if(m.item){n.append(el('h3',l('Reward receipt','Reçu de récompense')),cosmetic(m.item.spec),el('small','claim-'+m.item.award.claimId+' · '+date(m.at)));return n;}
-        n.append(el('h3',local(m,'subject')),el('p',local(m,'text')),el('small',date(m.at)));
-        if(m.destination)n.append(link(l('View','Consulter'),m.destination));
-        if(!m.readAt)n.append(button(l('Mark as read','Marquer comme lu'),()=>run(()=>post('read',{id:m.id})),true));return n;
-      },l('No messages yet.','Aucun message pour le moment.'));return;
+      createContactList(body,{ui,t,state:inboxState,
+        searchLabel:l('Message, reward or reference','Message, récompense ou référence'),filterLabel:l('Show','Afficher'),
+        filters:[['all',l('All items','Tous les éléments')],['unread',l('Unread messages','Messages non lus')],['messages',l('Site messages','Messages du site')],['receipts',l('Reward receipts','Reçus de récompense')]],
+        empty:l('No matching messages or receipts.','Aucun message ou reçu correspondant.'),
+        summary:r=>l('Results','Résultats')+' · '+r.total+'　'+l('Unread messages','Messages non lus')+' · '+r.unread,
+        load(params){params.set('locale',french()?'fr-CA':'en-CA');return api('discovery/inbox?'+params,undefined,'GET');},
+        draw(row,refresh){
+          const card=el('article','','discovery-card');
+          if(row.kind==='receipt'){
+            card.append(el('h3',l('Reward receipt','Reçu de récompense')),cosmetic(row),el('small',row.reference+' · '+date(row.at)));
+            card.append(button(l('View in my collection','Voir dans ma collection'),()=>{
+              profileGroup=row.rewardCollectionEn?.trim().toLocaleLowerCase('en-CA')||'';
+              previewRewards=false;focusClaim=row.id;select('profile');
+            },true));
+            card.append(button(l('Get help with this receipt','Aide sur ce reçu'),()=>openSupport(row.reference),true));
+          } else {
+            const header=el('div','','discovery-line');
+            header.append(el('h3',local(row,'subject')),el('small',row.readAt?l('Read','Lu'):l('Unread','Non lu')));
+            card.append(header,el('p',local(row,'text')),el('small',names()[row.topic]+' · '+date(row.at)));
+            if(row.destination)card.append(link(l('View','Consulter'),row.destination));
+            if(!row.readAt){
+              const mark=button(l('Mark as read','Marquer comme lu'),async()=>{
+                mark.disabled=true;
+                try{await post('read',{id:row.id});if(gen===generation&&card.isConnected)await refresh();}
+                catch(e){if(gen===generation)message.textContent=t(e.message);mark.disabled=false;}
+              },true);card.append(mark);
+            }
+          }
+          return card;
+        }
+      });return;
     }
     for(const [topic,name] of Object.entries(names())){
       const section=el('section','','discovery-card');section.append(el('h3',name));
@@ -222,5 +256,5 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
       body.append(section);
     }
   }
-  return {render,openTab(k){selected=k;}};
+  return {render,openTab(k,playerId){if(playerId!==undefined)switchPlayer(playerId);selected=k;}};
 }

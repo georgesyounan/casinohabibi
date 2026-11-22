@@ -821,7 +821,24 @@ async function api(req, res, path, tenantId, requestId) {
     const previews=enabled?comingSoon.previewOptions(tenantId,catalogueAudience(tenantId)):[];
     return {items,enabled,threeSaveQuest,previewCount:previews.length,previews,collections:editorial.collections,guides:editorial.targets.filter(x=>x.key.startsWith('help/'))};
   }
-  if (route==='GET /api/admin/discovery/campaigns') { staffContext(req,tenantId,websiteRoles); return {items:communications.staff(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone || 'UTC'}; }
+  if (route==='GET /api/admin/discovery/campaigns') {
+    staffContext(req,tenantId,websiteRoles);
+    if (params.get('view')==='list') return transaction(()=>communications.campaignPage(tenantId,params),{readOnly:true});
+    return {items:communications.staff(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone || 'UTC'};
+  }
+  const campaignDetail=path.match(/^\/api\/admin\/discovery\/campaigns\/([1-9]\d{0,14})$/);
+  if (req.method==='GET' && campaignDetail) {
+    staffContext(req,tenantId,websiteRoles);
+    return transaction(()=>communications.campaignDetail(tenantId,Number(campaignDetail[1])),{readOnly:true});
+  }
+  if (route==='POST /api/admin/discovery/campaign-preview') {
+    staffContext(req,tenantId,websiteRoles);
+    const {spec}=await body(req);
+    return transaction(()=>{
+      staffContext(req,tenantId,websiteRoles);
+      return communications.preview(tenantId,spec);
+    },{readOnly:true});
+  }
   if (route==='POST /api/admin/discovery/programs' || route==='POST /api/admin/discovery/campaigns') {
     staffContext(req,tenantId,websiteRoles);
     const input=await body(req);
@@ -838,6 +855,11 @@ async function api(req, res, path, tenantId, requestId) {
   if (route==='GET /api/admin/discovery/report') {
     staffContext(req,tenantId,supportRoles);
     return transaction(()=>engagementReport(db,dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,Date.now()),params,fail),{readOnly:true});
+  }
+  if (route==='GET /api/discovery/inbox') {
+    if (!player) fail(401,'signin');
+    if (catalogueLocale && !['fr-CA','en-CA'].includes(catalogueLocale)) fail(400,'invalid');
+    return transaction(()=>communications.history(tenantId,player,params,catalogueLocale),{readOnly:true});
   }
   if (route==='GET /api/discovery/activity') {
     if(!player) fail(401,'signin');
@@ -867,7 +889,7 @@ async function api(req, res, path, tenantId, requestId) {
         item.previews=item.spec.pair.map(id=>db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenantId,id))
           .map(r=>r&&publishedCataloguePreview(tenantId,r.slug,locale)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
       }
-      return {...state,partner:Boolean(growth.owner(tenantId,player)),choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player,50,catalogueLocale)};
+      return {...state,partner:Boolean(growth.owner(tenantId,player)),choices:communications.choices(tenantId,player),...(params.get('view')==='summary'?{}:{messages:communications.inbox(tenantId,player,50,catalogueLocale)})};
     },{readOnly:true});
   }
   if (req.method==='POST' && /^\/api\/discovery\/[a-z]+$/.test(path)) {
@@ -2069,6 +2091,7 @@ const assets = {
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/growth-player.js':['growth-player.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
+  '/contact-views.js': ['contact-views.js','text/javascript'],
   '/discovery.js': ['discovery.js', 'text/javascript'],
   '/discovery-admin.js': ['discovery-admin.js', 'text/javascript'],
   '/account-break.js': ['account-break.js', 'text/javascript'],

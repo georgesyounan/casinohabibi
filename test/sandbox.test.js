@@ -2727,3 +2727,112 @@ test('player support pages keep older unread replies until that player opens the
   assert.equal((await checked(alice,'support/inbox')).unread,2);
   assert.equal((await checked(alice,'support/read',{ticketId:ids[1]})).unread,1);
 });
+const collectionMessage=(patch={})=>({topic:'collections',channel:'inbox',subjectEn:'Studio update',subjectFr:'Nouvelles du studio',
+  textEn:'Read our studio notes.',textFr:'Consultez nos nouvelles.',destination:'',localTime:'2025-01-15T12:00',quietStart:0,quietEnd:0,...patch});
+
+test('a campaign preview is read only and the scheduled audience rechecks consent, pauses and language',async t=>{
+  const {base,database}=await startSandbox(t);
+  const staff=client(base),players=Array.from({length:5},()=>client(base)),guest=client(base);
+  const operator=await checked(staff,'admin/login',staffCredentials);
+  for(const [i,p] of players.entries()){
+    await growthAccount(p,'audience-'+i,{locale:i===4?'en-CA':'fr-CA'});
+    await checked(p,'discovery/preferences',{topic:'collections',channel:'inbox',granted:true});
+  }
+  await checked(players[1],'safety/pause',{});
+  const spec=collectionMessage({audienceLocale:'fr-CA'});
+  const preview='admin/discovery/campaign-preview',campaigns='admin/discovery/campaigns';
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const before=()=>['contact_deliveries','contact_campaigns','staff_events'].map(table=>db.prepare('SELECT count(*) AS n FROM '+table).get().n);
+  const initial=before();
+  const estimate=await checked(staff,preview,{spec});
+  assert.deepEqual(estimate.counts,{selected:4,eligible:3,deferred:0,blocked:1});
+  assert.deepEqual(estimate.reasons,{accountBreak:1});
+  assert.deepEqual(before(),initial);
+  assert.equal((await checked(staff,preview,{spec:{...spec,audienceLocale:'all'}})).counts.selected,5);
+  assert.equal((await staff(preview,{spec:{...spec,audienceLocale:'es'}})).status,400);
+  const zone=estimate.zone;
+  const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',hourCycle:'h23'}).format(Date.now()));
+  const overnight=await checked(staff,preview,{spec:{...spec,quietStart:hour,quietEnd:(hour+2)%24}});
+  assert.deepEqual(overnight.counts,{selected:4,eligible:0,deferred:3,blocked:1});
+  assert.equal(overnight.reasons.quietHours,3);
+  assert.equal((await guest(preview,{spec})).status,401);
+  const creds={email:'preview-staff@example.test',password:'preview-operator-password'};
+  await checked(staff,'admin/staff',{...creds,role:'operator_support'});
+  const supporter=client(base);await checked(supporter,'admin/login',creds);
+  assert.equal((await supporter(preview,{spec})).status,403);
+  const result=await checked(staff,campaigns,{action:'save',version:0,spec});
+  await checked(staff,campaigns,{action:'schedule',version:1,id:result.id});
+  await checked(players[2],'account/preferences',{locale:'en-CA'});
+  await checked(players[3],'discovery/preferences',{topic:'collections',channel:'inbox',granted:false});
+  await checked(staff,'admin/discovery/dispatch',{});
+  await checked(staff,'admin/discovery/dispatch',{});
+  const detail=()=>checked(staff,campaigns+'/'+result.id);
+  const actual=await detail();
+  assert.equal(actual.total,4);assert.equal(actual.read,0);
+  assert.deepEqual(actual.outcomes.map(r=>[r.state,r.reason,r.count]),[
+    ['delivered','',1],['suppressed','accountBreak',1],['suppressed','audienceChanged',1],['suppressed','optedOut',1]]);
+  assert.ok(!JSON.stringify(actual).includes('@example.test'));
+  const delivered=await checked(players[0],'discovery/inbox');
+  assert.equal(delivered.unread,1);
+  assert.equal((await players[4]('discovery/read',{id:delivered.items[0].id})).status,404);
+  await checked(players[0],'discovery/read',{id:delivered.items[0].id});
+  await checked(players[0],'discovery/read',{id:delivered.items[0].id});
+  assert.equal((await detail()).read,1);
+  const old=JSON.stringify(collectionMessage({subjectFr:'Édition du théâtre'}));
+  const seed=db.prepare("INSERT INTO contact_campaigns(tenant,version,status,spec,created_at) VALUES('sandbox',1,'draft',?,1)");
+  for(let i=0;i<10;i++)seed.run(old);
+  const page=await checked(staff,campaigns+'?view=list&q=theatre&status=draft&page=2');
+  assert.equal(page.total,10);assert.equal(page.items.length,2);assert.equal(page.pages,2);
+  assert.equal((await checked(staff,campaigns+'?view=list&q=campaign-'+result.id)).items[0].id,result.id);
+  db.prepare("INSERT INTO tenants VALUES('campaign-test','campaign-test','Private test','active',1)").run();
+  db.prepare("UPDATE tenant_domains SET tenant_id='campaign-test' WHERE host='localhost'").run();
+  db.prepare("INSERT INTO tenant_staff_memberships(tenant_id,staff_id,role,status,created_at) VALUES('campaign-test',?,'operator_admin','active',1)").run(operator.id);
+  const second=client(base);await checked(second,'admin/login',staffCredentials,'localhost');
+  assert.equal((await checked(second,campaigns+'?view=list',undefined,'localhost')).total,0);
+  assert.equal((await second(campaigns+'/'+result.id,undefined,'localhost')).status,404);
+  assert.equal((await checked(second,preview,{spec},'localhost')).counts.selected,0);
+});
+
+test('the player inbox finds older bilingual messages and original reward receipts in its own paged history',async t=>{
+  const {base,database}=await startSandbox(t),alice=client(base),bob=client(base),staff=client(base);
+  await checked(staff,'admin/login',staffCredentials);
+  const player=await growthAccount(alice,'inbox-a');
+  await growthAccount(bob,'inbox-b');
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const created=Date.now()-86400000;
+  const campaign=db.prepare("INSERT INTO contact_campaigns(tenant,version,status,spec,created_at) VALUES('sandbox',2,'scheduled',?,?)");
+  const delivery=db.prepare('INSERT INTO contact_deliveries(campaign,player,state,next_at,updated_at,read_at) VALUES(?,?,?,?,?,?)');
+  let oldest;
+  for(let i=0;i<62;i++){
+    const spec=collectionMessage({subjectFr:i===0?'Édition mémoire':'Émission '+i,channel:i===61?'email':'inbox'});
+    const c=campaign.run(JSON.stringify(spec),created+i).lastInsertRowid;
+    const d=delivery.run(c,player,i===60?'suppressed':'delivered',created+i,created+i,i<2?null:created+i);
+    if(!i) oldest=Number(d.lastInsertRowid);
+  }
+  const grantSpec={template:'offer',slot:'badge',color:'gold',titleEn:'Old quest',titleFr:'Ancienne quête',itemEn:'Original badge',itemFr:'Écusson original'};
+  const prog=db.prepare("INSERT INTO discovery_programs(tenant_id,version,draft,live) VALUES('sandbox',1,?,1)").run(JSON.stringify(grantSpec)).lastInsertRowid;
+  db.prepare('INSERT INTO discovery_versions VALUES(?,?,?,?)').run(prog,1,JSON.stringify(grantSpec),created);
+  const grant=db.prepare('INSERT INTO cosmetic_grants(program,version,player,granted_at) VALUES(?,1,?,?)').run(prog,player,created).lastInsertRowid;
+  const claim=Number(db.prepare('INSERT INTO cosmetic_claims(grant_id,claimed_at) VALUES(?,?)').run(grant,created).lastInsertRowid);
+  const inbox='discovery/inbox';
+  assert.equal((await checked(alice,'discovery')).messages.length,50);
+  assert.ok(!('messages' in await checked(alice,'discovery?view=summary')));
+  let first=await checked(alice,inbox);
+  assert.equal(first.total,61);assert.equal(first.unread,2);assert.equal(first.items.length,6);
+  const gathered=new Set();for(let n=1;n<=first.pages;n++){
+    const page=await checked(alice,inbox+'?page='+n);
+    for(const row of page.items){assert.ok(!gathered.has(row.reference));gathered.add(row.reference);}
+  }
+  assert.equal(gathered.size,61);
+  for(const [term,ref] of [['edition memoire','message-'+oldest],['ecusson','claim-'+claim],['claim-'+claim,'claim-'+claim]]){
+    const found=await checked(alice,inbox+'?'+new URLSearchParams({q:term,page:'99'}));
+    assert.equal(found.page,1);assert.deepEqual(found.items.map(r=>r.reference),[ref]);
+  }
+  assert.equal((await checked(alice,inbox+'?filter=receipts')).items[0].itemFr,'Écusson original');
+  assert.equal((await checked(alice,inbox+'?filter=messages')).total,60);
+  assert.equal((await checked(alice,inbox+'?filter=unread')).total,2);
+  assert.equal((await checked(bob,inbox)).total,0);
+  assert.equal((await alice(inbox+'?filter=broken')).status,400);
+  await checked(alice,'discovery/read',{id:oldest});
+  first=await checked(alice,inbox+'?filter=unread');assert.equal(first.unread,1);assert.equal(first.total,1);
+});
