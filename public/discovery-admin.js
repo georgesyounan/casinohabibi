@@ -1,7 +1,7 @@
 import { uiKit } from './discovery.js';
 const templates=['offer','Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09'];
 const toLocal=t=>{if(!t)return '';const d=new Date(t);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
-export function createDiscoveryAdmin({api,t,french,publish,openPlayer}) {
+export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHref}) {
   const {l,el,button,field,pages,date,local}=uiKit(french);
   let generation=0;
   async function load(kind){
@@ -148,7 +148,16 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer}) {
           for(const [k,v] of Object.entries(r.totals))nav.append(button(metricNames[k]+' · '+v,()=>{metric=k;void show();},metric!==k));
           area.append(nav,el('small',r.period.from+' — '+r.period.to+' · '+r.period.zone));
           area.append(el('p',l('Currently open cases','Demandes ouvertes actuellement')+' · '+r.currentOpen));
-          for(const row of r.list){const n=el('article','','discovery-line');n.append(button(row.reference,()=>openPlayer('player-'+row.playerId),true),el('small',date(row.at)));area.append(n);}
+          for (const row of r.list) {
+            const n=el('article','','discovery-line');
+            if (metric==='cases') {
+              const link=el('a','case-'+row.id);
+              link.href=supportHref('case',row.id);
+              n.append(link);
+              if (row.reference && row.reference!=='case-'+row.id) n.append(el('span',row.reference));
+            } else n.append(button(row.reference,()=>openPlayer('player-'+row.playerId),true));
+            n.append(el('small',date(row.at)));area.append(n);
+          }
           if(!r.list.length)area.append(el('p',l('No records in this period.','Aucun dossier pour cette période.')));
           if(r.next)area.append(button(l('Next','Suivant'),()=>show(r.next),true));
           if(before)area.append(button(l('First page','Première page'),()=>show(),true));

@@ -2644,3 +2644,86 @@ test('a scoped title report reconciles with round receipts, the player history, 
   assert.ok(exported.activity.some(e=>e.id===oldRound.id && e.outcome===oldRound.outcome));
   assert.equal(exported.supportRequests.find(e=>e.id===sent.id).reference,ref);
 });
+test('support searches every request, linked reference and private note before paginating',async t=>{
+  const {base,database}=await startSandbox(t);
+  const staff=client(base), other=client(base), alice=client(base), guest=client(base);
+  const admin=await checked(staff,'admin/login',staffCredentials);
+  const id=await growthAccount(alice,'queue-fixture');
+  const round=await checked(alice,'play',{game:'gold',wager:100,requestId:randomUUID()});
+  const ref='round-'+round.history[0].id;
+  const target=await checked(alice,'support',{category:'game',message:'Please review the demo round.',reference:ref});
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const seed=db.prepare(`INSERT INTO support_tickets(tenant_id,player_id,category,message,status,priority,created_at,updated_at)
+    VALUES('sandbox',?,'other','General inquiry','open','normal',?,?)`);
+  for(let i=0;i<215;i++) seed.run(id,Date.now()+i,Date.now()+i);
+  db.prepare("UPDATE support_tickets SET priority='urgent',assigned_to=? WHERE id=?").run(admin.id,target.id);
+  db.prepare(`INSERT INTO support_ticket_notes(tenant_id,ticket_id,staff_id,note,created_at)
+    VALUES('sandbox',?,?,'Précision réservée au personnel',?)`).run(target.id,admin.id,Date.now());
+  const path='admin/support/queue';
+  const first=await checked(staff,path);
+  assert.equal(first.total,216);assert.equal(first.pages,22);assert.equal(first.tickets.length,10);
+  assert.equal(first.tickets[0].id,target.id);
+  for(const q of [ref,'#'+target.id,'case-'+target.id,'precision reservee']) {
+    const only=await checked(staff,path+'?'+new URLSearchParams({q,priority:'urgent',topic:'game',assignee:'mine'}));
+    assert.equal(only.total,1);assert.equal(only.tickets[0].reference,ref);
+    assert.ok(!('notes' in only.tickets[0]) && !('messages' in only.tickets[0]));
+  }
+  assert.equal((await checked(staff,path+'?q=player-'+id)).total,216);
+  const second=await checked(staff,path+'?page=2');
+  assert.ok(second.tickets.every(x=>!first.tickets.some(y=>x.id===y.id)));
+  assert.equal((await checked(staff,path+'?page=99')).tickets.length,6);
+  assert.equal((await checked(staff,path+'?q='+ref+'&type=complaints')).total,0);
+  assert.equal((await checked(staff,path+'?assignee=unassigned')).total,215);
+  assert.equal((await staff(path+'?page=0')).status,400);
+  const detail='admin/support/case/'+target.id;
+  assert.match((await checked(staff,detail)).notes[0].note,/Précision/);
+  const profile=await checked(staff,'admin/players/'+id);
+  assert.equal(profile.supportCases.total,216);assert.equal(profile.supportCases.tickets.length,3);
+  assert.equal((await guest(detail)).status,401);assert.equal((await alice(path)).status,401);
+  const credentials={email:'queue-content@example.test',password:'test-editor-password'};
+  await checked(staff,'admin/staff',{...credentials,role:'operator_content'});
+  await checked(other,'admin/login',credentials);
+  assert.equal((await other(detail)).status,403);assert.equal((await other(path)).status,403);
+  db.prepare("INSERT INTO tenants VALUES('second','second','Second','active',1)").run();
+  db.prepare("UPDATE tenant_domains SET tenant_id='second' WHERE host='localhost'").run();
+  db.prepare("INSERT INTO tenant_staff_memberships(tenant_id,staff_id,role,status,created_at) VALUES('second',?,'operator_admin','active',1)").run(admin.id);
+  const secondBrand=client(base);
+  await checked(secondBrand,'admin/login',staffCredentials,'localhost');
+  assert.equal((await checked(secondBrand,path,undefined,'localhost')).total,0);
+  assert.equal((await secondBrand(detail,undefined,'localhost')).status,404);
+});
+
+test('player support pages keep older unread replies until that player opens the exact conversation',async t=>{
+  const {base,database}=await startSandbox(t);
+  const staff=client(base), alice=client(base), bob=client(base);
+  const admin=await checked(staff,'admin/login',staffCredentials);
+  const id=await growthAccount(alice,'case-owner');
+  await growthAccount(bob,'case-neighbour');
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const add=db.prepare(`INSERT INTO support_tickets(tenant_id,player_id,category,message,status,priority,created_at,updated_at)
+    VALUES('sandbox',?,'account','Original player question','answered','normal',?,?)`);
+  const reply=db.prepare(`INSERT INTO support_ticket_messages(tenant_id,ticket_id,author_type,staff_id,message,created_at)
+    VALUES('sandbox',?,'staff',?,'Public response',?)`);
+  const ids=[];
+  for(let i=0;i<64;i++){
+    const at=Date.now()-10000+i, ticket=Number(add.run(id,at,at).lastInsertRowid);
+    ids.push(ticket);if(i<2) reply.run(ticket,admin.id,at+1);
+  }
+  db.prepare(`INSERT INTO support_ticket_notes(tenant_id,ticket_id,staff_id,note,created_at)
+    VALUES('sandbox',?,?,'Confidential handoff',?)`).run(ids[0],admin.id,Date.now());
+  const inbox=await checked(alice,'support/inbox?page=11');
+  assert.equal(inbox.total,64);assert.equal(inbox.tickets.length,4);assert.equal(inbox.unread,2);
+  assert.ok(inbox.tickets.find(row=>row.id===ids[0]).unread);
+  assert.equal((await checked(alice,'account')).supportReplies,2);
+  assert.equal((await bob('support/read',{ticketId:ids[0]})).status,404);
+  assert.equal((await checked(bob,'support/inbox')).total,0);
+  const opened=await checked(alice,'support/read',{ticketId:ids[0]});
+  assert.equal(opened.unread,1);assert.equal(opened.ticket.messages[0].message,'Public response');
+  assert.ok(!JSON.stringify(opened).includes('Confidential') && !JSON.stringify(opened).includes(staffCredentials.email));
+  assert.equal((await checked(alice,'support/read',{ticketId:ids[0]})).unread,1);
+  assert.equal((await checked(alice,'account')).supportReplies,1);
+  const detail=await checked(staff,'admin/support/case/'+ids[0]);
+  await checked(staff,'admin/support/reply',{ticketId:ids[0],expectedUpdatedAt:detail.updatedAt,status:'answered',priority:'normal',reply:'A second public reply.'});
+  assert.equal((await checked(alice,'support/inbox')).unread,2);
+  assert.equal((await checked(alice,'support/read',{ticketId:ids[1]})).unread,1);
+});

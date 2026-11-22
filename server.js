@@ -15,6 +15,7 @@ import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createDiscoveryNavigation } from './lib/discovery-navigation.js';
 import { collectionKey } from './public/catalog.js';
+import { createSupportCases } from './lib/support-cases.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
@@ -294,6 +295,7 @@ const publicationFollowup = createPublicationFollowup(db, { transaction, fail })
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
+const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
 transaction(()=>{for(const {id} of db.prepare('SELECT id FROM tenants').all()) rewards.seed(id);});
 const communications = createCommunications(db,{fail,transaction,accountBreaks,audit:staffAudit.record,mailEnabled,
   zoneFor: tenant=>publishedTenantConfig(tenant).config.reportingTimeZone || 'UTC', validDestination:campaignPath,
@@ -695,7 +697,7 @@ function account(id, tenantId) {
   const profile = db.prepare('SELECT display_name AS displayName, preferred_locale AS preferredLocale FROM player_profiles WHERE player_id = ? AND tenant_id = ?').get(id, tenantId);
   const safety = db.prepare('SELECT pause_until, excluded_at, daily_limit_cents, cooling_off_until, session_reminder_minutes FROM player_safety WHERE player = ?').get(id) || {};
   const marketingConsent = db.prepare("SELECT granted FROM player_consent_events WHERE player_id = ? AND tenant_id = ? AND consent_type = 'marketing_email' ORDER BY id DESC LIMIT 1").get(id, tenantId);
-  const supportReplies = db.prepare("SELECT count(*) AS count FROM support_tickets t WHERE t.player_id = ? AND t.tenant_id = ? AND coalesce((SELECT max(m.created_at) FROM support_ticket_messages m WHERE m.tenant_id = t.tenant_id AND m.ticket_id = t.id AND m.author_type = 'staff'), 0) > coalesce(t.player_seen_at, 0) AND t.id IN (SELECT id FROM support_tickets WHERE player_id = ? AND tenant_id = ? ORDER BY updated_at DESC, id DESC LIMIT 50)").get(id, tenantId, id, tenantId).count;
+  const supportReplies = supportCases.unreadCount(tenantId,id);
   const historyRows = db.prepare('SELECT id, game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id DESC LIMIT 21').all(id, tenantId);
   const favorites = accountFavorites(id, tenantId);
   const hasMoreHistory = historyRows.length > 20;
@@ -993,7 +995,7 @@ async function api(req, res, path, tenantId, requestId) {
         if (!Number.isSafeInteger(value) || value < 1) fail(400, 'invalid');
         return value;
       };
-      return { ...playerAccess.detail(tenantId, id), rounds: playerAccess.rounds(tenantId, id, cursor('round'), cursor('beforeRound')), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
+      return { ...playerAccess.detail(tenantId, id), supportCases: supportCases.profile(tenantId,id), rounds: playerAccess.rounds(tenantId, id, cursor('round'), cursor('beforeRound')), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
     }
     if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
     const input = await body(req);
@@ -1663,6 +1665,18 @@ async function api(req, res, path, tenantId, requestId) {
     });
     return account(player, tenantId);
   }
+  if (route === 'GET /api/support/inbox') {
+    if (!player) fail(401, 'signin');
+    return transaction(() => supportCases.inbox(tenantId,player,params), {readOnly:true});
+  }
+  if (route === 'POST /api/support/read') {
+    if (!player) fail(401, 'signin');
+    const input = await body(req);
+    return transaction(() => {
+      req.assertPlayerSession();
+      return supportCases.read(tenantId,player,input.ticketId);
+    });
+  }
   if (route === 'GET /api/support') {
     if (!player) fail(401, 'signin');
     const tickets = db.prepare('SELECT t.id,l.reference,t.category,t.is_complaint AS isComplaint,t.message,t.status,t.created_at AS createdAt,t.updated_at AS updatedAt FROM support_tickets t LEFT JOIN support_case_links l ON l.ticket=t.id WHERE t.player_id=? AND t.tenant_id=? ORDER BY updated_at DESC, id DESC LIMIT 50').all(player, tenantId);
@@ -1673,12 +1687,13 @@ async function api(req, res, path, tenantId, requestId) {
     if (!player) fail(401, 'signin');
     const { category, message, reference } = await body(req, 8192);
     if (!['account', 'game', 'responsible_play', 'other', 'complaint'].includes(category) || typeof message !== 'string' || message.trim().length < 10 || message.trim().length > 3000) fail(400, 'invalid');
-    const recent = db.prepare("SELECT count(*) AS count FROM support_tickets WHERE player_id = ? AND tenant_id = ? AND created_at > ?").get(player, tenantId, Date.now() - 60 * 60 * 1000).count;
-    if (recent >= 5) fail(429, 'supportRateLimited');
-    const now = Date.now();
     const isComplaint = category === 'complaint';
     const storedCategory = isComplaint ? 'other' : category;
     const ticketId = transaction(() => {
+      req.assertPlayerSession();
+      const recent = db.prepare("SELECT count(*) AS count FROM support_tickets WHERE player_id = ? AND tenant_id = ? AND created_at > ?").get(player, tenantId, Date.now() - 60 * 60 * 1000).count;
+      if (recent >= 5) fail(429, 'supportRateLimited');
+      const now = Date.now();
       const result = db.prepare("INSERT INTO support_tickets(tenant_id, player_id, category, is_complaint, message, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)").run(tenantId, player, storedCategory, Number(isComplaint), message.trim(), now, now);
       const id = Number(result.lastInsertRowid);
       if(typeof reference==='string'&&reference.startsWith('list-')){
@@ -1694,16 +1709,28 @@ async function api(req, res, path, tenantId, requestId) {
     if (!player) fail(401, 'signin');
     const { ticketId, message } = await body(req, 8192);
     if (!Number.isSafeInteger(ticketId) || ticketId < 1 || typeof message !== 'string' || message.trim().length < 1 || message.trim().length > 3000) fail(400, 'invalid');
-    const ticket = db.prepare('SELECT id, updated_at AS updatedAt FROM support_tickets WHERE id = ? AND player_id = ? AND tenant_id = ?').get(ticketId, player, tenantId);
-    if (!ticket) fail(404, 'invalid');
-    const recent = db.prepare("SELECT count(*) AS count FROM support_ticket_messages WHERE player_id = ? AND tenant_id = ? AND author_type = 'player' AND created_at > ?").get(player, tenantId, Date.now() - 60 * 60 * 1000).count;
-    if (recent >= 20) fail(429, 'supportRateLimited');
-    const now = Math.max(Date.now(), ticket.updatedAt + 1);
-    transaction(() => {
+    return transaction(() => {
+      req.assertPlayerSession();
+      const ticket = db.prepare('SELECT id, updated_at AS updatedAt FROM support_tickets WHERE id = ? AND player_id = ? AND tenant_id = ?').get(ticketId, player, tenantId);
+      if (!ticket) fail(404, 'invalid');
+      const recent = db.prepare("SELECT count(*) AS count FROM support_ticket_messages WHERE player_id = ? AND tenant_id = ? AND author_type = 'player' AND created_at > ?").get(player, tenantId, Date.now() - 60 * 60 * 1000).count;
+      if (recent >= 20) fail(429, 'supportRateLimited');
+      const now = Math.max(Date.now(), ticket.updatedAt + 1);
       db.prepare("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, player_id, message, created_at) VALUES (?, ?, 'player', ?, ?, ?)").run(tenantId, ticketId, player, message.trim(), now);
       db.prepare("UPDATE support_tickets SET status = 'open', updated_at = ?, player_seen_at = ? WHERE id = ? AND player_id = ? AND tenant_id = ?").run(now, now, ticketId, player, tenantId);
+      return { id: ticketId, status: 'open', createdAt: now };
     });
-    return { id: ticketId, status: 'open', createdAt: now };
+  }
+  if (route === 'GET /api/admin/support/queue') {
+    const staff=staffContext(req,tenantId,supportRoles);
+    return transaction(()=>supportCases.queue(tenantId,staff.id,params),{readOnly:true});
+  }
+  const caseRoute = path.match(/^\/api\/admin\/support\/case\/([1-9]\d{0,15})$/);
+  if (req.method==='GET' && caseRoute) {
+    staffContext(req,tenantId,supportRoles);
+    const id=Number(caseRoute[1]);
+    if (!Number.isSafeInteger(id)) fail(400,'invalid');
+    return transaction(()=>supportCases.staffCase(tenantId,id),{readOnly:true});
   }
   if (route === 'GET /api/admin/support') {
     staffContext(req, tenantId, supportRoles);
@@ -1714,27 +1741,13 @@ async function api(req, res, path, tenantId, requestId) {
     const total = db.prepare('SELECT count(*) AS count FROM support_tickets WHERE tenant_id = ?').get(tenantId).count;
     const counts = { open: 0, answered: 0, closed: 0 };
     for (const row of db.prepare('SELECT status, count(*) AS count FROM support_tickets WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = row.count;
-    const ticketQuery = 'SELECT t.id,(SELECT reference FROM support_case_links WHERE ticket=t.id) AS reference, t.player_id AS playerId, p.email, profile.display_name AS displayName, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt, safety.excluded_at AS playerExcludedAt, safety.cooling_off_until AS playerCoolingOffUntil, safety.pause_until AS playerPauseUntil FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to LEFT JOIN player_safety safety ON safety.player = p.id AND t.category = \'responsible_play\' AND t.is_complaint = 0 WHERE t.tenant_id = ?';
+    const ticketQuery = supportCases.detailQuery;
     const pageRows = cursorUpdatedAt === null
       ? db.prepare(`${ticketQuery} ORDER BY t.updated_at DESC, t.id DESC LIMIT 201`).all(tenantId)
       : db.prepare(`${ticketQuery} AND (t.updated_at < ? OR (t.updated_at = ? AND t.id < ?)) ORDER BY t.updated_at DESC, t.id DESC LIMIT 201`).all(tenantId, Number(cursorUpdatedAt), Number(cursorUpdatedAt), Number(cursorId));
     const hasMore = pageRows.length > 200;
     const tickets = pageRows.slice(0, 200);
-    const ticketIds = tickets.map((ticket) => ticket.id);
-    const ticketPlaceholders = ticketIds.map(() => '?').join(',');
-    const notes = ticketIds.length ? db.prepare(`SELECT n.ticket_id AS ticketId, n.note, s.email AS author, n.created_at AS createdAt FROM support_ticket_notes n JOIN staff_accounts s ON s.id = n.staff_id WHERE n.tenant_id = ? AND n.ticket_id IN (${ticketPlaceholders}) ORDER BY n.id`).all(tenantId, ...ticketIds) : [];
-    const notesByTicket = new Map();
-    for (const note of notes) {
-      if (!notesByTicket.has(note.ticketId)) notesByTicket.set(note.ticketId, []);
-      notesByTicket.get(note.ticketId).push(note);
-    }
-    const now = Date.now();
-    const items = attachSupportMessages(tickets.map((ticket) => ({
-      ...ticket, notes: notesByTicket.get(ticket.id) || [],
-      ...(ticket.category === 'responsible_play' && !ticket.isComplaint && {
-        accountBreak: ticket.playerPauseUntil > now || ticket.playerCoolingOffUntil > now ? accountBreaks.at(tenantId, ticket.playerId, now) : null
-      })
-    })), tenantId, true);
+    const items = supportCases.conversations(tenantId,tickets);
     const lastTicket = tickets.at(-1);
     return { tickets: items, total, counts, nextCursor: hasMore ? { updatedAt: lastTicket.updatedAt, id: lastTicket.id } : null };
   }
@@ -2046,6 +2059,7 @@ const assets = {
   '/admin': ['index.html', 'text/html'],
   '/style.css': ['style.css', 'text/css'],
   '/admin.css': ['admin.css', 'text/css'],
+  '/support-queue.js': ['support-queue.js', 'text/javascript'],
   '/app.js': ['app.js', 'text/javascript'],
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],

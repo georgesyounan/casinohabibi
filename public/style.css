@@ -354,3 +354,12 @@ dialog::backdrop{background:#090e0bd9}
 .round-support-link{background:transparent;border:0;color:var(--green);padding:.3rem .2rem;text-decoration:underline;text-underline-offset:.16em}
 .overview-title-search{display:block;max-width:25rem;margin-block:.75rem}
 .overview-title-search input{display:block;width:100%}
+
+.support-filters{margin:.7rem 0}
+.support-filters>summary{cursor:pointer;font-weight:600}
+.support-filters[open]>.support-controls{margin-top:.7rem}
+.case-pager{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-block:.8rem}
+.case-pager[hidden]{display:none}
+.support-ticket-summary,.support-ticket-body,.support-ticket-body p,.case-inbox-row{min-width:0;overflow-wrap:anywhere}
+.case-inbox-row{display:grid;gap:.2rem;width:100%;text-align:start}
+#player-case-list a,#player-case-all,.discovery-line>a{text-decoration:underline;text-underline-offset:.15em}
