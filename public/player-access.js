@@ -1,7 +1,11 @@
 import { showBreakPeriod } from './account-break.js';
 
 export const playerAccessCopy = {
-  playerSearchLabel: ['Email, player ID, save, activity or claim reference', 'Courriel, numéro de joueur, référence de favori, d’activité ou de réclamation'],
+  playerSearchLabel: ['Email, player ID or reference', 'Courriel, numéro de joueur ou référence'],
+  playerRounds: ['Demo round history', 'Historique des parties de démo'],
+  playerNoRounds: ['No matching round.', 'Aucune partie correspondante.'],
+  playerRewardHistory: ['Quests and rewards', 'Quêtes et récompenses'],
+  roundSupport: ['Get help with this round', 'Aide sur cette partie'],
   playerFavoriteHistory: ['Favorite activity', 'Historique des favoris'],
   playerNoFavorites: ['No favorite activity yet.', 'Aucune activité de favoris.'],
   playerAddedFavorite: ['Added to favorites', 'Ajout aux favoris'],
@@ -39,7 +43,7 @@ export const playerAccessCopy = {
   recoveryDeliveryUnavailable: ['Email delivery is unavailable. Try again later.', 'L’envoi de courriels est indisponible. Réessayez plus tard.']
 };
 
-export function createPlayerAccessUi({ api, t, element, action, canManage, locale }) {
+export function createPlayerAccessUi({ api, t, element, action, canManage, locale, renderRound }) {
   const byId = (id) => document.getElementById(id);
   const form = byId('coming-soon-save-search');
   const record = byId('player-record');
@@ -52,6 +56,9 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
   let message = '';
   let searched = false;
   let activityQuery = '';
+  let roundPage = 0;
+  let roundCursors = [null];
+  let roundRequest = 0;
   let breakTimer;
   let breakRequest = 0;
 
@@ -112,6 +119,13 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-confirm-status').disabled = busy;
     byId('player-confirm-status').textContent = t(suspended ? 'playerConfirmRestore' : 'playerConfirmSuspend');
     byId('player-action-status').textContent = message ? t(message) : '';
+    const rounds = player.rounds;
+    byId('player-round-list').replaceChildren(...(rounds.entries.length
+      ? rounds.entries.map(entry => renderRound(entry)) : [element('li', t('playerNoRounds'))]));
+    byId('player-round-pages').hidden = !roundPage && !rounds.nextCursor;
+    byId('player-round-prev').disabled = !roundPage;
+    byId('player-round-next').disabled = !rounds.nextCursor;
+    byId('player-round-page').textContent = 'Page ' + (roundPage + 1);
     const { entries, nextCursor } = player.savedActivity;
     byId('player-favorite-events').replaceChildren(...(entries.length ? entries.map((event) => {
       const row = element('li');
@@ -137,20 +151,30 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     busy = false;
     statusForm.hidden = true;
     statusForm.reset();
+    ++roundRequest;
+    roundPage = 0;
+    roundCursors = [null];
+    byId('player-round-status').textContent = '';
+    byId('player-round-details').open = false;
+    byId('player-reward-details').open = false;
     byId('player-event-details').open = false;
     byId('player-activity-details').open = false;
   }
 
-  async function open(id) {
+  async function open(id, reference = '') {
     const current = ++generation;
     resetRecord();
+    const ref = /^(activity|round)-([1-9]\d*)$/i.exec(reference);
+    activityQuery = ref ? '?' + ref[1].toLowerCase() + '=' + ref[2] : '';
     render();
     try {
       const result = await api('admin/players/' + id + activityQuery, undefined, 'GET');
       if (current !== generation) return;
       player = result;
       breakTimer = setInterval(refreshBreak, 15_000);
-      byId('player-activity-details').open = Boolean(activityQuery);
+      byId('player-activity-details').open = activityQuery.startsWith('?activity=');
+      byId('player-round-details').open = activityQuery.startsWith('?round=');
+      byId('player-reward-details').open = /^claim-[1-9]\d*$/i.test(reference);
       render();
       byId('player-record-title').focus();
     } catch (error) {
@@ -184,6 +208,9 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
       try {
         const fresh = await api('admin/players/' + id + activityQuery, undefined, 'GET');
         if (current !== operation) return;
+        ++roundRequest;
+        roundPage = 0;
+        roundCursors = [null];
         player = fresh;
       } catch (error) {
         if (current !== operation) return;
@@ -204,8 +231,6 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     searched = false;
     render();
     const query = form.elements.query.value.trim();
-    const ref = /^activity-([1-9]\d*)$/i.exec(query);
-    activityQuery = ref ? '?activity=' + ref[1] : '';
     if (!query) return;
     byId('player-search-status').textContent = t('loading');
     try {
@@ -214,12 +239,35 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
       matches = rows;
       searched = true;
       render();
-      if (matches.length === 1) await open(matches[0].id);
+      if (matches.length === 1) await open(matches[0].id, query);
     } catch (error) {
       if (current === generation) byId('player-search-status').textContent = t(error.message);
     }
   });
   statusForm.addEventListener('submit', (event) => { event.preventDefault(); void change('access'); });
+  async function pageRounds(next) {
+    const target = player;
+    if (!target || next < 0 || (next > roundPage && !target.rounds.nextCursor)) return;
+    const request = ++roundRequest;
+    const cursor = next > roundPage ? target.rounds.nextCursor : roundCursors[next];
+    const query = cursor ? '?beforeRound=' + cursor : '';
+    for (const id of ['player-round-prev','player-round-next']) byId(id).disabled = true;
+    byId('player-round-status').textContent = t('loading');
+    try {
+      const response = await api('admin/players/' + target.id + query, undefined, 'GET');
+      if (request !== roundRequest || target !== player) return;
+      roundCursors = [...roundCursors.slice(0,next), cursor];
+      roundPage = next;
+      target.rounds = response.rounds;
+      byId('player-round-status').textContent = '';
+    } catch (error) {
+      if (request !== roundRequest || target !== player) return;
+      byId('player-round-status').textContent = t(error.message);
+    }
+    render();
+  }
+  byId('player-round-prev').addEventListener('click', () => void pageRounds(roundPage - 1));
+  byId('player-round-next').addEventListener('click', () => void pageRounds(roundPage + 1));
   byId('player-more-activity').addEventListener('click', async (event) => {
     const target = player;
     const cursor = target?.savedActivity.nextCursor;

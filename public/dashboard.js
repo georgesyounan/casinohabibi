@@ -1,7 +1,13 @@
+import { demoTitle } from './catalog.js';
+
 export const dashboardCopy = {
   reportBrand: ['Brand', 'Marque'], reportSource: ['Data', 'Données'], reportSite: ['Site activity', 'Activité du site'], reportTest: ['Test data', 'Données de test'],
   reportCustom: ['Custom dates', 'Dates au choix'], reportFrom: ['From', 'Du'], reportTo: ['Through', 'Au'], reportApply: ['Apply dates', 'Appliquer les dates'],
   reportApplyHint: ['Apply these dates to update the report.', 'Appliquez les dates pour actualiser le rapport.'],
+  reportRounds: ['Demo rounds', 'Parties de démonstration'],
+  reportRoundsHelp: ['Open a round reference to see the player’s receipt.', 'Ouvrez une référence de partie pour voir le reçu du joueur.'],
+  reportTitleSearch: ['Find a game or preview', 'Chercher un jeu ou une fiche'],
+  reportNoTitles: ['No title matches this search.', 'Aucun titre ne correspond à cette recherche.'],
   reportNoRounds: ['No demo rounds in this period.', 'Aucune partie de démo pendant cette période.'],
   reportSignups: ['Verified signups', 'Inscriptions vérifiées'], reportActive: ['Signed-in players', 'Joueurs connectés'],
   reportSaves: ['First saves', 'Premiers favoris'], reportPublished: ['Eligible previews now', 'Fiches visibles maintenant'],
@@ -19,7 +25,7 @@ export const dashboardCopy = {
   reportChanged: ['The report changed. Refresh to see the current records.', 'Le rapport a changé. Actualisez pour voir les dossiers actuels.']
 };
 
-const metricLabels = { signups: 'reportSignups', active: 'reportActive', saves: 'reportSaves', published: 'reportPublished' };
+const metricLabels = { rounds: 'reportRounds', signups: 'reportSignups', active: 'reportActive', saves: 'reportSaves', published: 'reportPublished' };
 
 export function createReportUi({ api, t, element, action, appPath, locale, role, refresh, datesChanged, openPlayer }) {
   const el = (id) => document.getElementById(id);
@@ -27,6 +33,7 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
   const from = el('report-from'), to = el('report-to'), detail = el('report-records'), heading = el('report-records-heading');
   const buttons = [...document.querySelectorAll('[data-report-metric]')];
   let current, lastBrand, brands = [], records, selected, cursorStack = [null], page = 0, serial = 0;
+  let roundSource, roundTrigger;
   const initial = new URLSearchParams(location.search);
   const initialDays = initial.get('reportDays');
   if (['7', '30', '90'].includes(initialDays)) period.value = initialDays;
@@ -48,7 +55,9 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
   }
   function close(focus = false) {
     serial++;
-    if (focus) buttons.find((b) => b.dataset.reportMetric === selected)?.focus();
+    if (focus) (selected === 'rounds' ? roundTrigger : buttons.find((b) => b.dataset.reportMetric === selected))?.focus();
+    roundTrigger?.setAttribute('aria-expanded', 'false');
+    roundSource = roundTrigger = null;
     selected = records = null; page = 0; cursorStack = [null];
     detail.hidden = true;
     el('report-record-list').replaceChildren();
@@ -63,7 +72,8 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
   }
   function renderRecords() {
     if (!selected) return;
-    heading.textContent = t(metricLabels[selected]);
+    const title = selected === 'rounds' && current.demoRoundsByTitle.find(row => row.source === roundSource);
+    heading.textContent = title ? t('reportRounds') + ' · ' + demoTitle(title.game, title.preview, locale()) : t(metricLabels[selected]);
     el('report-record-help').textContent = t(metricLabels[selected] + 'Help');
     if (!records) return;
     const fmt = new Intl.DateTimeFormat(locale(), { timeZone: current.reportingTimeZone, dateStyle: 'medium', timeStyle: 'short' });
@@ -81,11 +91,14 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
           edit.href = appPath('/admin?preview=' + row.slug + '#coming-soon-admin');
           li.append(' · ', edit);
         }
+      } else if (selected === 'rounds') {
+        const ref = 'round-' + row.id;
+        li.append(action(ref, () => openPlayer(ref), 'report-record-link'), element('small', row.email));
       } else {
         const reference = selected === 'saves' ? (row.activityId ? 'activity-' + row.activityId : 'save-' + row.id) : 'player-' + row.playerId;
         li.append(action(row.email, () => openPlayer(reference), 'report-record-link'));
       }
-      const ref = selected === 'published' ? row.slug + ' · ' + t('comingSoonRevision') + ' ' + row.revision :
+      const ref = selected === 'rounds' ? '' : selected === 'published' ? row.slug + ' · ' + t('comingSoonRevision') + ' ' + row.revision :
         selected === 'saves' ? 'save-' + row.id + ' · ' + row.slug : 'player-' + row.playerId;
       li.append(element('small', [ref, row.at && fmt.format(row.at)].filter(Boolean).join(' · ')));
       return li;
@@ -106,19 +119,25 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
     el('report-record-pages').hidden = true; el('report-record-status').textContent = t('loading');
     const query = new URLSearchParams({ metric, from: current.from, to: current.to, brand: current.brandId, scope: current.scope,
       asOf: current.generatedAt, stamp: current.catalogueStamp, zone: current.reportingTimeZone });
+    if (metric === 'rounds') query.set('source', roundSource);
     if (nextPage) query.set('before', cursorStack[nextPage]);
     try {
       const result = await api('admin/overview/records?' + query, undefined, 'GET');
       if (id !== serial) return;
-      if (current.totals[metric] !== result.total) throw new Error('reportChanged');
+      const count = metric === 'rounds' ? current.demoRoundsByTitle.find(row => row.source === roundSource)?.rounds : current.totals[metric];
+      if (count !== result.total) throw new Error('reportChanged');
       records = result; cursorStack = cursorStack.slice(0, nextPage + 1);
       if (result.nextCursor) cursorStack.push(result.nextCursor);
       renderRecords();
     } catch (error) {
       if (id !== serial) return;
       if (retry && error.message === 'reportChanged') {
+        const source = roundSource;
         await refresh();
-        if (current && !selected) await loadRecords(metric, 0, false);
+        if (current && !selected && (metric !== 'rounds' || current.demoRoundsByTitle.some(row => row.source === source))) {
+          roundSource = source;
+          await loadRecords(metric, 0, false);
+        }
       } else el('report-record-status').textContent = t(error.message);
     }
   }
@@ -149,7 +168,7 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
     }
     renderRecords();
   }
-  for (const button of buttons) button.addEventListener('click', () => { void loadRecords(button.dataset.reportMetric); });
+  for (const button of buttons) button.addEventListener('click', () => { close(); void loadRecords(button.dataset.reportMetric); });
   el('report-close').addEventListener('click', () => close(true));
   el('report-prev').addEventListener('click', () => { if (page) void loadRecords(selected, page - 1); });
   el('report-next').addEventListener('click', () => { if (records?.nextCursor) void loadRecords(selected, page + 1); });
@@ -172,5 +191,12 @@ export function createReportUi({ api, t, element, action, appPath, locale, role,
     if (preferredScope) url.searchParams.set('reportScope', preferredScope);
     url.hash = 'overview'; location.assign(url.href);
   });
-  return { render, loading, params };
+  return { render, loading, params, openRounds(source, trigger) {
+    close();
+    roundSource = source;
+    roundTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    void loadRecords('rounds');
+    heading.focus();
+  } };
 }

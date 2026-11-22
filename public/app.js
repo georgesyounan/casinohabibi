@@ -1,4 +1,4 @@
-import { catalogueCategories, games, roundPreview, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
+import { catalogueCategories, games, roundPreview, demoTitle, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
@@ -126,7 +126,7 @@ const copy = {
   refreshOverview: ['Refresh overview', 'Actualiser l’aperçu'], overviewExport: ['Export CSV', 'Exporter le CSV'], overviewExportReady: ['Report CSV downloaded.', 'Le rapport CSV a été téléchargé.'],
   overviewPeriodLabel: ['Activity period', 'Période d’activité'], overviewPeriod7: ['Last 7 days', '7 derniers jours'], overviewPeriod30: ['Last 30 days', '30 derniers jours'], overviewPeriod90: ['Last 90 days', '90 derniers jours'],
   overviewActivityChart: ['Demo rounds by day', 'Parties de démo par jour'], overviewActivityHelp: ['Bar heights show daily demo rounds for the selected period.', 'La hauteur des barres représente les parties de démo quotidiennes pour la période choisie.'], overviewActivityDetails: ['View daily values', 'Voir les valeurs quotidiennes'], overviewActivitySummary: ['{total} demo rounds across {days} days. Busiest day: {date} ({rounds} rounds).', '{total} parties de démo sur {days} jours. Journée la plus active : {date} ({rounds} parties).'], overviewActivityDay: ['{date}: {rounds} demo rounds', '{date} : {rounds} parties de démo'],
-  overviewGameBreakdown: ['Built-in demo game activity', 'Activité des jeux de démo intégrés'], overviewGameName: ['Game', 'Jeu'], overviewGameRounds: ['Rounds', 'Parties'], overviewGameShare: ['Round share', 'Part des parties'], overviewGameActivePlayers: ['Active players', 'Joueurs actifs'], overviewGameWagered: ['Simulated wagers (CAD; no cash value)', 'Mises fictives (CAD; aucune valeur monétaire)'],
+  overviewGameBreakdown: ['Activity by demo title', 'Activité par titre de démo'], overviewGameName: ['Game', 'Jeu'], overviewGameRounds: ['Rounds', 'Parties'], overviewGameShare: ['Round share', 'Part des parties'], overviewGameActivePlayers: ['Active players', 'Joueurs actifs'], overviewGameWagered: ['Simulated wagers (CAD; no cash value)', 'Mises fictives (CAD; aucune valeur monétaire)'],
   overviewPlayers: ['Player accounts', 'Comptes joueurs'], overviewVerified: ['Email verified', 'Courriel confirmé'],
   overviewRounds: ['Demo rounds · {days} days', 'Parties fictives · {days} jours'], overviewActivePlayers: ['Players active in demo · {days} days', 'Joueurs ayant joué à la démo · {days} jours'], overviewWagered: ['Simulated wagers · {days} days', 'Mises fictives · {days} jours'],
   overviewTickets: ['Open support tickets', 'Demandes de soutien ouvertes'], overviewCatalog: ['Enabled catalog listings', 'Fiches actives du catalogue'],
@@ -413,10 +413,7 @@ function clearDemoSelection() {
   clearPendingDemo();
 }
 function roundTitle(entry) {
-  const source = roundPreview(entry.outcome);
-  if (source) return language ? source.titleFr : source.titleEn;
-  const game = games.find(game => game.id === entry.game);
-  return game ? gameName(game) : entry.game;
+  return demoTitle(entry.game, roundPreview(entry.outcome), language ? 'fr-CA' : 'en-CA');
 }
 let tenantCopy = { headline: copy.headline, intro: copy.intro, announcement: ['', ''] };
 let tenantFaqItems = [];
@@ -798,7 +795,7 @@ function supportThreadEntries(ticket) {
   return [{ authorType: 'player', message: ticket.message, createdAt: ticket.createdAt }, ...entries];
 }
 
-function historyEntryElement(entry) {
+function historyEntryElement(entry, showSupport = true) {
   if (!entry.game) {
     const reset = demoBalanceResetDetails(entry.outcome);
     if (reset) {
@@ -811,7 +808,16 @@ function historyEntryElement(entry) {
   const change = `${entry.amount > 0 ? '+' : ''}${money(entry.amount)}`;
   const summary = describeOutcome(entry.game, entry.outcome);
   const outcome = summary ? ` · ${t('roundResult')}: ${summary}` : '';
-  return element('li', `${roundTitle(entry)}${date} · ${t('wager')}: ${money(entry.wager)} · ${t('balanceChange')}: ${change}${outcome}`);
+  const row = element('li');
+  const ref = 'round-' + entry.id;
+  row.append(element('strong', roundTitle(entry)), element('span', date + ' · ' + t('wager') + ' ' + money(entry.wager) +
+    ' · ' + t('balanceChange') + ' ' + change + outcome), element('small', ref, 'round-reference'));
+  if (showSupport) {
+    const help = action(t('roundSupport'), () => openSupportCenter(ref), 'round-support-link');
+    help.setAttribute('aria-label', t('roundSupport') + ' · ' + ref);
+    row.append(help);
+  }
+  return row;
 }
 
 function csvCell(value) {
@@ -1233,13 +1239,14 @@ function renderDialog() {
       option.value = value;
       category.append(option);
     }
+    if (supportReference.startsWith('round-')) category.value = 'game';
     categoryLabel.append(category);
     const messageLabel = element('label', t('supportMessage'));
     const message = element('textarea');
     Object.assign(message, { name: 'message', required: true, minLength: 10, maxLength: 3000, rows: 5 });
     messageLabel.append(message);
     const ref=field('reference','text',t('supportLinkedRef'),'off');
-    const refInput=ref.querySelector('input');refInput.required=false;refInput.value=supportReference;refInput.placeholder='claim-…, save-…, activity-…';
+    const refInput=ref.querySelector('input');refInput.required=false;refInput.value=supportReference;refInput.placeholder='round-…, claim-…, save-…, activity-…';
     panel.append(submitForm([categoryLabel, messageLabel, ref], t('supportSend'), async ({ category: ticketCategory, message: ticketMessage,reference }) => {
       await api('support', { category: ticketCategory, message: ticketMessage,reference:reference.trim() });
       supportReference='';
@@ -1413,8 +1420,8 @@ function renderDialog() {
     try {
       const data = await api('account/export', undefined, 'GET');
       const headers = language
-        ? ['Date (UTC)', 'Activité', 'Résultat de la partie', 'Mise (CAD)', 'Variation du solde (CAD)', 'Devise']
-        : ['Date (UTC)', 'Activity', 'Round result', 'Wager (CAD)', 'Balance change (CAD)', 'Currency'];
+        ? ['Date (UTC)', 'Activité', 'Résultat de la partie', 'Mise (CAD)', 'Variation du solde (CAD)', 'Devise', 'Référence']
+        : ['Date (UTC)', 'Activity', 'Round result', 'Wager (CAD)', 'Balance change (CAD)', 'Currency', 'Reference'];
       const rows = data.activity.map((entry) => {
         const reset = demoBalanceResetDetails(entry.outcome);
         return [
@@ -1423,7 +1430,7 @@ function renderDialog() {
           reset ? t('demoBalanceResetCsvDetail').replace('{balance}', money(reset.newBalance)) : describeOutcome(entry.game, entry.outcome),
           (entry.wager / 100).toFixed(2),
           (entry.amount / 100).toFixed(2),
-          'CAD'
+          'CAD', entry.game ? 'round-' + entry.id : ''
         ];
       });
       const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
@@ -1739,6 +1746,7 @@ let supportInboxCounts = { open: 0, answered: 0, closed: 0 };
 let supportInboxHasMore = false;
 let latestOverview = null;
 const playerAccessUi = createPlayerAccessUi({ api, t, element, action,
+  renderRound: entry => historyEntryElement(entry, false),
   canManage: () => currentStaffPermissions.managePlayerAccess, locale: () => language ? 'fr-CA' : 'en-CA' });
 const comingSoonUi = createComingSoonUi({
   api, t, element, action, appPath, currentRoute, openPlayer: playerAccessUi.open, catalogueParams,
@@ -2649,7 +2657,7 @@ function renderSupportInbox() {
       } else if (!ticket.playerExcludedAt) context.append(element('p', t('supportPlayerNoActiveRestriction')));
       article.append(context);
     }
-    if(ticket.reference)article.append(action(ticket.reference,()=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(ticket.playerId);},'ghost'));
+    if(ticket.reference)article.append(action(ticket.reference,()=>{adminWorkspace.open('coming-soon-saves');void playerAccessUi.open(ticket.playerId, ticket.reference);},'ghost'));
     article.append(element('p', `${t('supportAssignedTo')}: ${ticket.assignedEmail || t('supportUnassigned')}`));
     article.append(element('h4', t('supportThread')));
     for (const message of supportThreadEntries(ticket)) {
@@ -2863,9 +2871,12 @@ let overviewRequest = 0;
 function resetOverview(message) {
   ++overviewRequest;
   latestOverview = null;
+  titlePage = 0;
+  $('#overview-title-search').value = '';
   $('#overview-export').disabled = true;
   reportUi.loading();
   $('#overview .admin-metrics').hidden = true;
+  $('#overview-round-report').hidden = true;
   $('#overview-status').textContent = t(message);
   return overviewRequest;
 }
@@ -2888,6 +2899,7 @@ async function refreshOperatorOverview() {
 function renderOperatorOverview(overview) {
   reportUi.render(overview);
   $('#overview .admin-metrics').hidden = false;
+  $('#overview-round-report').hidden = false;
   const locale = language ? 'fr-CA' : 'en-CA';
   const number = new Intl.NumberFormat(locale);
   for (const id of ['overview-rounds', 'overview-active-players', 'overview-wagered']) {
@@ -2943,18 +2955,51 @@ function renderOverviewActivity(overview) {
     return element('li', t('overviewActivityDay').replace('{date}', date).replace('{rounds}', number.format(rounds)));
   }));
 }
+let titlePage = 0;
+if (new URLSearchParams(location.search).get('report') === 'rounds') $('#overview-round-report').open = true;
 function renderOverviewGameActivity(overview) {
-  const activity = new Map((overview.demoRoundsByGame || []).map((game) => [game.game, game]));
-  const totalRounds = overview.demoRoundsInPeriod;
-  const share = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA', { style: 'percent', maximumFractionDigits: 1 });
-  const rows = games.map((game) => {
-    const stats = activity.get(game.id) || { rounds: 0, active_players: 0, wagered_cents: 0 };
-    const row = element('tr');
-    row.append(element('th', gameName(game)), element('td', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(stats.rounds)), element('td', share.format(totalRounds ? stats.rounds / totalRounds : 0)), element('td', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(stats.active_players)), element('td', money(stats.wagered_cents)));
-    return { id: game.id, name: gameName(game), stats, row };
+  const locale = language ? 'fr-CA' : 'en-CA';
+  const number = new Intl.NumberFormat(locale);
+  const share = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 });
+  const query = normalizeCatalogueText($('#overview-title-search').value);
+  const titles = overview.demoRoundsByTitle.filter(({ game, preview }) => {
+    const names = [demoTitle(game, preview, 'fr-CA'), demoTitle(game, preview, 'en-CA'), preview?.slug || game];
+    return normalizeCatalogueText(names.join(' ')).includes(query);
   });
-  $('#overview-game-table tbody').replaceChildren(...rows.map(({ row }) => row));
-  return rows;
+  const pageCount = Math.ceil(titles.length / 8);
+  titlePage = Math.max(0, Math.min(titlePage, pageCount - 1));
+  const permitted = ['operator_admin', 'operator_support'].includes(currentStaffRole);
+  const rows = titles.slice(titlePage * 8, (titlePage + 1) * 8).map(title => {
+    const row = element('tr'), header = element('th');
+    header.scope = 'row';
+    const name = demoTitle(title.game, title.preview, locale);
+    if (permitted && title.rounds) {
+      const button = action(name, () => reportUi.openRounds(title.source, button), 'report-record-link');
+      button.setAttribute('aria-controls', 'report-records');
+      button.setAttribute('aria-expanded', 'false');
+      header.append(button);
+    } else header.textContent = name;
+    row.append(header, element('td', number.format(title.rounds)),
+      element('td', share.format(overview.demoRoundsInPeriod ? title.rounds / overview.demoRoundsInPeriod : 0)),
+      element('td', number.format(title.active_players)), element('td', money(title.wagered_cents)));
+    return row;
+  });
+  $('#overview-game-table tbody').replaceChildren(...rows);
+  $('#overview-title-empty').hidden = Boolean(titles.length);
+  $('#overview-title-pages').hidden = pageCount <= 1;
+  $('#overview-title-page').textContent = (titlePage + 1) + ' / ' + pageCount;
+  $('#overview-title-prev').disabled = titlePage === 0;
+  $('#overview-title-next').disabled = titlePage + 1 >= pageCount;
+}
+$('#overview-title-search').addEventListener('input', () => {
+  titlePage = 0;
+  if (latestOverview) renderOverviewGameActivity(latestOverview);
+});
+for (const [id, step] of [['overview-title-prev', -1], ['overview-title-next', 1]]) {
+  $('#' + id).addEventListener('click', () => {
+    titlePage += step;
+    if (latestOverview) renderOverviewGameActivity(latestOverview);
+  });
 }
 function exportOperatorOverview() {
   if (!latestOverview) return;
@@ -2976,13 +3021,13 @@ function exportOperatorOverview() {
   if (overview.scope === 'site' && overview.playerAccounts) rows.push([t('reportTrackingSince'), new Date(overview.startedAt).toISOString(), 'UTC']);
   rows.push([t('overviewActivityChart'), '', overview.reportingTimeZone]);
   rows.push(...overview.demoRoundsByDay.map(({ day, rounds }) => [day, rounds, language ? 'parties' : 'rounds']));
-  rows.push([language ? 'Activité par jeu de démo' : 'Demo activity by game', '', '']);
-  for (const game of games) {
-    const stats = (overview.demoRoundsByGame || []).find((entry) => entry.game === game.id) || { rounds: 0, active_players: 0, wagered_cents: 0 };
-    rows.push([`${gameName(game)} · ${t('overviewGameRounds')}`, stats.rounds, language ? 'parties' : 'rounds']);
-    rows.push([`${gameName(game)} · ${t('overviewGameShare')}`, overview.demoRoundsInPeriod ? ((stats.rounds / overview.demoRoundsInPeriod) * 100).toFixed(1) : '0.0', '%']);
-    rows.push([`${gameName(game)} · ${t('overviewGameActivePlayers')}`, stats.active_players, language ? 'joueurs' : 'players']);
-    rows.push([`${gameName(game)} · ${t('overviewGameWagered')}`, (stats.wagered_cents / 100).toFixed(2), language ? 'CAD; aucune valeur monétaire' : 'CAD; no cash value']);
+  rows.push([t('overviewGameBreakdown'), '', '']);
+  for (const title of overview.demoRoundsByTitle) {
+    const name = demoTitle(title.game, title.preview, language ? 'fr-CA' : 'en-CA');
+    rows.push([name + ' · ' + t('overviewGameRounds'), title.rounds, language ? 'parties' : 'rounds']);
+    rows.push([name + ' · ' + t('overviewGameShare'), overview.demoRoundsInPeriod ? ((title.rounds / overview.demoRoundsInPeriod) * 100).toFixed(1) : '0.0', '%']);
+    rows.push([name + ' · ' + t('overviewGameActivePlayers'), title.active_players, language ? 'joueurs' : 'players']);
+    rows.push([name + ' · ' + t('overviewGameWagered'), (title.wagered_cents / 100).toFixed(2), language ? 'CAD fictifs' : 'simulated CAD']);
   }
   const headers = language ? ['Mesure', 'Valeur', 'Unité / remarque'] : ['Metric', 'Value', 'Unit / note'];
   const csv = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');

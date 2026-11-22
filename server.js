@@ -969,7 +969,7 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/admin/players') {
     staffContext(req, tenantId, supportRoles);
     const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
-    if (/^claim-[1-9]\d*$/.test(query)) {
+    if (/^(?:claim|round)-[1-9]\d*$/.test(query)) {
       const id=rewards.owner(tenantId,query);
       return id ? [playerAccess.get(tenantId,id)] : [];
     }
@@ -993,7 +993,7 @@ async function api(req, res, path, tenantId, requestId) {
         if (!Number.isSafeInteger(value) || value < 1) fail(400, 'invalid');
         return value;
       };
-      return { ...playerAccess.detail(tenantId, id), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
+      return { ...playerAccess.detail(tenantId, id), rounds: playerAccess.rounds(tenantId, id, cursor('round'), cursor('beforeRound')), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
     }
     if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
     const input = await body(req);
@@ -1567,7 +1567,7 @@ async function api(req, res, path, tenantId, requestId) {
     const safety = db.prepare('SELECT pause_until AS pausedUntil, cooling_off_until AS coolingOffUntil, excluded_at AS excludedAt, daily_limit_cents AS dailyLimitCents, session_reminder_minutes AS sessionReminderMinutes FROM player_safety WHERE player = ?').get(player) || {};
     const dailyWagerDateUtc = new Date().toISOString().slice(0, 10);
     const dailyWageredCents = dailyWagered(player, tenantId, dailyWagerDateUtc);
-    const transactions = db.prepare('SELECT game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
+    const transactions = db.prepare('SELECT id, game, wager, amount, outcome, created_at AS createdAt FROM ledger WHERE player = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
     const tickets = db.prepare('SELECT t.id,l.reference,t.category,t.is_complaint AS isComplaint,t.message,t.status,t.created_at AS createdAt,t.updated_at AS updatedAt FROM support_tickets t LEFT JOIN support_case_links l ON l.ticket=t.id WHERE t.player_id=? AND t.tenant_id=? ORDER BY id').all(player, tenantId);
     const consents = db.prepare('SELECT consent_type AS type, granted, locale, notice_version AS noticeVersion, source, captured_at AS capturedAt FROM player_consent_events WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId).map((entry) => ({ ...entry, granted: Boolean(entry.granted) }));
     const protectionHistory = db.prepare('SELECT action, duration_days AS durationDays, until_at AS untilAt, created_at AS createdAt FROM player_protection_events WHERE player_id = ? AND tenant_id = ? ORDER BY id').all(player, tenantId);
