@@ -1,3 +1,8 @@
+import { createPartnerLobby } from './lib/partner-lobby.js';
+import { createLobbyShelves } from './lib/lobby-shelves.js';
+import { createFinancePilot } from './lib/finance-pilot.js';
+import { createOperatorProducts } from './lib/operator-products.js';
+import { createOperatorServices } from './lib/operator-services.js';
 import { createProviderCatalog } from './lib/provider-catalog.js';
 import { createServer } from 'node:http';
 import { resolveTxt } from 'node:dns/promises';
@@ -286,6 +291,11 @@ const savedTitles = createSavedTitles(db, { fail, transaction, onSave(tenant,pla
 } });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
+const partnerLobby=transaction(()=>createPartnerLobby(db,{fail,audit:staffAudit.record,encryptionKey}));
+const lobbyShelves = transaction(() => createLobbyShelves(db, { fail, audit: staffAudit.record }));
+const financePilot = transaction(() => createFinancePilot(db, { fail, audit: staffAudit.record }));
+const operatorProducts = transaction(() => createOperatorProducts(db, { fail, audit: staffAudit.record }));
+const operatorServices = transaction(() => createOperatorServices(db, { fail, audit: staffAudit.record }));
 const providerCatalog=transaction(()=>createProviderCatalog(db,{fail,audit:staffAudit.record,encryptKey:encryptProviderKey}));
 installPlayerAccess(db, transaction);
 const dashboard = createDashboard(db, { transaction, fail });
@@ -751,6 +761,62 @@ async function api(req, res, path, tenantId, requestId) {
   if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   const params = new URL(req.url,'http://localhost').searchParams;
+  if (route === 'GET /api/v1/lobby' || route === 'GET /api/admin/shelves/at' || route === 'GET /api/partner/v1/lobby') {
+    if (path === '/api/partner/v1/lobby') partnerLobby.authorize(tenantId,req.headers.authorization,params.get('environment'));
+    const protectedView = path.startsWith('/api/admin/');
+    if (protectedView) staffContext(req,tenantId,catalogueRoles);
+    if (!protectedView && params.has('at')) fail(400,'invalid');
+    const config = publishedTenantConfig(tenantId).config;
+    const context = {market:params.get('market') ?? config.displayMarket,channel:params.get('channel') || 'desktop',
+      lang:params.get('lang') || (config.primaryLocale.startsWith('fr')?'fr':'en')};
+    if (protectedView && params.has('at')) context.now=Number(params.get('at'));
+    return transaction(()=>lobbyShelves.publicView(tenantId,context),{readOnly:true});
+  }
+  if (path === '/api/admin/shelves' || path.startsWith('/api/admin/shelves/')) {
+    staffContext(req,tenantId,catalogueRoles);
+    if (route === 'GET /api/admin/shelves') return { ...lobbyShelves.index(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone };
+    if (route === 'POST /api/admin/shelves/preview') return lobbyShelves.preview(tenantId,(await body(req)) || {});
+    if (route === 'POST /api/admin/shelves/change') {
+      const input=await body(req);
+      if (!input||typeof input!=='object') fail(400,'invalid');
+      return auditedChange(catalogueRoles,input,staff=>lobbyShelves.update(tenantId,staff,requestId,input),'publishCatalogue');
+    }
+    fail(404,'opMissing');
+  }
+  if (path.startsWith('/api/admin/operator/')) {
+    const resource = path.slice('/api/admin/operator/'.length);
+    const supplier = ['products','history','sessions','session','configure','play'].includes(resource);
+    const finance = ['pilot','pilots'].includes(resource);
+    const clients = ['clients','client-history'].includes(resource);
+    const roles = (finance || clients) ? ['operator_admin'] : supplier ? ['operator_admin','operator_provider'] : staffRoles;
+    const staff = staffContext(req, tenantId, roles);
+    if (!adminEnabled) fail(503,'adminDisabled');
+    const before = params.has('before') ? Number(params.get('before')) : undefined;
+    if (req.method === 'GET') return transaction(() => {
+      switch (resource) {
+        case 'clients': return partnerLobby.list(tenantId);
+        case 'client-history': return partnerLobby.history(tenantId,params.get('id'));
+        case 'pilots': return financePilot.list(tenantId,Number(params.get('page') || 1));
+        case 'pilot': return financePilot.detail(tenantId,params.get('id'));
+        case 'products': return operatorProducts.directory(tenantId);
+        case 'history': return operatorProducts.history(tenantId,params.get('product'),before);
+        case 'sessions': return operatorProducts.sessions(tenantId,params.get('before'));
+        case 'session': return operatorProducts.detail(tenantId,params.get('id'));
+        case 'services': return operatorServices.catalogue(params.get('q') || '',params.get('category') || '');
+        case 'agents': return {items:operatorServices.agents(tenantId)};
+        case 'orders': return operatorServices.list(tenantId,staff,Number(params.get('page') || 1));
+        case 'order': return operatorServices.detail(tenantId,staff,params.get('id'),before);
+        default: fail(404,'opMissing');
+      }
+    }, {readOnly:true});
+    if (req.method === 'POST' && ['configure','play','orders','pilot','clients'].includes(resource)) {
+      const input = await body(req, 64 * 1024);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) fail(400,'invalid');
+      const command = {configure:operatorProducts.configure,play:operatorProducts.play,orders:operatorServices.change,pilot:financePilot.change,clients:partnerLobby.change}[resource];
+      return auditedChange(roles,input,actor=>command(tenantId,actor,requestId,input),supplier?'publishCatalogue':undefined);
+    }
+    fail(404,'opMissing');
+  }
   const reportContext=()=>{
     const actual=Date.now(),asOf=params.has('asOf')?Number(params.get('asOf')):actual;
     if(!Number.isSafeInteger(asOf)||asOf<=0||asOf>actual)fail(400,'invalid');
@@ -2067,6 +2133,10 @@ const assets = {
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/growth-player.js':['growth-player.js','text/javascript'],
+  '/finance-pilot.js':['finance-pilot.js','text/javascript'],
+  '/partner-lobby.js':['partner-lobby.js','text/javascript'],
+  '/lobby-shelves.js':['lobby-shelves.js','text/javascript'],
+  '/operator-workflows.js':['operator-workflows.js','text/javascript'],
   '/provider-catalog.js':['provider-catalog.js','text/javascript'],
   '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],

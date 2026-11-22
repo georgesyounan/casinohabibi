@@ -3055,3 +3055,209 @@ test('legacy provider history restores manual hides and searches the catalog bey
   const audit=await checked(staff,'providers/catalog/imports/'+legacyAudit);assert.equal(audit.counts,null);assert.deepEqual(audit.entries,[]);
   assert.equal((await staff('providers/catalog/listings?page=0')).status,400);
 });
+test('operator sandbox rechecks product, provider, role and brand at launch and retains a versioned session after suspension',async t=>{
+  const {base,database}=await startSandbox(t),admin=client(base),other=client(base),reader=client(base);
+  const prefix='admin/operator/',req=(route,data,headers)=>checked(admin,prefix+route,data,undefined,headers);
+  await checked(admin,'admin/login',staffCredentials);
+  const directory=await req('products');assert.equal(directory.products.length,13);
+  const live=directory.products.find(p=>p.id==='live-casino');assert.equal(live.providers.length,2);assert.equal(live.binding.version,0);
+  const config=(provider,version,action='enable',profile='healthy')=>({product:'live-casino',provider,version,action,profile,environment:'sandbox',reason:'Acceptance fixture'});
+  const play={action:'launch',environment:'sandbox',provider:'atlas',game:'atlas-wheel'};
+  assert.equal((await other(prefix+'products')).status,401);
+  for(const bad of [{...config('',0),product:'vr-expo'},{...config('atlas',0)},{...config('',0),environment:'production'}])
+    assert.ok([400,409].includes((await admin(prefix+'configure',bad)).status));
+  await req('configure',config('',0));assert.equal((await admin(prefix+'play',play)).status,409);
+  assert.equal((await req('configure',config('atlas',0,'enable','offline'))).state,'failed');
+  assert.equal((await admin(prefix+'play',play)).status,409);
+  const key={'X-Request-ID':randomUUID()},act=config('atlas',1),accepted=await req('configure',act,key);
+  assert.deepEqual(await req('configure',act,key),accepted);
+  assert.equal((await admin(prefix+'configure',act)).status,409);
+  const lease=await req('play',play,keyFor());assert.equal((await req('session?id='+lease.id)).providerVersion,2);
+  assert.equal((await admin(prefix+'play',{...play,provider:'cedar',game:'cedar-cards'})).status,409);
+  await req('configure',config('atlas',2,'suspend'));assert.equal((await admin(prefix+'play',play)).status,409);
+  const finishKey=keyFor(),settle={action:'settle',environment:'sandbox',id:lease.id};
+  const finish=await req('play',settle,finishKey);assert.deepEqual(await req('play',settle,finishKey),finish);
+  const trace=await req('session?id='+lease.id);assert.equal(trace.events.length,2);assert.equal(trace.replay,true);
+  await req('configure',config('cedar',0));const cedar=await req('play',{...play,provider:'cedar',game:'cedar-cards'});
+  assert.equal((await req('session?id='+cedar.id)).replay,false);
+  await req('configure',config('',1,'suspend'));assert.equal((await admin(prefix+'play',{...play,provider:'cedar',game:'cedar-cards'})).status,409);
+  const list=await req('sessions');assert.equal(list.items.length,2);
+  assert.equal((await req('history?product=live-casino')).items.length,6);
+  const credentials={email:'product-reader@example.test',password:'reader-demo-credentials'};
+  await checked(admin,'admin/staff',{...credentials,role:'operator_provider',publishCatalogue:false});await checked(reader,'admin/login',credentials);
+  await checked(reader,prefix+'products');assert.equal((await reader(prefix+'configure',config('',2))).status,403);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  assert.equal(db.prepare('SELECT count(*) AS n FROM ledger').get().n,0);
+  db.prepare("INSERT INTO tenants(id,slug,name,status,created_at) VALUES('second','second','Second','active',1)").run();
+  db.prepare("INSERT INTO tenant_domains(host,tenant_id,verified) VALUES('localhost','second',1) ON CONFLICT(host) DO UPDATE SET tenant_id='second',verified=1").run();
+  db.prepare("INSERT INTO tenant_staff_memberships(tenant_id,staff_id,role,status,created_at) SELECT 'second',id,'operator_admin','active',1 FROM staff_accounts WHERE email=?").run(staffCredentials.email);
+  await checked(other,'admin/login',staffCredentials,'localhost');
+  assert.equal((await checked(other,prefix+'sessions',undefined,'localhost')).items.length,0);
+  assert.equal((await other(prefix+'session?id='+lease.id,undefined,'localhost')).status,404);
+  assert.equal((await checked(other,prefix+'products',undefined,'localhost')).products.find(p=>p.id==='live-casino').binding.version,0);
+  function keyFor(){return {'X-Request-ID':randomUUID()};}
+});
+
+test('operator translation orders retain private discussions, optional text, fulfillment, quote revisions and one test invoice',async t=>{
+  const {base}=await startSandbox(t),admin=client(base),owner=client(base),agent=client(base),outsider=client(base),prefix='admin/operator/';
+  await checked(admin,'admin/login',staffCredentials);
+  async function sign(who,name,role){
+    const credentials={email:name+'@example.test',password:'staff-fixture-password'};
+    await checked(admin,'admin/staff',{...credentials,role});return checked(who,'admin/login',credentials);
+  }
+  const requester=await sign(owner,'service-owner','operator_content');
+  const assigned=await sign(agent,'service-agent','operator_support');
+  await sign(outsider,'service-stranger','operator_support');
+  assert.equal((await checked(owner,prefix+'services')).items.length,14);
+  assert.deepEqual((await checked(owner,prefix+'services?q=translation')).items.map(i=>i.id),['translation']);
+  assert.ok((await checked(owner,prefix+'services?category=it')).items.every(i=>i.group==='it'));
+  const input={action:'order',title:'Translate the website',brief:'Home and help pages',service:'translation',agent:assigned.id,source:'en',target:'es'};
+  assert.equal((await owner(prefix+'orders',{...input,service:'legal'})).status,409);
+  assert.equal((await owner(prefix+'orders',{...input,agent:requester.id})).status,400);
+  assert.equal((await owner(prefix+'orders',{...input,attachment:{name:'bad.html',text:'bad'}})).status,400);
+  assert.equal((await agent(prefix+'orders',input)).status,403);
+  const key={'X-Request-ID':randomUUID()},created=await checked(owner,prefix+'orders',input,undefined,key);
+  assert.deepEqual(await checked(owner,prefix+'orders',input,undefined,key),created);
+  const orderPath=prefix+'order?id='+created.id;
+  assert.equal((await checked(agent,orderPath)).status,'ordered');assert.equal((await checked(owner,prefix+'orders')).total,1);
+  for(const actor of [outsider,admin]){assert.equal((await actor(orderPath)).status,404);assert.equal((await checked(actor,prefix+'orders')).total,0);}
+  const send=(who,version,action,extra={})=>checked(who,prefix+'orders',{id:created.id,version,action,...extra});
+  await send(owner,1,'comment',{text:'Internal translation note'});
+  assert.equal((await checked(agent,orderPath)).events[0].body.text,'Internal translation note');
+  assert.equal((await owner(prefix+'orders',{id:created.id,version:1,action:'comment',text:'stale'})).status,409);
+  assert.equal((await agent(prefix+'orders',{id:created.id,version:2,action:'invoice'})).status,409);
+  await send(agent,2,'advance');await send(agent,3,'quote',{minor:8500});await send(agent,4,'quote',{minor:7200});
+  assert.equal((await owner(prefix+'orders',{id:created.id,version:5,action:'accept',quote:1})).status,409);
+  await send(owner,5,'accept',{quote:2});const invoice=await send(agent,6,'invoice');
+  assert.equal((await send(agent,6,'invoice')).invoice,invoice.invoice);
+  await send(agent,7,'advance');await send(owner,8,'advance');
+  const result=await checked(owner,orderPath);assert.equal(result.status,'closed');assert.equal(result.acceptedQuote,2);
+  assert.deepEqual(result.events.filter(e=>e.kind==='quote').map(e=>e.body.minor),[7200,8500]);assert.equal(result.events.filter(e=>e.kind==='invoiced').length,1);
+  const withFile=await checked(owner,prefix+'orders',{...input,title:'Copy with file',attachment:{name:'Site notes.txt',text:'Synthetic fixture'}});
+  assert.equal((await checked(agent,prefix+'order?id='+withFile.id)).events[0].body.attachment.text,'Synthetic fixture');
+  const [{id:newAgent}]=(await checked(owner,prefix+'agents')).items.filter(a=>a.email===staffCredentials.email);
+  await checked(owner,prefix+'orders',{id:withFile.id,version:1,action:'assign',agent:newAgent});
+  assert.equal((await agent(prefix+'order?id='+withFile.id)).status,404);
+  assert.equal((await checked(admin,prefix+'order?id='+withFile.id)).canFulfill,true);
+  await checked(admin,'admin/staff/role',{email:'service-agent@example.test',role:'operator_content',reason:'Remove fulfillment assignment privileges'});
+  await checked(agent,'admin/login',{email:'service-agent@example.test',password:'staff-fixture-password'});
+  assert.equal((await agent(orderPath)).status,404);
+  assert.equal((await checked(agent,prefix+'orders')).total,0);
+
+});
+test('V05 V06 V07 settle integer double entries, serialize competing suppliers, and retain both financial closes',async t=>{
+  const {base,database}=await startSandbox(t),admin=client(base),second=client(base),visitor=client(base);
+  await checked(admin,'admin/login',staffCredentials);await checked(second,'admin/login',staffCredentials);
+  const prefix='admin/operator/',path=prefix+'pilot',post=(who,cmd,key)=>checked(who,path,cmd,undefined,key?{'X-Request-ID':key}:undefined);
+  assert.equal((await visitor(prefix+'pilots')).status,401);
+  for(const scenario of ['V05','V06','V07']){
+    const key=randomUUID(),start={action:'start',scenario},r=await post(admin,start,key);
+    assert.deepEqual(await post(admin,start,key),r);
+    const read=()=>checked(admin,path+'?id='+r.id);
+    let detail=await read();assert.equal(detail.summary.balance.available,0);
+    for(let step=0;step<detail.stages.length;step++){
+      const stage=detail.stages[step],cmd={action:'step',id:r.id,step};
+      if(stage==='compete'){
+        assert.equal((await admin(path,cmd)).status,409);
+        const attempts=await Promise.all([['cedar',second],['atlas',admin]].map(([provider,who])=>post(who,{...cmd,action:'attempt',provider})));
+        assert.deepEqual(attempts.map(a=>a.result.status).sort(),['limit','posted']);
+      }
+      const k=randomUUID(),saved=await post(admin,cmd,k);assert.deepEqual(await post(admin,cmd,k),saved);
+      assert.equal((await second(path,cmd)).status,409);
+      detail=await read();const s=detail.summary;
+      assert.equal(s.unbalanced,0);assert.equal(Object.values(s.balance).reduce((a,b)=>a+b,0),0);
+      if(stage==='timeout'){
+        assert.equal(s.payouts.length,1);assert.equal(s.balance.held,2000);assert.equal(s.balance.available,8000);
+        assert.equal(s.payouts[0].status,'unknown');
+      }
+      if(stage==='break'){assert.equal(detail.paused,true);assert.equal(s.openRounds,1);assert.equal(detail.steps.at(-1).evidence.at(-1).status,'paused');}
+    }
+    const s=detail.summary;
+    if(scenario==='V05'){
+      assert.deepEqual([s.balance.available,s.cash,s.ggr,s.openRounds,s.statements.length],[7600,8000,400,0,4]);
+      assert.ok(s.statements.every(line=>line.status==='matched'));assert.equal(s.journalCount,5);assert.equal(detail.closes.length,1);
+    }
+    if(scenario==='V06'){
+      assert.equal(s.stakes,800);assert.equal(s.wins,400);assert.equal(s.openRounds,0);assert.equal(s.journalCount,3);
+      assert.equal(detail.steps.at(-1).evidence[1].replayed,true);
+    }
+    if(scenario==='V07'){
+      assert.equal(s.payouts[0].status,'paid');assert.equal(s.balance.held,0);assert.equal(s.balance.available,8000);assert.equal(s.journalCount,3);
+      assert.equal(s.statements.length,1);assert.deepEqual(detail.closes.map(c=>c.snapshot.timing.length),[1,0]);
+    }
+  }
+  const db=new DatabaseSync(database);t.after(()=>db.close());assert.equal(db.prepare('SELECT count(*) AS n FROM players').get().n,0);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM ledger').get().n,0);assert.equal((await checked(admin,prefix+'pilots')).total,3);
+  const creds={email:'pilot-reader@example.test',password:'some-reader-passphrase'};
+  await checked(admin,'admin/staff',{...creds,role:'operator_provider',publishCatalogue:true,reason:'Validate finance role separation'});await checked(visitor,'admin/login',creds);
+  assert.equal((await visitor(prefix+'pilots')).status,403);
+});
+test('V04 public and custom lobby share eligible fixture listings and the exact schedule, slot and locale boundaries',async t=>{
+  const {base,database}=await startSandbox(t),admin=client(base),publicSite=client(base),reader=client(base);
+  await checked(admin,'admin/login',staffCredentials);
+  const prefix='admin/operator/',configure=(provider)=>checked(admin,prefix+'configure',{product:'live-casino',provider,action:'enable',version:0,profile:'healthy',reason:'V04 fixture',environment:'sandbox'});
+  await configure('');await configure('atlas');
+  async function importSample(){
+    const sample=await checked(admin,'providers/catalog/sample');
+    return checked(admin,'providers/catalog',{name:sample.name,sample:true,games:sample.games,expectedRevision:sample.preview.revision});
+  }
+  await importSample();
+  const original=await checked(publicSite,'games');await importSample();
+  assert.deepEqual((await checked(publicSite,'games')).map(i=>i.id),original.map(i=>i.id));assert.ok(original.length>=4);
+  const [hidden,pinned,extra]=original;
+  const spec={name:'evening',titleEn:'Evening picks',titleFr:'Sélection du soir',titleEs:'',market:'CA',channel:'all',zone:'America/Toronto',
+    start:'2026-11-19T10:00',end:'2026-11-19T13:00',priority:5,category:'all',sort:'name',cap:3,hide:[hidden.id],pins:[{slot:2,id:pinned.id}]};
+  const preview=await checked(admin,'admin/shelves/preview',{spec,lang:'fr'});assert.equal(preview.items[1].id,pinned.id);
+  assert.equal(preview.items.length,3);assert.equal(new Set(preview.items.map(g=>g.id)).size,3);
+  const change=(action,name,version,spec)=>({action,name,version,spec});
+  const receipt=await checked(admin,'admin/shelves/change',change('publish',spec.name,0,spec));
+  const overlap={...spec,name:'overlap',market:'',channel:'mobile'};assert.equal((await admin('admin/shelves/change',change('publish',overlap.name,0,overlap))).status,409);
+  const invalid={...spec,start:'2026-11-01T01:30'};assert.equal((await admin('admin/shelves/preview',{spec:invalid})).status,400);
+  const view=(at,market='CA',lang='es',channel='mobile')=>checked(admin,'admin/shelves/at?'+new URLSearchParams({at,market,lang,channel}));
+  assert.equal((await view(preview.starts-1)).shelf,null);
+  const active=(await view(preview.starts)).shelf;assert.equal(active.revision,receipt.version);assert.equal(active.title,spec.titleEn);assert.equal(active.language,'en');
+  assert.equal(active.items[1].id,pinned.id);assert.ok(active.items.every(g=>g.id!==hidden.id));
+  assert.equal((await view(preview.ends)).shelf,null);assert.equal((await view(preview.starts,'MX')).shelf,null);
+  assert.equal((await publicSite('v1/lobby?at='+preview.starts)).status,400);assert.equal((await publicSite('admin/shelves/at?at='+preview.starts)).status,401);
+  const open={...spec,start:'2020-01-01T10:00',end:'2090-01-01T10:00',market:'',channel:'all'};
+  await checked(admin,'admin/shelves/change',change('publish',spec.name,1,open));
+  const publicView=()=>checked(publicSite,'v1/lobby?market=CA&channel=mobile&lang=fr');
+  assert.deepEqual((await publicView()).shelf,(await view(Date.now(),'CA','fr','mobile')).shelf);
+  const launch={action:'launch',environment:'sandbox',provider:'atlas',game:'atlas-wheel',listingId:pinned.id};
+  const round=await checked(admin,prefix+'play',launch);
+  assert.equal((await checked(admin,prefix+'session?id='+round.id)).listingRef,pinned.externalId);
+  const listings=await checked(admin,'providers/catalog/listings?provider='+encodeURIComponent(pinned.provider));
+  const listing=listings.items.find(g=>g.id===pinned.id);
+  await checked(admin,'providers/catalog/status',{name:pinned.provider,externalId:pinned.externalId,enabled:false,version:listing.version});
+  assert.ok((await publicView()).shelf.items.every(g=>g.id!==pinned.id));
+  assert.ok((await checked(publicSite,'games')).every(g=>g.id!==pinned.id));assert.equal((await admin(prefix+'play',launch)).status,409);
+  await checked(admin,prefix+'play',{action:'settle',environment:'sandbox',id:round.id});
+  assert.ok((await publicView()).shelf.items.some(g=>g.id===extra.id));
+  await checked(admin,'admin/shelves/change',change('withdraw',spec.name,2));
+  assert.equal((await publicView()).shelf,null);
+  const creds={email:'shelf-reader@example.test',password:'private-fixture-password'};
+  await checked(admin,'admin/staff',{...creds,role:'operator_content',publishCatalogue:false});await checked(reader,'admin/login',creds);
+  await checked(reader,'admin/shelves');assert.equal((await reader('admin/shelves/change',change('publish',spec.name,3,open))).status,403);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  assert.equal(db.prepare('SELECT count(*) AS n FROM ledger').get().n,0);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM lobby_shelf_versions WHERE name=?').get(spec.name).n,3);
+});
+test('D27 a scoped fixture client follows the public shelf, rotates once and cannot read a second brand or production',async t=>{
+  const {base,database}=await startSandbox(t),admin=client(base),site=client(base),p='admin/operator/clients';
+  await checked(admin,'admin/login',staffCredentials);
+  const secret=()=> 'hbs_'+randomBytes(32).toString('hex'),first=secret(),second=secret(),key={'X-Request-ID':randomUUID()};
+  const payload={action:'create',environment:'sandbox',secret:first,label:'Sandbox kiosk'};
+  const one=await checked(admin,p,payload,undefined,key);assert.deepEqual(await checked(admin,p,payload,undefined,key),one);
+  const read=(s,env='sandbox',host)=>site('partner/v1/lobby?channel=mobile&lang=es&environment='+env,undefined,host,{Authorization:'Bearer '+s});
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  db.exec("INSERT INTO tenants VALUES('partner-two','partner-two','Other','active',1); UPDATE tenant_domains SET tenant_id='partner-two' WHERE host='localhost';");
+  assert.equal((await read(first,'sandbox','localhost')).status,401);
+  assert.equal((await read(first,'production')).status,403);assert.equal((await read('invalid')).status,401);
+  assert.deepEqual((await read(first)).data,await checked(site,'v1/lobby?channel=mobile&lang=es'));
+  const rotated=await checked(admin,p,{action:'rotate',id:one.id,version:1,environment:'sandbox',secret:second});
+  assert.equal(rotated.version,2);assert.equal((await read(first)).status,401);assert.equal((await read(second)).status,200);
+  const detail=await checked(admin,'admin/operator/client-history?id='+one.id);assert.deepEqual(detail.items.map(e=>e.kind),['rotate','create']);
+  await checked(admin,p,{action:'revoke',id:one.id,version:2,environment:'sandbox'});assert.equal((await read(second)).status,401);
+  const meta=JSON.stringify([await checked(admin,p),detail,db.prepare('SELECT * FROM staff_mutation_receipts').all(),db.prepare('SELECT * FROM staff_events').all()]);
+  assert.ok(!meta.includes(first)&&!meta.includes(second));assert.equal((await site(p)).status,401);
+});
