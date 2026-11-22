@@ -1,6 +1,8 @@
-import { games } from './catalog.js';
+import { catalogueCategories, games, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
+import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
+import { followupCopy, createPublicationFollowup } from './publication-followup.js';
 import { playerAccessCopy, createPlayerAccessUi } from './player-access.js';
 import { adminWorkspaceCopy, createAdminWorkspace } from './admin-workspace.js';
 
@@ -13,6 +15,8 @@ const copy = {
   ...comingSoonCopy,
   ...playerAccessCopy,
   ...dashboardCopy,
+  ...websiteContentCopy,
+  ...followupCopy,
   ...adminWorkspaceCopy,
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
@@ -62,7 +66,7 @@ const copy = {
   faqQuestionEn: ['Question · English', 'Question · anglais'], faqQuestionFr: ['Question · Canadian French', 'Question · français canadien'],
   faqAnswerEn: ['Answer · English', 'Réponse · anglais'], faqAnswerFr: ['Answer · Canadian French', 'Réponse · français canadien'],
   faqOne: ['FAQ entry 1', 'Entrée FAQ 1'], faqTwo: ['FAQ entry 2', 'Entrée FAQ 2'], faqThree: ['FAQ entry 3', 'Entrée FAQ 3'],
-  all: ['All games', 'Tous les jeux'], slots: ['Slots', 'Machines à sous'], table: ['Table games', 'Jeux de table'], live: ['Live games', 'Jeux avec croupier en direct'], favorites: ['Favorites', 'Favoris'], recentGames: ['Recently played', 'Joués récemment'],
+  all: ['All games', 'Tous les jeux'], ...catalogueCategories, favorites: ['Favorites', 'Favoris'], recentGames: ['Recently played', 'Joués récemment'],
   browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
   clearGameSearch: ['Clear search', 'Effacer la recherche'],
   providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
@@ -224,7 +228,7 @@ const copy = {
   catalogEmpty: ['Games will appear here after an approved provider is connected and its catalog is synced.', 'Les jeux apparaîtront ici après la connexion d’un fournisseur approuvé et la synchronisation de son catalogue.'],
   noFavoriteGamesTitle: ['No favorites yet', 'Aucun favori pour le moment'],
   noRecentGamesTitle: ['No recent games yet', 'Aucun jeu récent'], noRecentGames: ['Games you play will appear here.', 'Les jeux auxquels vous jouez apparaîtront ici.'],
-  searchGames: ['Search games or providers', 'Rechercher un jeu ou un fournisseur'],
+  searchGames: ['Search the catalogue', 'Rechercher dans le catalogue'],
   catalogNoMatchesTitle: ['No matching games', 'Aucun jeu correspondant'],
   catalogNoMatches: ['Try another search or choose a different category.', 'Essayez une autre recherche ou choisissez une autre catégorie.'],
   catalogListing: ['Provider preview · not playable', 'Aperçu fournisseur · non jouable'],
@@ -282,6 +286,9 @@ const copy = {
 
 const $ = (selector) => document.querySelector(selector);
 const auditActionLabels = {
+  website_content_saved: websiteContentCopy.website_content_saved,
+  website_content_published: websiteContentCopy.website_content_published,
+  website_content_archived: websiteContentCopy.website_content_archived,
   player_suspended: playerAccessCopy.player_suspended, player_restored: playerAccessCopy.player_restored, player_recovery_requested: playerAccessCopy.player_recovery_requested,
   coming_soon_draft_saved: comingSoonCopy.comingSoonAuditSaved,
   coming_soon_published: comingSoonCopy.comingSoonAuditPublished,
@@ -327,8 +334,27 @@ let player;
 let playerSessionStartedAt;
 let displayedReminderPeriod;
 let displayedReminderLanguage;
-let filter = 'all';
-let searchQuery = '';
+const catalogLocation = new URLSearchParams(location.search);
+let filter = ['slots', 'table', 'live', 'favorites', 'recent'].includes(catalogLocation.get('category')) ? catalogLocation.get('category') : 'all';
+let searchQuery = (catalogLocation.get('q') || '').slice(0, 120);
+let selectedCollection = normalizeCatalogueText((catalogLocation.get('collection') || '').slice(0, 128));
+
+function catalogueParams() {
+  const params = new URLSearchParams();
+  if (searchQuery.trim()) params.set('q', searchQuery.trim());
+  if (filter !== 'all') params.set('category', filter);
+  if (selectedCollection) params.set('collection', selectedCollection);
+  return params;
+}
+function rememberCatalogue() {
+  const url = new URL(location.href);
+  const filters = catalogueParams();
+  for (const key of ['q', 'category', 'collection']) {
+    if (filters.has(key)) url.searchParams.set(key, filters.get(key));
+    else url.searchParams.delete(key);
+  }
+  history.replaceState(history.state, '', url);
+}
 let providerSort = localStorage.getItem('northplay-provider-sort') === 'alpha' ? 'alpha' : 'recent';
 let guestFavorites;
 try {
@@ -435,6 +461,7 @@ function updateSessionReminder() {
   displayedReminderLanguage = language;
 }
 
+const pendingPublications = new Map();
 async function api(path, data, method = 'POST') {
   const headers = {};
   const options = { method, headers };
@@ -442,18 +469,40 @@ async function api(path, data, method = 'POST') {
     headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(data);
   }
-  const auditedMutation = data !== undefined && /^(admin\/(config|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
+  const auditedMutation = data !== undefined && /^(admin\/(config|website-content|coming-soon|staff|players\/|support\/)|providers\/catalog(?:\/status)?$)/.test(path);
   const savingPreview = /^me\/saved\/[1-9]\d*(?:\?|$)/.test(path) && ['PUT', 'DELETE'].includes(method);
-  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) headers['X-Request-ID'] = crypto.randomUUID();
+  const publication = (path === 'admin/website-content' || path === 'admin/coming-soon') &&
+    ['publish', 'archive'].includes(data?.action);
+  let attempt;
+  if ((auditedMutation || savingPreview) && globalThis.crypto?.randomUUID) {
+    if (publication) {
+      const signature = JSON.stringify([data.kind, data.slug, data.action, data.version]);
+      attempt = pendingPublications.get(path);
+      if (attempt?.signature !== signature) {
+        attempt = { signature, id: crypto.randomUUID() };
+        pendingPublications.set(path, attempt);
+      }
+    }
+    headers['X-Request-ID'] = attempt?.id || crypto.randomUUID();
+  }
   const send = async () => {
     const response = await fetch(appPath('/api/' + path), options);
     return { response, payload: await response.json() };
   };
-  const { response, payload } = await send().catch((error) => {
+  const { response, payload } = await send().catch(async (error) => {
     if (!headers['X-Request-ID']) throw error;
-    return send();
+    try { return await send(); }
+    catch (retryError) {
+      retryError.requestId = headers['X-Request-ID'];
+      throw retryError;
+    }
   });
-  if (!response.ok) throw new Error(payload.error);
+  if (attempt && response.status < 500 && pendingPublications.get(path) === attempt) pendingPublications.delete(path);
+  if (!response.ok) {
+    const error = new Error(payload.error);
+    error.requestId = response.headers.get('X-Request-ID') || headers['X-Request-ID'];
+    throw error;
+  }
   return payload;
 }
 
@@ -657,6 +706,7 @@ function readTenantConfig() {
 
 function updateDocumentTitle() {
   document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
+    : publicWebsite.isHelp && publicWebsite.title() ? publicWebsite.title() + ' · ' + tenantBrandName
     : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
@@ -1444,7 +1494,7 @@ function announceFavorite(message, activityId) {
 }
 
 function renderCatalog() {
-  const editorial = comingSoonUi.renderLobby(filter, searchQuery);
+  const editorial = comingSoonUi.renderLobby(filter, searchQuery, selectedCollection);
   const previewTitle = comingSoonUi.renderDetail();
   if (previewTitle) {
     updateDocumentTitle();
@@ -1466,12 +1516,6 @@ function renderCatalog() {
     button.setAttribute('aria-label', t(isFavorite ? 'removeFavorite' : 'addFavorite').replace('{game}', name));
     art.append(button);
   };
-  const normalizedQuery = searchQuery.trim().toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  const matchesQuery = (values) => {
-    if (!normalizedQuery) return true;
-    const searchable = values.filter(Boolean).join(' ').toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').normalize('NFD').replace(/\p{Diacritic}/gu, '');
-    return searchable.includes(normalizedQuery);
-  };
   const recentGameOrder = new Map();
   for (const entry of player?.history || []) {
     if (entry.game && !recentGameOrder.has(entry.game)) recentGameOrder.set(entry.game, recentGameOrder.size);
@@ -1481,7 +1525,7 @@ function renderCatalog() {
     if (filter === 'favorites' && !favorites.has(key)) return false;
     if (filter === 'recent' && !recentGameOrder.has(game.id)) return false;
     if (filter !== 'all' && filter !== 'favorites' && filter !== 'recent' && filter !== game.type) return false;
-    return matchesQuery([...game.name, demoProviderName()]);
+    return !selectedCollection && matchesCatalogue(searchQuery, [...game.name, demoProviderName()], game.type);
   }).sort((a, b) => filter === 'recent'
     ? recentGameOrder.get(a.id) - recentGameOrder.get(b.id)
     : Number(tenantFeaturedGameIds.includes(b.id)) - Number(tenantFeaturedGameIds.includes(a.id)));
@@ -1490,28 +1534,29 @@ function renderCatalog() {
     const key = `provider:${game.provider}:${game.externalId}`;
     if (filter === 'favorites' && !favorites.has(key)) return false;
     if (filter !== 'all' && filter !== 'favorites' && filter !== game.category) return false;
-    return matchesQuery([game.titleEn, game.titleFr, game.provider]);
+    return !selectedCollection && matchesCatalogue(searchQuery, [game.titleEn, game.titleFr, game.provider], game.category);
   }).sort((a, b) => providerSort === 'recent'
     ? b.id - a.id
     : providerTitleCollator.compare(language ? a.titleFr : a.titleEn, language ? b.titleFr : b.titleEn));
   const hasListings = demoGames.length + visibleGames.length + editorial.count > 0;
-  $('#catalog-controls').hidden = !games.length && !providerGames.length;
-  $('#provider-sort-control').hidden = !providerGames.length;
+  const hasCatalogue = Boolean(games.length || providerGames.length || editorial.available);
+  $('#catalog-controls').hidden = !hasCatalogue && !selectedCollection;
+  $('#provider-sort-control').hidden = !providerGames.length || Boolean(selectedCollection);
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
   $('#catalog-summary').textContent = t('catalogResultSummary')
     .replace('{games}', countFormat.format(demoGames.length))
     .replace('{previews}', countFormat.format(visibleGames.length + editorial.count));
-  $('#catalog-summary').hidden = !games.length && !providerGames.length;
+  $('#catalog-summary').hidden = !hasCatalogue && !selectedCollection;
   $('#catalog-empty').hidden = hasListings;
   const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
   const noFavorites = filter === 'favorites' && !hasAvailableFavorite;
   const noRecentGames = filter === 'recent' && recentGameOrder.size === 0;
-  $('#browse-all-games').hidden = hasListings || filter === 'all';
+  $('#browse-all-games').hidden = hasListings || (filter === 'all' && !selectedCollection);
   $('#clear-game-search').hidden = hasListings || !searchQuery.trim() || noFavorites || noRecentGames;
-  $('[data-copy="catalogEmptyTitle"]').textContent = noFavorites ? t('noFavoriteGamesTitle') : noRecentGames ? t('noRecentGamesTitle') : (games.length || providerGames.length) ? t('catalogNoMatchesTitle') : t('catalogEmptyTitle');
-  $('[data-copy="catalogEmpty"]').textContent = noFavorites ? t('noFavoriteGames') : noRecentGames ? t('noRecentGames') : (games.length || providerGames.length) ? t('catalogNoMatches') : t('catalogEmpty');
+  $('[data-copy="catalogEmptyTitle"]').textContent = noFavorites ? t('noFavoriteGamesTitle') : noRecentGames ? t('noRecentGamesTitle') : (hasCatalogue || selectedCollection) ? t('catalogNoMatchesTitle') : t('catalogEmptyTitle');
+  $('[data-copy="catalogEmpty"]').textContent = noFavorites ? t('noFavoriteGames') : noRecentGames ? t('noRecentGames') : (hasCatalogue || selectedCollection) ? t('catalogNoMatches') : t('catalogEmpty');
   for (const game of demoGames) {
     const card = element('article', '', 'card demo-card');
     const art = createArt(game.icon, game.id);
@@ -1563,7 +1608,7 @@ let latestOverview = null;
 const playerAccessUi = createPlayerAccessUi({ api, t, element, action,
   canManage: () => currentStaffPermissions.managePlayerAccess, locale: () => language ? 'fr-CA' : 'en-CA' });
 const comingSoonUi = createComingSoonUi({
-  api, t, element, action, appPath, currentRoute, openPlayer: playerAccessUi.open,
+  api, t, element, action, appPath, currentRoute, openPlayer: playerAccessUi.open, catalogueParams,
   lobbyEnabled: () => publicComingSoon,
   isFrench: () => Boolean(language),
   getFavorites: () => favorites,
@@ -1571,7 +1616,14 @@ const comingSoonUi = createComingSoonUi({
   toggleFavorite
 });
 
+const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
+const followupUi = createPublicationFollowup({ api, t, element, appPath, locale: siteContentLocale });
+const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
+const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale,
+  canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
+
 const adminLoaders = {
+  'website-editorial': websiteEditor.load,
   overview: () => refreshOperatorOverview().catch((error) => { $('#overview-status').textContent = t(error.message); }),
   'coming-soon-admin': comingSoonUi.loadDrafts,
   'coming-soon-saves': comingSoonUi.loadSaves,
@@ -1582,6 +1634,8 @@ const adminLoaders = {
   'audit-log': () => refreshStaffAudit().catch((error) => { $('#staff-audit-summary').textContent = t(error.message); })
 };
 const adminWorkspace = createAdminWorkspace($('#admin-tools'), (view, panel) => {
+  const editorial = panel === 'website-editorial';
+  for (const selector of ['#tenant-config','#tenant-config-preview','#tenant-settings-help']) $(selector).hidden = editorial;
   const load = adminLoaders[panel] || adminLoaders[view];
   if (load) void load();
 });
@@ -1597,14 +1651,17 @@ const reportUi = createReportUi({ api, t, element, action, appPath, role: () => 
 function render() {
   const languageChanged = renderedLanguage !== language;
   renderedLanguage = language;
-  if (languageChanged && !isAdminPage) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
+  if (languageChanged && !isAdminPage) {
+    void publicWebsite.load();
+    if (!publicWebsite.isHelp) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
+  }
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
-  $('#skip-link').href = isAdminPage ? '#admin' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
+  $('#skip-link').href = isAdminPage ? '#admin' : publicWebsite.isHelp ? '#site-public-help' : comingSoonUi.isDetail ? '#coming-soon-detail' : '#lobby';
   for (const node of document.querySelectorAll('[data-copy]')) node.textContent = t(node.dataset.copy);
-  if (languageChanged) adminWorkspace.syncPicker();
+  if (languageChanged) { adminWorkspace.syncPicker(); websiteEditor.translate(); }
   updateStaffRoleHelp();
   const announcement = $('#lobby-announcement');
   announcement.textContent = t('announcement');
@@ -1622,6 +1679,7 @@ function render() {
   }
   if (languageChanged && currentStaffRole === 'operator_admin') renderStaffList();
   if (languageChanged && currentStaffPermissions.viewAudit) renderStaffAudit();
+  if (languageChanged) followupUi.render();
   $('#close').setAttribute('aria-label', t('close'));
   $('#provider-status').textContent = providerStatus ? t(providerStatus) : '';
   updateAccount();
@@ -1660,6 +1718,14 @@ $('#language').addEventListener('click', async () => {
       if ($('#dialog').open) $('#status').textContent = t('unavailable');
     }
   }
+  if (!isAdminPage) {
+    const url = new URL(location.href);
+    if (publicWebsite.isHelp || url.searchParams.has('lang')) {
+      url.searchParams.set('lang', language ? 'fr' : 'en');
+      if (url.searchParams.has('locale')) url.searchParams.set('locale', siteContentLocale());
+      history.replaceState(null, '', url);
+    }
+  }
 });
 $('#account').addEventListener('click', () => {
   selectedGame = undefined;
@@ -1680,26 +1746,38 @@ $('#close').addEventListener('click', () => {
   }
   $('#dialog').close();
 });
+$('#game-search').value = searchQuery;
+for (const button of $('#filters').children) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
+$('#catalog-collection').addEventListener('change', (event) => {
+  selectedCollection = event.currentTarget.value;
+  rememberCatalogue();
+  renderCatalog();
+});
 $('#filters').addEventListener('click', (event) => {
   if (!event.target.dataset.filter) return;
   filter = event.target.dataset.filter;
+  rememberCatalogue();
   for (const button of $('#filters').children) button.setAttribute('aria-pressed', button === event.target);
   renderCatalog();
 });
 $('#browse-all-games').addEventListener('click', () => {
   filter = 'all';
   searchQuery = '';
+  selectedCollection = '';
+  rememberCatalogue();
   $('#game-search').value = '';
   for (const button of $('#filters').children) button.setAttribute('aria-pressed', String(button.dataset.filter === 'all'));
   renderCatalog();
 });
 $('#clear-game-search').addEventListener('click', () => {
   searchQuery = '';
+  rememberCatalogue();
   $('#game-search').value = '';
   renderCatalog();
 });
 $('#game-search').addEventListener('input', (event) => {
   searchQuery = event.currentTarget.value;
+  rememberCatalogue();
   renderCatalog();
 });
 $('#provider-sort').addEventListener('change', (event) => {
@@ -2315,7 +2393,7 @@ function getFilteredStaffAuditEntries(source = staffAuditCache) {
   $('#staff-audit-range-error').hidden = !invalidRange;
   $('#staff-audit-range-error').textContent = invalidRange ? t('staffAuditRangeInvalid') : '';
   if (invalidRange) return [];
-  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : action.startsWith('tenant_config_') ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
+  const categoryFor = (action) => action.startsWith('staff_mfa_') ? 'mfa' : /^(tenant_config_|website_content_)/.test(action) ? 'casino' : action.startsWith('support_') ? 'support' : /^(provider_|catalog_|coming_soon_)/.test(action) ? 'providers' : ['staff_login', 'staff_logout', 'staff_password_changed'].includes(action) ? 'auth' : action.startsWith('staff_') ? 'staff' : 'other';
   return source.filter((entry) => {
     const searchable = `${entry.actor} ${entry.action} ${auditActionLabel(entry.action)} ${entry.target} ${entry.details?.recordId || ''} ${entry.details?.revision || ''} ${entry.correlationId || ''}`.toLocaleLowerCase(locale).normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const eventDate = new Date(entry.createdAt).toISOString().slice(0, 10);
@@ -2625,10 +2703,14 @@ async function refreshOperatorOverview() {
     const result = await api('admin/overview?' + reportUi.params(), undefined, 'GET');
     if (request !== overviewRequest) return;
     latestOverview = result;
+    followupUi.update(result.publicationFollowup);
     $('#overview-export').disabled = false;
     renderOperatorOverview(result);
   } catch (error) {
-    if (request === overviewRequest) $('#overview-status').textContent = t(error.message);
+    if (request === overviewRequest) {
+      followupUi.update(null);
+      $('#overview-status').textContent = t(error.message);
+    }
   }
 }
 function renderOperatorOverview(overview) {
@@ -3008,7 +3090,8 @@ $('#mfa-disable').addEventListener('click', async () => {
 
 document.body.classList.toggle('admin-route', isAdminPage);
 $('#admin-view-lobby').hidden = !isAdminPage;
-$('#lobby').hidden = isAdminPage || comingSoonUi.isDetail;
+$('#lobby').hidden = isAdminPage || comingSoonUi.isDetail || publicWebsite.isHelp;
+$('#site-public-help').hidden = !publicWebsite.isHelp;
 $('#admin').hidden = !isAdminPage;
 $('#coming-soon-detail').hidden = !comingSoonUi.isDetail;
 render();
@@ -3016,7 +3099,7 @@ if (isAdminPage) {
   try { showStaffSession(await api('admin/session', undefined, 'GET')); }
   catch { $('#staff-login').hidden = false; $('#admin-tools').hidden = true; }
 }
-if (!isAdminPage) {
+if (!isAdminPage && !publicWebsite.isHelp) {
   try { await comingSoonUi.loadLobby(); }
   catch { /* The preview renders its localized unavailable state. */ }
   renderCatalog();
@@ -3028,9 +3111,12 @@ try {
   // Use the shared default brand if tenant settings are unavailable.
 }
 if (!isAdminPage) {
-  try { providerGames = await api('games', undefined, 'GET'); }
-  catch { /* Keep the local catalogue available. */ }
-  renderCatalog();
+  void publicWebsite.load();
+  if (!publicWebsite.isHelp) {
+    try { providerGames = await api('games', undefined, 'GET'); }
+    catch { /* Keep the local catalogue available. */ }
+    renderCatalog();
+  }
   try {
     player = await api('account', undefined, 'GET');
     if (player) {
@@ -3038,7 +3124,7 @@ if (!isAdminPage) {
       if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
     }
     playerSessionStartedAt = player?.sessionStartedAt;
-    if (player?.preferredLocale) {
+    if (player?.preferredLocale && !['en','fr'].includes(requestedLanguage)) {
       language = publicLanguage(player.preferredLocale);
       if (publicLocales.includes(player.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
     }
