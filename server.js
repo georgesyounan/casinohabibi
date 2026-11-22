@@ -9,6 +9,7 @@ import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 import { configureTransactionalEmail } from './lib/transactional-email.js';
 import { createDashboard } from './lib/dashboard.js';
 import { createWebsiteContent } from './lib/website-content.js';
+import { createPublicationFollowup } from './lib/publication-followup.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
@@ -271,6 +272,7 @@ const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.reco
 const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath, transaction });
 const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath,
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
+const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -656,17 +658,37 @@ async function api(req, res, path, tenantId, requestId) {
   }
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
   const route = `${req.method} ${path}`;
-  const auditedChange = (roles, input, work, permission) => staffAudit.change(tenantId, requestId, route, input, () => {
-    const staff = staffContext(req, tenantId, roles);
-    if (!adminEnabled) fail(503, 'adminDisabled');
-    if (permission && !staffPermissions(staff)[permission]) fail(403, 'staffForbidden');
-    if (['publish', 'archive'].includes(input?.action) && typeof input.slug === 'string' && input.slug.length <= 64 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug)) {
-      if (path === '/api/admin/coming-soon') req.publication = { action: input.action, record: 'coming-soon/' + input.slug };
-      if (path === '/api/admin/website-content' && ['help', 'banner'].includes(input.kind))
-        req.publication = { action: input.action, record: 'website-content/' + input.kind + '/' + input.slug };
+  const auditedChange = (roles, input, work, permission) => {
+    let actorId, lastAudit;
+    const authorize = () => {
+      const staff = staffContext(req, tenantId, roles);
+      if (!adminEnabled) fail(503, 'adminDisabled');
+      if (permission && !staffPermissions(staff)[permission]) fail(403, 'staffForbidden');
+      req.publication = publicationFollowup.describe(path, input);
+      if (req.publication) {
+        actorId = staff.id;
+        lastAudit = publicationFollowup.frontier();
+      }
+      return staff;
+    };
+    try {
+      return staffAudit.change(tenantId, requestId, route, input, authorize, (staff) => {
+        const result = work(staff);
+        if (req.publication && result.auditId) publicationFollowup.completed(tenantId, req.publication, input.version, result.auditId);
+        return result;
+      });
+    } catch (error) {
+      if (req.publication && lastAudit !== undefined) {
+        try { publicationFollowup.failed(tenantId, actorId, requestId, req.publication, input.version, lastAudit, error); }
+        catch { console.warn(JSON.stringify({ event: 'publication_followup_unavailable', requestId, tenantId })); }
+      }
+      throw error;
     }
-    return staff;
-  }, work);
+  };
+  if (route === 'GET /api/admin/publication-followup') {
+    const staff = staffContext(req, tenantId, catalogueRoles);
+    return publicationFollowup.list(tenantId, staff, staffPermissions(staff), new URL(req.url, 'http://localhost').searchParams);
+  }
   const savedResource = ['PUT', 'DELETE'].includes(req.method) && path.match(/^\/api\/me\/saved\/([1-9]\d{0,15})$/);
   if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
@@ -715,6 +737,10 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/admin/coming-soon') {
     staffContext(req, tenantId, catalogueRoles);
     return comingSoon.drafts(tenantId);
+  }
+  if (route === 'GET /api/admin/coming-soon/index') {
+    staffContext(req, tenantId, catalogueRoles);
+    return comingSoon.draftIndex(tenantId, new URL(req.url, 'http://localhost').searchParams);
   }
   if (route === 'POST /api/admin/coming-soon') {
     staffContext(req, tenantId, catalogueRoles);
@@ -832,7 +858,7 @@ async function api(req, res, path, tenantId, requestId) {
         FROM tenant_staff_memberships m JOIN tenants t ON t.id = m.tenant_id WHERE m.staff_id = ? AND m.status = 'active'
         AND t.status = 'active' ORDER BY name,t.id`).all(staff.id).filter((brand) => brand.id === tenantId || brand.host);
       const catalog = db.prepare('SELECT count(*) AS enabled FROM game_catalog WHERE tenant_id = ? AND enabled = 1').get(tenantId);
-      return { ...dashboard.summary(ctx), brands, enabledCatalogListings: catalog.enabled, publishedConfigVersion: published.version,
+      return { ...dashboard.summary(ctx), brands, publicationFollowup: publicationFollowup.summary(tenantId, staff, staffPermissions(staff)), enabledCatalogListings: catalog.enabled, publishedConfigVersion: published.version,
         configNeedsPublish: Boolean(draft && draft.config !== settings.config) };
     }, { readOnly: true });
   }
@@ -1783,6 +1809,7 @@ const assets = {
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
   '/website-content.js': ['website-content.js', 'text/javascript'],
+  '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
   '/hero.webp': ['hero.webp', 'image/webp'],
