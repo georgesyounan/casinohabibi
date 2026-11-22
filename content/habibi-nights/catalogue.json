@@ -1,0 +1,58 @@
+{
+  "collectionEn": "Habibi Nights",
+  "collectionFr": "Les nuits d’Habibi",
+  "studio": "Habibi Demo Studio",
+  "locales": ["fr-CA", "en-CA"],
+  "previews": [
+    {
+      "slug": "lanterns-of-the-souk-demo",
+      "category": "slots",
+      "titleFr": "Les lanternes du souk · Démo",
+      "titleEn": "Lanterns of the Souk · Demo",
+      "descriptionFr": "La nuit tombe sur le souk. Une lanterne turquoise éclaire les arches, les autres brillent en ambre. Ces couleurs ont inspiré les symboles de cette machine à sous imaginaire.",
+      "descriptionEn": "Night falls over the souk. One turquoise lantern lights the arcade while the others glow amber. Their colours inspired the reel symbols for this fictional slot machine.",
+      "altFr": "Lanternes de laiton et de verre turquoise sous les arches d’un souk, la nuit.",
+      "altEn": "Brass lanterns with turquoise glass beneath a market arcade at night.",
+      "image": "lanterns.webp"
+    },
+    {
+      "slug": "midnight-in-beirut-demo",
+      "category": "table",
+      "titleFr": "Minuit à Beyrouth · Démo",
+      "titleEn": "Midnight in Beirut · Demo",
+      "descriptionFr": "Un as de pique et un roi de cœur reposent sur le tapis vert. Derrière la table, les lumières de la corniche dessinent la baie de Beyrouth. C’est le décor imaginé pour cette démo de blackjack.",
+      "descriptionEn": "An ace of spades and a king of hearts rest on green felt. Beyond the table, the lights of Beirut’s Corniche trace the bay. This is the setting for our fictional blackjack preview.",
+      "altFr": "Un as de pique et un roi de cœur sur un tapis vert devant la baie de Beyrouth illuminée.",
+      "altEn": "An ace of spades and a king of hearts on green felt above Beirut’s illuminated waterfront.",
+      "image": "midnight.webp"
+    },
+    {
+      "slug": "dune-roulette-demo",
+      "category": "table",
+      "titleFr": "La roulette des dunes · Démo",
+      "titleEn": "Dune Roulette · Demo",
+      "descriptionFr": "Une bille ivoire repose au bord d’une roue de cuivre. Au loin, la dernière lumière découpe les dunes. Le rouge et le bleu des cases reprennent les couleurs du ciel dans ce concept de roulette.",
+      "descriptionEn": "An ivory ball rests on the rim of a copper wheel. The last light traces the dunes beyond it. The red and blue pockets borrow their colours from the desert sky in this fictional roulette concept.",
+      "altFr": "Roue de roulette cuivrée et bille ivoire devant des dunes au crépuscule.",
+      "altEn": "A copper roulette wheel and an ivory ball in front of sand dunes at dusk.",
+      "image": "dunes.webp"
+    }
+  ],
+  "guide": {
+    "slug": "habibi-nights-first-quest",
+    "addressFr": "quete-des-trois-favoris",
+    "addressEn": "three-favorites-quest",
+    "titleFr": "Trois favoris pour le badge Curateur",
+    "titleEn": "Earn the Curator badge with three favorites",
+    "bodyFr": "1. Connectez-vous et ouvrez « Découverte et récompenses ». Dans l’onglet « Quêtes », trouvez « Curateur du catalogue » et choisissez « Participer ».\n\n2. Ouvrez chacune des trois fiches de la collection « Les nuits d’Habibi » ci-dessous. Touchez l’étoile de chaque fiche pour l’ajouter à vos favoris. La quête suit les ajouts effectués après votre inscription.\n\n3. Revenez à la quête. À 3 sur 3, choisissez « Réclamer ». Dans « Mon profil », vous pouvez ensuite équiper le badge Curateur.",
+    "bodyEn": "1. Sign in and open Discovery & rewards. In the Quests tab, find “Lobby Curator” and choose “Join quest.”\n\n2. Open each of the three Habibi Nights previews listed below. Select the star on each preview to add it to your favorites. The quest counts new saves after you join.\n\n3. Return to the quest. At 3 of 3, choose “Claim reward.” You can then equip your Curator badge in My profile.",
+    "linkFr": "Ouvrir Les lanternes du souk",
+    "linkEn": "Open Lanterns of the Souk",
+    "target": "title/lanterns-of-the-souk-demo",
+    "collection": "habibi nights",
+    "seoTitleFr": "La quête des trois favoris",
+    "seoTitleEn": "The three-favorites quest",
+    "seoDescriptionFr": "Ajoutez trois fiches démo à vos favoris dans Les nuits d’Habibi et réclamez le badge Curateur du catalogue.",
+    "seoDescriptionEn": "Save three demo previews in Habibi Nights and claim the Lobby Curator badge."
+  }
+}
