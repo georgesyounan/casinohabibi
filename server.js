@@ -774,7 +774,7 @@ async function api(req, res, path, tenantId, requestId) {
       ctx.fixture=db.prepare('SELECT report_fixture FROM players WHERE id=? AND tenant_id=?').get(player,tenantId).report_fixture;
       ctx.scope=ctx.fixture?'test':'site';
       return {name:partner.name,code:partner.code,link:'/r/'+partner.code,creatives:growth.approved(tenantId,partner.id,Date.now(),catalogueLocale),
-        report:growth.report(ctx,{},partner)};
+        report:growth.report(ctx,{links:params.get('links')},partner)};
     },{readOnly:true});
   }
   if(route==='GET /api/community'){
@@ -785,8 +785,25 @@ async function api(req, res, path, tenantId, requestId) {
     if(!player)fail(401,'signin');
     const input=await body(req);return transaction(()=>community.mutate(tenantId,player,path.slice('/api/community/'.length),input));
   }
+  if (route==='GET /api/admin/growth/reviews') {
+    staffContext(req,tenantId,supportRoles);
+    return transaction(()=>growth.links.reviews(tenantId,params),{readOnly:true});
+  }
+  if (route==='GET /api/admin/growth/partners') {
+    staffContext(req,tenantId,['operator_admin']);
+    return transaction(()=>growth.links.directory(tenantId,params),{readOnly:true});
+  }
+  const partnerLinks=path.match(/^\/api\/admin\/growth\/partners\/([1-9]\d{0,14})\/links$/);
+  if (req.method==='GET' && partnerLinks) {
+    staffContext(req,tenantId,['operator_admin']);
+    return transaction(()=>growth.links.forPartner(tenantId,Number(partnerLinks[1])),{readOnly:true});
+  }
   if(route==='GET /api/admin/growth'){
     const staff=staffContext(req,tenantId,['operator_admin','operator_content','operator_support']);
+    if(params.get('view')==='report'){
+      if(!supportRoles.includes(staff.role))fail(403,'staffForbidden');
+      return transaction(()=>growth.reportFilters(tenantId),{readOnly:true});
+    }
     const all=growth.staff(tenantId);
     const previewOptions=params.get('view')==='placements'&&websiteRoles.includes(staff.role)&&comingSoonEnabled(tenantId)
       ?comingSoon.previewOptions(tenantId,catalogueAudience(tenantId)):[];
@@ -801,7 +818,7 @@ async function api(req, res, path, tenantId, requestId) {
     staffContext(req,tenantId,['operator_admin']);return testCredits.history(tenantId,Number(params.get('player')));
   }
   if(req.method==='POST' && path.startsWith('/api/admin/growth/')){
-    const handlers={partner:growth.partner,placement:growth.edit,review:growth.decide,spend:growth.spend,experiment:growth.experiment,poll:community.managePoll,credits:testCredits.post};
+    const handlers={partner:growth.partner,link:growth.links.manage,placement:growth.edit,review:growth.decide,spend:growth.spend,experiment:growth.experiment,poll:community.managePoll,credits:testCredits.post};
     const key=path.slice('/api/admin/growth/'.length);
     if(!Object.hasOwn(handlers,key))fail(404,'invalid');
     const roles=key==='review'?supportRoles:['poll','placement'].includes(key)?websiteRoles:['operator_admin'];
@@ -1017,7 +1034,7 @@ async function api(req, res, path, tenantId, requestId) {
         if (!Number.isSafeInteger(value) || value < 1) fail(400, 'invalid');
         return value;
       };
-      return { ...playerAccess.detail(tenantId, id), supportCases: supportCases.profile(tenantId,id), rounds: playerAccess.rounds(tenantId, id, cursor('round'), cursor('beforeRound')), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
+      return { ...playerAccess.detail(tenantId, id), supportCases: supportCases.profile(tenantId,id), referral: growth.links.profile(tenantId,id), rounds: playerAccess.rounds(tenantId, id, cursor('round'), cursor('beforeRound')), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
     }
     if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
     const input = await body(req);
@@ -2090,6 +2107,7 @@ const assets = {
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/growth-player.js':['growth-player.js','text/javascript'],
+  '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/contact-views.js': ['contact-views.js','text/javascript'],
   '/discovery.js': ['discovery.js', 'text/javascript'],
@@ -2141,11 +2159,11 @@ createServer(async (req, res) => {
       return res.end(JSON.stringify({ status: 'ready', requestId }));
     }
     tenantId = resolveTenant(req);
-    const tagged=req.method==='GET'&&path.match(/^\/(r|go)\/([a-z0-9][a-z0-9-]{1,47})$/);
-    if(tagged){
+    const tagged=req.method==='GET' && path.match(/^\/(r|go)\/([a-z0-9][a-z0-9-]{1,47})(?:\/([a-z0-9][a-z0-9-]{0,47}))?$/);
+    if(tagged && (tagged[1]==='r' || !tagged[3])){
       const requested=requestUrl.searchParams.get('lang');
       const locale=requested==='fr'?'fr-CA':requested==='en'?'en-CA':null;
-      const click=transaction(()=>growth.click(tenantId,tagged[1],tagged[2],referralCookie(req),signedPlayer(req,tenantId),Date.now(),locale));
+      const click=transaction(()=>growth.click(tenantId,tagged[1],tagged[2],referralCookie(req),signedPlayer(req,tenantId),Date.now(),locale,tagged[3]));
       const lang=click.locale?.slice(0,2)||requested;
       res.setHeader('Set-Cookie',`habibi_ref=${click.token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secureCookie}`);
       res.writeHead(302,{Location:appBasePath+click.path+(['fr','en'].includes(lang)?'?lang='+lang:''),'Cache-Control':'private, no-store','Referrer-Policy':'same-origin'});

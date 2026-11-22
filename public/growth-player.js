@@ -1,3 +1,4 @@
+import { shareLink, showLinkReport, linkReportRows } from './referral-views.js';
 import { uiKit } from './discovery.js';
 export const growthCopy = {
   growth: ['Acquisition', 'Acquisition'],
@@ -12,6 +13,10 @@ export const growthCopy = {
     'This invitation has expired, was used, or was revoked.',
     'Cette invitation a expiré, a déjà servi ou a été révoquée.'
   ],
+  playerReferral: ['Referral', 'Parrainage'],
+  referralOwnerMissing: ['Enter the email or number of a verified player account.', 'Entrez le courriel ou le numéro d’un compte joueur vérifié.'],
+  referralLinkName: ['Include a letter or number in the link name.', 'Ajoutez une lettre ou un chiffre au nom du lien.'],
+  referralLinkExists: ['This partner already has a link with this address. Choose a different name.', 'Ce partenaire possède déjà un lien à cette adresse. Choisissez un autre nom.'],
   referralInvalid: [
     'Check the referral code or leave it empty.',
     'Vérifiez le code de parrainage ou laissez le champ vide.'
@@ -30,8 +35,9 @@ export const growthCopy = {
   ]
 };
 export function downloadReport(name, rows) {
+  const safeCell=cell=>typeof cell==='string'&&/^\s*[=+@-]/.test(cell)?"'"+cell:String(cell??'');
   const csv = rows
-    .map((row) => row.map((cell) => '"' + String(cell ?? '').replace(/"/g, '""') + '"').join(','))
+    .map((row) => row.map((cell) => '"' + safeCell(cell).replace(/"/g, '""') + '"').join(','))
     .join('\r\n');
   const link = document.createElement('a'),
     url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
@@ -103,77 +109,61 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
       }
     }
   }
-  function share(root, value) {
-    const label = el('label', l('Share link', 'Lien à partager')),
-      input = el('input');
-    input.value = value;
-    input.readOnly = true;
-    label.append(input);
-    root.append(
-      label,
-      button(
-        l('Copy link', 'Copier le lien'),
-        async (e) => {
-          try {
-            await navigator.clipboard.writeText(value);
-            e.currentTarget?.setAttribute('aria-label', l('Copied', 'Copié'));
-          } catch {
-            input.focus();
-            input.select();
-          }
-        },
-        true
-      )
-    );
-  }
+  const ui=uiKit(french);
+  const share=(root,value)=>shareLink(root,value,ui);
+  const urlFor=path=>location.origin+appPath(path+'?lang='+(french()?'fr':'en'));
   async function partner(root) {
-    let days = '30';
-    async function refresh() {
-      try {
-        const p = await get('growth/partner?days=' + days+'&locale='+(french()?'fr-CA':'en-CA'));
-        root.replaceChildren(
-          el('h3', p.name),
-          el('p', l('Signup code', 'Code d’inscription') + ' · ' + p.code)
-        );
-        share(root, location.origin + appPath(p.link));
-        const scope = field(root, 'days', l('Reporting period', 'Période'), {
-          items: ['7', '30', '90'].map((n) => [n, n + l(' days', ' jours')]),
-          value: days
-        });
-        scope.onchange = () => {
-          days = scope.value;
-          refresh();
-        };
-        const rows = reportRows(p.report, l);
-        const list = el('dl', '', 'growth-metrics');
-        for (const [label, value] of rows.slice(3, 8)) list.append(el('dt', label), el('dd', value));
-        root.append(
-          el('p', p.report.period.from + ' – ' + p.report.period.to + ' · ' + p.report.period.zone),
-          list,
-          button(
-            l('Export aggregate counts', 'Exporter les totaux'),
-            () => downloadReport('referrals-' + p.code + '.csv', rows),
-            true
-          )
-        );
-        const cards = el('div');
-        root.append(el('h3', l('Approved creatives', 'Publicités approuvées')), cards);
-        pages(
-          cards,
-          p.creatives,
-          (c) => {
-            const n = el('article', '', 'discovery-card');
-            n.append(el('strong', local(c, 'title')), el('p', local(c, 'text')), el('small', date(c.expires)));
-            share(n, location.origin + appPath('/go/' + c.slug+'?lang='+(french()?'fr':'en')));
-            return n;
-          },
-          l('No active creative.', 'Aucune publicité active.')
-        );
-      } catch (e) {
-        root.replaceChildren(el('p', t(e.message)));
+    const title=el('h3',l('Partner portal','Portail partenaire')),main=el('div');
+    const form=el('form','','discovery-filters'),body=el('div');
+    const period=field(form,'days',l('Reporting period','Période'),{
+      items:[...['7','30','90'].map(n=>[n,n+l(' days',' jours')]),['custom',l('Custom dates','Dates personnalisées')]],value:'30'});
+    const from=field(form,'from',l('From','Du'),{type:'date'}),to=field(form,'to',l('To','Au'),{type:'date'});
+    const apply=el('button',l('Apply dates','Appliquer les dates'));
+    const status=el('p','','discovery-feedback');status.setAttribute('role','status');
+    form.append(apply);
+    root.replaceChildren(title,main,form,status,body);
+    let generation=0;
+    function syncDates(){
+      const custom=period.value==='custom';
+      for(const input of [from,to]){input.closest('label').hidden=!custom;input.required=custom;}
+      apply.hidden=!custom;
+    }
+    async function refresh(){
+      const request=++generation;
+      const params=new URLSearchParams({locale:french()?'fr-CA':'en-CA',links:'1'});
+      if(period.value==='custom'){if(!form.reportValidity())return;params.set('from',from.value);params.set('to',to.value);}
+      else params.set('days',period.value);
+      status.textContent=t('loading');body.replaceChildren();
+      try{
+        const p=await get('growth/partner?'+params);
+        if(request!==generation||!body.isConnected)return;
+        const report=p.report;
+        status.textContent='';
+        title.textContent=p.name;
+        main.replaceChildren(el('p',l('Signup code','Code d’inscription')+' · '+p.code));
+        share(main,urlFor(p.link));
+        if(period.value!=='custom'){from.value=report.period.from;to.value=report.period.to;}
+        const totals=reportRows(report,l),rows=[...totals,...linkReportRows(report,l)];
+        const list=el('dl','','growth-metrics');
+        for(const [label,value] of totals.slice(3,8))list.append(el('dt',label),el('dd',value));
+        body.append(el('p',report.period.from+' – '+report.period.to+' · '+report.period.zone),list,
+          button(l('Export aggregate counts','Exporter les totaux'),()=>downloadReport('referrals-'+p.code+'.csv',rows),true));
+        showLinkReport(body,report,ui,urlFor);
+        const creative=el('details'),cards=el('div');
+        creative.append(el('summary',l('Approved creatives','Publicités approuvées')+' ('+p.creatives.length+')'),cards);
+        body.append(creative);
+        pages(cards,p.creatives,c=>{
+          const item=el('article','','discovery-card');
+          item.append(el('strong',local(c,'title')),el('p',local(c,'text')),el('small',date(c.expires)));
+          share(item,urlFor('/go/'+c.slug));return item;
+        },l('No active creative.','Aucune publicité active.'));
+      }catch(e){
+        if(request===generation&&body.isConnected){status.textContent=t(e.message);body.replaceChildren(button(l('Try again','Réessayer'),refresh,true));}
       }
     }
-    await refresh();
+    period.onchange=()=>{++generation;syncDates();if(period.value!=='custom')void refresh();};
+    form.onsubmit=e=>{e.preventDefault();void refresh();};
+    syncDates();await refresh();
   }
   async function community(root) {
     const message = el('p');
