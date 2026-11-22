@@ -29,6 +29,7 @@
 </section>
 <section class="welcome-rail" aria-label="Key information"><div><span class="rail-mark">CAD</span><span data-copy="cadDisplay"></span></div><div><span class="rail-mark">EN / FR</span><span data-copy="twoLanguages"></span></div><div><span class="rail-mark">DEMO</span><span data-copy="simulatedOnly"></span></div></section>
 <section id="games" class="games"><div class="section-title"><div><p class="eyebrow" data-copy="lobbyEyebrow"></p><h2 data-copy="games"></h2><p class="section-intro" data-copy="gamesIntro"></p></div></div>
+<button id="open-discovery" type="button" class="ghost discovery-launch" data-copy="discovery"></button>
 <div id="catalog-controls" class="catalog-controls" hidden><label class="game-search"><span data-copy="searchGames"></span><input id="game-search" type="search" maxlength="120" autocomplete="off"></label>
 <label id="catalog-collection-control" class="provider-sort" hidden><span data-copy="catalogueCollection"></span><select id="catalog-collection"></select></label>
 <label id="provider-sort-control" class="provider-sort" hidden><span data-copy="providerSortLabel"></span><select id="provider-sort"><option value="recent" data-copy="providerSortRecent"></option><option value="alpha" data-copy="providerSortAlpha"></option></select></label>
@@ -80,6 +81,7 @@
           <li><a href="#overview" data-admin-link data-admin-primary data-copy="adminNavDashboard"></a></li>
           <li><a href="#game-catalog" data-admin-link data-admin-primary data-copy="adminNavCatalogue"></a></li>
           <li><a href="#coming-soon-saves" data-admin-link data-admin-primary data-copy="adminNavPlayers"></a></li>
+          <li><a href="#engagement" data-admin-link data-admin-primary data-copy="discovery"></a></li>
           <li><a href="#support-inbox" data-admin-link data-admin-primary data-copy="supportInbox"></a></li>
         </ul>
         <p data-copy="adminSettings"></p>
@@ -298,6 +300,13 @@
               <tbody id="coming-soon-saves-body"></tbody>
             </table></div>
             <div class="actions" id="saves-pages" hidden><button type="button" class="ghost" id="saves-previous" data-copy="playerPrevious"></button><span id="saves-page-count" role="status"></span><button type="button" class="ghost" id="saves-next" data-copy="playerNext"></button></div>
+        </section>
+        <section id="engagement" class="admin-page" data-admin-view data-roles="operator_admin,operator_content,operator_support" aria-labelledby="engagement-heading" hidden>
+          <h2 id="engagement-heading" tabindex="-1" data-admin-heading data-copy="discovery"></h2>
+          <nav class="admin-subnav discovery-tabs" aria-label="Discovery"><a href="#engagement-programs" data-admin-link data-roles="operator_admin,operator_content" data-copy="discoveryAdmin"></a><a href="#engagement-campaigns" data-admin-link data-roles="operator_admin,operator_content" data-copy="campaignAdmin"></a><a href="#engagement-report" data-admin-link data-roles="operator_admin,operator_support" data-copy="discoveryReports"></a></nav>
+          <section id="engagement-programs" data-admin-panel data-roles="operator_admin,operator_content" hidden><h3 data-admin-heading tabindex="-1" data-copy="discoveryAdmin"></h3><div id="engagement-programs-body"></div></section>
+          <section id="engagement-campaigns" data-admin-panel data-roles="operator_admin,operator_content" hidden><h3 data-admin-heading tabindex="-1" data-copy="campaignAdmin"></h3><div id="engagement-campaigns-body"></div></section>
+          <section id="engagement-report" data-admin-panel data-roles="operator_admin,operator_support" hidden><h3 data-admin-heading tabindex="-1" data-copy="discoveryReports"></h3><div id="engagement-report-body"></div></section>
         </section>
         <section id="support-inbox" class="admin-page" data-admin-view data-roles="operator_admin,operator_support" aria-labelledby="support-inbox-title" hidden>
           <div class="admin-page-heading">

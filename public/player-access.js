@@ -1,7 +1,7 @@
 import { showBreakPeriod } from './account-break.js';
 
 export const playerAccessCopy = {
-  playerSearchLabel: ['Email, player ID, save or activity reference', 'Courriel, numéro de joueur, référence de favori ou d’activité'],
+  playerSearchLabel: ['Email, player ID, save, activity or claim reference', 'Courriel, numéro de joueur, référence de favori, d’activité ou de réclamation'],
   playerFavoriteHistory: ['Favorite activity', 'Historique des favoris'],
   playerNoFavorites: ['No favorite activity yet.', 'Aucune activité de favoris.'],
   playerAddedFavorite: ['Added to favorites', 'Ajout aux favoris'],
@@ -95,6 +95,12 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     byId('player-record-summary').textContent = ['player-' + player.id, t(suspended ? 'playerSuspendedState' : 'playerActive'),
       t(player.emailVerified ? 'playerVerified' : 'playerUnverified'), t('playerSessions') + ' · ' + player.activeSessions].join('　|　');
     renderBreak();
+    const earned=player.discovery||[];
+    const list=byId('player-reward-list');
+    list.replaceChildren(...earned.map(i=>{
+      const line=element('li');line.textContent=[i.spec[locale()==='fr-CA'?'titleFr':'titleEn'],i.marks.length+'/'+i.goal,i.award && 'grant-'+i.award.grantId,i.award?.claimId && 'claim-'+i.award.claimId].filter(Boolean).join(' · ');return line;
+    }));
+    byId('player-reward-details').hidden=!earned.length;
     const actions = byId('player-record-actions');
     actions.replaceChildren();
     if (!suspended) actions.append(action(t('playerSendRecovery'), () => change('recovery'), 'ghost'));

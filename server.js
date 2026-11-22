@@ -13,6 +13,9 @@ import { createPublicPages, guideBody, pageHead, sitemapXml } from './lib/public
 import { createPublicationFollowup } from './lib/publication-followup.js';
 import { createSavedTitles } from './lib/saved-titles.js';
 import { changedFields, createStaffAudit } from './lib/staff-audit.js';
+import { createRewards } from './lib/rewards.js';
+import { createCommunications } from './lib/communications.js';
+import { engagementReport } from './lib/engagement-reports.js';
 import { createAccountBreaks } from './lib/account-breaks.js';
 import { createPlayerAccess, installPlayerAccess } from './lib/player-access.js';
 
@@ -266,7 +269,11 @@ if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === '
 db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 installComingSoon(db);
 const accountBreaks = createAccountBreaks(db, { fail, transaction });
-const savedTitles = createSavedTitles(db, { fail, transaction });
+const savedTitles = createSavedTitles(db, { fail, transaction, onSave(tenant,player,titleId,activity,now) {
+  const slug = db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenant,titleId)?.slug;
+  const title = slug && comingSoon.published(tenant,slug,catalogueAudience(tenant));
+  if (title) rewards.observe(tenant,player,'save',titleId,'activity-'+activity,now,{collections:[title.collectionEn,title.collectionFr]});
+} });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 installPlayerAccess(db, transaction);
@@ -277,6 +284,26 @@ const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath });
+const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record});
+transaction(()=>{for(const {id} of db.prepare('SELECT id FROM tenants').all()) rewards.seed(id);});
+function discoveryDestination(tenant,path) {
+  const [,section,slug]=path.split('/');
+  const config=publishedTenantConfig(tenant).config;
+  return section==='coming-soon' ? comingSoonEnabled(tenant) && comingSoon.published(tenant,slug,catalogueAudience(tenant))
+    : section==='help' && config.enabledLocales.some(locale=>websiteContent.resolveGuide(tenant,config,slug,locale));
+}
+const communications = createCommunications(db,{fail,transaction,accountBreaks,audit:staffAudit.record,mailEnabled,
+  zoneFor: tenant=>publishedTenantConfig(tenant).config.reportingTimeZone || 'UTC', validDestination:discoveryDestination,
+  send: async d=>{
+    const host=db.prepare('SELECT host FROM tenant_domains WHERE tenant_id=? AND verified=1 ORDER BY (host=?) DESC,host LIMIT 1').get(d.tenant,publicSite?.hostname || '');
+    if (!host || !/^[a-z0-9.-]+$/i.test(host.host)) throw new Error('Missing verified destination');
+    const link=d.destination?'\n\nhttps://'+host.host+appBasePath+d.destination:'';
+    await deliverTransactionalEmail(d.email,d.subject,d.text+link,'casino-campaign-'+d.tenant+'-'+d.id);
+  }
+});
+let lastCampaignWake=0;
+const dispatchCampaigns=()=>communications.dispatch().catch(()=>console.warn(JSON.stringify({event:'campaign_dispatch_failed'})));
+if(process.env.DISABLE_CAMPAIGN_WORKER!=='1') setInterval(dispatchCampaigns,30_000).unref();
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -657,7 +684,7 @@ async function api(req, res, path, tenantId, requestId) {
     JOIN players p ON p.id = s.player AND p.tenant_id = s.tenant_id AND p.access_status = 'active'
     WHERE s.token = ? AND s.tenant_id = ? AND s.expires > ?`).get(hash(cookie), tenantId, Date.now())?.player;
   const player = activeSession();
-  if (player && req.method !== 'GET' && /^\/api\/(?:account\/|me\/saved\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
+  if (player && req.method !== 'GET' && /^\/api\/(?:discovery\/|growth\/|community\/|account\/|me\/saved\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
     req.assertPlayerSession = () => { if (activeSession() !== player) fail(401, 'signin'); };
   }
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -696,6 +723,63 @@ async function api(req, res, path, tenantId, requestId) {
   const savedResource = ['PUT', 'DELETE'].includes(req.method) && path.match(/^\/api\/me\/saved\/([1-9]\d{0,15})$/);
   if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
+  const params = new URL(req.url,'http://localhost').searchParams;
+  if (route==='GET /api/admin/discovery/programs') { staffContext(req,tenantId,websiteRoles); return rewards.staff(tenantId); }
+  if (route==='GET /api/admin/discovery/campaigns') { staffContext(req,tenantId,websiteRoles); return {items:communications.staff(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone || 'UTC'}; }
+  if (route==='POST /api/admin/discovery/programs' || route==='POST /api/admin/discovery/campaigns') {
+    staffContext(req,tenantId,websiteRoles);
+    const input=await body(req);
+    const program=path.endsWith('/programs');
+    return auditedChange(websiteRoles,input,actor=>program?rewards.edit(tenantId,actor.id,requestId,input):communications.edit(tenantId,actor.id,requestId,input),
+      input.action==='save'?undefined:'publishWebsite');
+  }
+  if (route==='POST /api/admin/discovery/dispatch') {
+    const input=await body(req);
+    const result=auditedChange(websiteRoles,input,actor=>({auditId:staffAudit.record(tenantId,actor.id,'campaign_dispatch','campaigns',requestId,{fields:['dispatch']})}),'publishWebsite');
+    await communications.dispatch(Date.now(),tenantId);
+    return result;
+  }
+  if (route==='GET /api/admin/discovery/report') {
+    staffContext(req,tenantId,supportRoles);
+    return transaction(()=>engagementReport(db,dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,Date.now()),params,fail),{readOnly:true});
+  }
+  if (route==='GET /api/discovery/activity') {
+    if(!player) fail(401,'signin');
+    return savedTitles.history(tenantId,player,{limit:8});
+  }
+  if (route==='GET /api/discovery') {
+    if(!player) fail(401,'signin');
+    return transaction(()=>{
+      const state=rewards.state(tenantId,player);
+      for(const item of state.items.filter(i=>i.spec.template==='Q09')) {
+        item.previews=item.spec.pair.map(id=>db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenantId,id))
+          .map(r=>r&&discoveryDestination(tenantId,'/coming-soon/'+r.slug)).filter(Boolean).map(({slug,titleEn,titleFr})=>({slug,titleEn,titleFr}));
+      }
+      return {...state,choices:communications.choices(tenantId,player),messages:communications.inbox(tenantId,player)};
+    },{readOnly:true});
+  }
+  if (req.method==='POST' && /^\/api\/discovery\/[a-z]+$/.test(path)) {
+    if(!player) fail(401,'signin');
+    const input=await body(req);
+    return transaction(()=>{
+      req.assertPlayerSession();
+      if(path.endsWith('/join')) return rewards.join(tenantId,player,input.id);
+      if(path.endsWith('/claim')) return rewards.claim(tenantId,player,input.ids);
+      if(path.endsWith('/equip')) return rewards.equip(tenantId,player,input.slot,input.claimId);
+      if(path.endsWith('/preferences')) return communications.choose(tenantId,player,input);
+      if(path.endsWith('/read')) return communications.read(tenantId,player,input.id);
+      if(path.endsWith('/visit')) {
+        const {kind,key}=input;
+        if(kind==='guideAck' && typeof key==='string' && discoveryDestination(tenantId,'/help/'+key)) rewards.observe(tenantId,player,kind,key,'guide-'+key);
+        else if(kind==='shelf') rewards.observe(tenantId,player,'shelf','shelf','shelf');
+        else if(['activity','activityAck'].includes(kind) && Number.isSafeInteger(key) && rewards.owner(tenantId,'activity-'+key)===player) rewards.observe(tenantId,player,kind,key,'activity-'+key);
+        else if(kind==='collection' && typeof key==='string' && key && comingSoonEnabled(tenantId) && comingSoon.hasCollection(tenantId,catalogueAudience(tenantId),key)) rewards.observe(tenantId,player,kind,key,'collection-'+key);
+        else fail(404,'discoveryMissing');
+        return {ok:true};
+      }
+      fail(404,'invalid');
+    });
+  }
   if (player && req.method === 'GET' && (path === '/api/account' || path === '/api/coming-soon' || path.startsWith('/api/coming-soon/'))) dashboard.recordVisit(tenantId, player);
   if (route === 'GET /api/website-content') {
     return websiteContent.lobby(tenantId, publishedTenantConfig(tenantId).config, catalogueLocale);
@@ -704,6 +788,7 @@ async function api(req, res, path, tenantId, requestId) {
   if (helpPage) {
     const page = websiteContent.resolveGuide(tenantId, publishedTenantConfig(tenantId).config, helpPage[1], catalogueLocale);
     if (!page) fail(404, 'siteContentMissing');
+    if(player) transaction(()=>rewards.observe(tenantId,player,'guide',page.slug,'guide-'+page.slug));
     return page;
   }
   if (route === 'GET /api/admin/website-content') {
@@ -731,6 +816,7 @@ async function api(req, res, path, tenantId, requestId) {
   if (preview) {
     const title = comingSoonEnabled(tenantId) && comingSoon.published(tenantId, preview[1], catalogueAudience(tenantId, catalogueLocale || 'default'));
     if (!title) fail(404, 'comingSoonMissing');
+    if(player) transaction(()=>rewards.observe(tenantId,player,'preview',title.id,'preview-'+title.id));
     return title;
   }
   const draftPreview = route.match(/^GET \/api\/admin\/coming-soon\/preview\/([a-z0-9-]{1,64})$/);
@@ -765,6 +851,10 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/admin/players') {
     staffContext(req, tenantId, supportRoles);
     const query = new URL(req.url, 'http://localhost').searchParams.get('q')?.trim().toLowerCase() || '';
+    if (/^claim-[1-9]\d*$/.test(query)) {
+      const id=rewards.owner(tenantId,query);
+      return id ? [playerAccess.get(tenantId,id)] : [];
+    }
     return playerAccess.search(tenantId, query);
   }
   const playerRoute = path.match(/^\/api\/admin\/players\/([1-9]\d*)(?:\/(access|recovery|break))?$/);
@@ -785,7 +875,7 @@ async function api(req, res, path, tenantId, requestId) {
         if (!Number.isSafeInteger(value) || value < 1) fail(400, 'invalid');
         return value;
       };
-      return { ...playerAccess.detail(tenantId, id), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
+      return { ...playerAccess.detail(tenantId, id), discovery: rewards.state(tenantId,id).items.filter(i=>i.startedAt || i.award), accountBreak: accountBreaks.at(tenantId, id), savedActivity: savedTitles.history(tenantId, id, { activityId: cursor('activity'), before: cursor('beforeActivity') }) };
     }
     if (req.method !== 'POST' || !playerRoute[2]) fail(404, 'invalid');
     const input = await body(req);
@@ -1027,7 +1117,8 @@ async function api(req, res, path, tenantId, requestId) {
           db.prepare("INSERT INTO tenants(id, slug, name, status, created_at) VALUES (?, ?, ?, 'pending', ?)").run(id, slug, name.trim(), Date.now());
           const config = { ...defaultTenantConfig, brandName: name.trim() };
           db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, 1, ?, 'published', ?)").run(id, JSON.stringify(config), Date.now());
-          db.prepare("INSERT INTO platform_events(tenant_id, action, target, created_at, correlation_id) VALUES (?, 'tenant_created', ?, ?, ?)").run(id, slug, Date.now(), requestId);
+          rewards.seed(id);
+        db.prepare("INSERT INTO platform_events(tenant_id, action, target, created_at, correlation_id) VALUES (?, 'tenant_created', ?, ?, ?)").run(id, slug, Date.now(), requestId);
         });
       } catch (error) {
         if (String(error.message).includes('UNIQUE')) fail(409, 'tenantSlugTaken');
@@ -1375,6 +1466,9 @@ async function api(req, res, path, tenantId, requestId) {
       favorites,
       previewSaveHistory: comingSoon.playerSaves(tenantId, player),
       previewSaveActivity: savedTitles.history(tenantId, player, { limit: -1 }).entries,
+      discovery: rewards.state(tenantId,player),
+      contactPreferences: communications.choices(tenantId,player),
+      inbox: communications.inbox(tenantId,player,-1),
       simulatedBalanceCents: balance(player, tenantId),
       responsiblePlay: { accountBreak: accountBreaks.at(tenantId, player), dailyLimitCents: safety.dailyLimitCents ?? 2500, dailyWageredCents, dailyWagerDateUtc, sessionReminderMinutes: safety.sessionReminderMinutes ?? 60, pausedUntil: safety.pausedUntil || null, coolingOffUntil: safety.coolingOffUntil || null, selfExcluded: Boolean(safety.excludedAt), history: protectionHistory },
       marketingEmailConsent: Boolean(consents.at(-1)?.granted),
@@ -1457,7 +1551,7 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/support') {
     if (!player) fail(401, 'signin');
-    const { category, message } = await body(req, 8192);
+    const { category, message, reference } = await body(req, 8192);
     if (!['account', 'game', 'responsible_play', 'other', 'complaint'].includes(category) || typeof message !== 'string' || message.trim().length < 10 || message.trim().length > 3000) fail(400, 'invalid');
     const recent = db.prepare("SELECT count(*) AS count FROM support_tickets WHERE player_id = ? AND tenant_id = ? AND created_at > ?").get(player, tenantId, Date.now() - 60 * 60 * 1000).count;
     if (recent >= 5) fail(429, 'supportRateLimited');
@@ -1467,6 +1561,7 @@ async function api(req, res, path, tenantId, requestId) {
     const ticketId = transaction(() => {
       const result = db.prepare("INSERT INTO support_tickets(tenant_id, player_id, category, is_complaint, message, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)").run(tenantId, player, storedCategory, Number(isComplaint), message.trim(), now, now);
       const id = Number(result.lastInsertRowid);
+      rewards.link(tenantId,player,id,reference);
       db.prepare("INSERT INTO support_ticket_messages(tenant_id, ticket_id, author_type, player_id, message, created_at) VALUES (?, ?, 'player', ?, ?, ?)").run(tenantId, id, player, message.trim(), now);
       return id;
     });
@@ -1496,7 +1591,7 @@ async function api(req, res, path, tenantId, requestId) {
     const total = db.prepare('SELECT count(*) AS count FROM support_tickets WHERE tenant_id = ?').get(tenantId).count;
     const counts = { open: 0, answered: 0, closed: 0 };
     for (const row of db.prepare('SELECT status, count(*) AS count FROM support_tickets WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = row.count;
-    const ticketQuery = 'SELECT t.id, t.player_id AS playerId, p.email, profile.display_name AS displayName, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt, safety.excluded_at AS playerExcludedAt, safety.cooling_off_until AS playerCoolingOffUntil, safety.pause_until AS playerPauseUntil FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to LEFT JOIN player_safety safety ON safety.player = p.id AND t.category = \'responsible_play\' AND t.is_complaint = 0 WHERE t.tenant_id = ?';
+    const ticketQuery = 'SELECT t.id,(SELECT reference FROM support_case_links WHERE ticket=t.id) AS reference, t.player_id AS playerId, p.email, profile.display_name AS displayName, t.category, t.is_complaint AS isComplaint, t.message, t.status, t.priority, t.assigned_to AS assignedTo, owner.email AS assignedEmail, t.created_at AS createdAt, t.updated_at AS updatedAt, safety.excluded_at AS playerExcludedAt, safety.cooling_off_until AS playerCoolingOffUntil, safety.pause_until AS playerPauseUntil FROM support_tickets t JOIN players p ON p.id = t.player_id AND p.tenant_id = t.tenant_id LEFT JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = t.tenant_id LEFT JOIN staff_accounts owner ON owner.id = t.assigned_to LEFT JOIN player_safety safety ON safety.player = p.id AND t.category = \'responsible_play\' AND t.is_complaint = 0 WHERE t.tenant_id = ?';
     const pageRows = cursorUpdatedAt === null
       ? db.prepare(`${ticketQuery} ORDER BY t.updated_at DESC, t.id DESC LIMIT 201`).all(tenantId)
       : db.prepare(`${ticketQuery} AND (t.updated_at < ? OR (t.updated_at = ? AND t.id < ?)) ORDER BY t.updated_at DESC, t.id DESC LIMIT 201`).all(tenantId, Number(cursorUpdatedAt), Number(cursorUpdatedAt), Number(cursorId));
@@ -1822,6 +1917,8 @@ const assets = {
   '/website-content.js': ['website-content.js', 'text/javascript'],
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
+  '/discovery.js': ['discovery.js', 'text/javascript'],
+  '/discovery-admin.js': ['discovery-admin.js', 'text/javascript'],
   '/account-break.js': ['account-break.js', 'text/javascript'],
   '/player-access.js': ['player-access.js', 'text/javascript'],
   '/coming-soon.js': ['coming-soon.js', 'text/javascript'],
@@ -1863,6 +1960,7 @@ createServer(async (req, res) => {
       return res.end(JSON.stringify({ status: 'ok', requestId }));
     }
     if (req.method === 'GET' && path === '/readyz') {
+      if(process.env.DISABLE_CAMPAIGN_WORKER!=='1' && Date.now()-lastCampaignWake>=60_000){lastCampaignWake=Date.now();void dispatchCampaigns();}
       db.prepare('SELECT 1').get();
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.end(JSON.stringify({ status: 'ready', requestId }));

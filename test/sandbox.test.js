@@ -1587,3 +1587,94 @@ test('P1 recovery drill restores account, catalogue, saved activity, website rev
     assert.equal((await client(source.base)('help/saved-titles')).status, 404);
   });
 });
+test('discovery quests use distinct eligible saves, preserve progress across sessions, and reconcile stock, profile and cases', async t => {
+  const {base,database}=await startSandbox(t);
+  const [staff,a,b,other]=Array.from({length:4},()=>client(base));
+  await staff('admin/login',staffCredentials);
+  await register(a);const id=(await b('login',playerCredentials)).data.id;
+  const alt={email:'discovery-second@example.test',password:'another-test-password'};
+  const signup=await other('signup',alt);await other('email-verification/complete',{token:new URL(signup.data.verifyUrl).searchParams.get('verify')});await other('login',alt);
+  const program=(await a('discovery')).data.items.find(i=>i.spec.template==='Q01');
+  const spec={...program.spec,titleEn:'Collector',stock:1};
+  const draft=(await staff('admin/discovery/programs',{action:'save',version:0,spec})).data;
+  const published=await staff('admin/discovery/programs',{action:'publish',id:draft.id,version:1});assert.equal(published.status,200);
+  assert.equal((await staff('admin/discovery/programs',{action:'publish',id:draft.id,version:1})).status,409);
+  const ids=[];
+  for(const text of ['River','Mountains','Night','Sunrise']){
+    const c=(await staff('admin/coming-soon',cardDraft(text))).data.title;
+    await staff('admin/coming-soon',{slug:c.slug,version:c.version,action:'publish'});ids.push(c.id);
+  }
+  const save=(session,n,headers={})=>session('me/saved/'+ids[n],undefined,undefined,headers,'PUT');
+  const remove=(session,n)=>session('me/saved/'+ids[n],undefined,undefined,{},'DELETE');
+  const current=async who=>(await who('discovery')).data.items.find(i=>i.id===draft.id);
+  await save(a,0);
+  for(const who of [a,other])assert.equal((await who('discovery/join',{id:draft.id})).status,200);
+  const req={'X-Request-ID':randomUUID()};await save(a,1,req);await save(b,1,req);await remove(b,1);await save(a,1);await save(a,2);
+  assert.equal((await current(b)).marks.length,2);
+  await a('safety/pause',{});await save(b,3);assert.equal((await current(a)).marks.length,2);
+  assert.equal((await a('discovery/join',{id:program.id})).data.error,'discoveryPaused');
+  assert.equal((await a('discovery/claim',{ids:[draft.id]})).data.receipts[0].state,'paused');
+  const db=new DatabaseSync(database);
+  try{
+    const p=db.prepare('SELECT id,requested_at FROM player_account_breaks WHERE player_id=?').get(id);
+    // Expire this short synthetic pause immediately after its saved activity.
+    const last=db.prepare("SELECT max(a.created_at) AS at FROM coming_soon_activity a JOIN coming_soon_saves s ON s.id=a.save_id WHERE s.player_id=?").get(id).at;
+    db.prepare('UPDATE player_account_breaks SET ends_at=? WHERE id=?').run(Math.max(p.requested_at+1,last+1),p.id);
+    db.prepare('UPDATE player_safety SET pause_until=0 WHERE player=?').run(id);
+  }finally{db.close();}
+  await remove(b,3);await save(b,3);assert.equal((await current(a)).state,'claimable');
+  for(const n of [0,1,2])await save(other,n);
+  const [first,second]=await Promise.all([a,other].map(who=>who('discovery/claim',{ids:[draft.id]})));
+  const winner=first.data.receipts[0].claimId?a:other,loser=winner===a?other:a;
+  const receipt=(first.data.receipts[0].claimId?first:second).data.receipts[0];
+  assert.ok(receipt.claimId);assert.equal((await current(loser)).state,'soldOut');
+  assert.deepEqual((await winner('discovery/claim',{ids:[draft.id]})).data.receipts[0],receipt);
+  assert.equal((await loser('discovery/equip',{slot:'badge',claimId:receipt.claimId})).status,403);
+  await winner('discovery/equip',{slot:'badge',claimId:receipt.claimId});
+  assert.equal((await winner('discovery')).data.equipped.badge,receipt.claimId);
+  const ref='claim-'+receipt.claimId;
+  assert.equal((await loser('support',{category:'account',message:'Check this reference please.',reference:ref})).status,404);
+  const ticket=await winner('support',{category:'account',message:'Help with this claim please.',reference:ref});
+  assert.equal(ticket.status,200);assert.equal((await staff('admin/support')).data.tickets[0].reference,ref);
+  assert.equal((await staff('admin/players?q='+ref)).data.length,1);
+  const report=(await staff('admin/discovery/report?scope=site&caseStatus=open')).data;
+  assert.equal(report.totals.claims,1);assert.equal(report.totals.cases,1);assert.equal(report.list[0].reference,ref);
+  assert.equal((await winner('account/export')).data.discovery.equipped.badge,receipt.claimId);
+  const offers=[];
+  for(const color of ['plum','forest']){
+    const offer=(await staff('admin/discovery/programs',{action:'save',version:0,spec:{...spec,template:'offer',slot:'theme',color}})).data;
+    await staff('admin/discovery/programs',{action:'publish',id:offer.id,version:1});offers.push(offer.id);
+  }
+  const old=(await winner('discovery/claim',{ids:[offers[0]]})).data.receipts[0];
+  const batch=(await winner('discovery/claim',{ids:offers})).data.receipts;assert.equal(batch.length,2);assert.deepEqual(batch[0],old);assert.notEqual(batch[1].claimId,old.claimId);
+});
+
+test('scheduled campaigns recheck brand, topic, channel, current break, quiet hours and consent at dispatch',async t=>{
+  const {base,database}=await startSandbox(t),staff=client(base),person=client(base);
+  await staff('admin/login',staffCredentials);await register(person);
+  const pref={topic:'collections',channel:'inbox',granted:true};
+  const arm=async(patch={})=>{
+    const spec={...pref,subjectEn:'Collection update',subjectFr:'Nouvelle collection',textEn:'Browse the collection.',textFr:'Consultez la collection.',
+      quietStart:0,quietEnd:0,destination:'',localTime:'2025-01-15T12:00',...patch};
+    const res=await staff('admin/discovery/campaigns',{action:'save',version:0,spec});assert.equal(res.status,200);
+    assert.equal((await staff('admin/discovery/campaigns',{id:res.data.id,action:'schedule',version:1})).status,200);return res.data.id;
+  };
+  const run=()=>staff('admin/discovery/dispatch',{});
+  const outcomes=async id=>(await staff('admin/discovery/campaigns')).data.items.find(c=>c.id===id).outcomes;
+  await person('discovery/preferences',pref);
+  const good=await arm();await run();await run();assert.deepEqual(await outcomes(good),[{state:'delivered',reason:'',count:1}]);
+  let messages=(await person('discovery')).data.messages;assert.equal(messages.length,1);
+  await person('discovery/read',{id:messages[0].id});assert.ok((await person('discovery')).data.messages[0].readAt);
+  const muted=await arm();await person('discovery/preferences',{...pref,granted:false});await run();
+  assert.equal((await outcomes(muted))[0].reason,'optedOut');
+  await person('discovery/preferences',pref);const quiet=await arm();
+  const db=new DatabaseSync(database);
+  try{let c=db.prepare('SELECT spec FROM contact_campaigns WHERE id=?').get(quiet);const s=JSON.parse(c.spec);
+    s.quietStart=Number(new Intl.DateTimeFormat('en-GB',{timeZone:s.zone,hour:'2-digit',hourCycle:'h23'}).format(Date.now()));s.quietEnd=(s.quietStart+2)%24;
+    db.prepare('UPDATE contact_campaigns SET spec=? WHERE id=?').run(JSON.stringify(s),quiet);
+  }finally{db.close();}
+  await run();assert.equal((await outcomes(quiet))[0].reason,'quietHours');
+  const paused=await arm();await person('safety/pause',{});await run();assert.equal((await outcomes(paused))[0].reason,'accountBreak');
+  assert.equal((await person('discovery')).data.messages.length,1);
+  assert.equal((await person('password-reset/request',{email:playerCredentials.email,locale:'en-CA'})).status,200);
+});
