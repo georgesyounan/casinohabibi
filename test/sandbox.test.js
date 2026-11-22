@@ -3261,3 +3261,429 @@ test('D27 a scoped fixture client follows the public shelf, rotates once and can
   const meta=JSON.stringify([await checked(admin,p),detail,db.prepare('SELECT * FROM staff_mutation_receipts').all(),db.prepare('SELECT * FROM staff_events').all()]);
   assert.ok(!meta.includes(first)&&!meta.includes(second));assert.equal((await site(p)).status,401);
 });
+
+test('D14 verification, player evidence, expiry and re-verification stay scoped to the brand and decision cycle', async (t) => {
+  const { base, database } = await startSandbox(t),
+    admin = client(base),
+    support = client(base),
+    player = client(base),
+    other = client(base),
+    guest = client(base),
+    d = 'admin/desk/';
+  await checked(admin, 'admin/login', staffCredentials);
+  await register(player);
+  const pid = (await checked(player, 'account')).id;
+  const supportCred = { email: 'desk-help@example.test', password: 'some-help-password' };
+  await checked(admin, 'admin/staff', { ...supportCred, role: 'operator_support' });
+  await checked(support, 'admin/login', supportCred);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  const open = { action: 'create', market: 'south', label: 'South sample', player: pid };
+  assert.equal((await admin(d + 'review', open)).status, 400);
+  db.prepare('UPDATE players SET report_fixture=1 WHERE id=?').run(pid);
+  const s = await checked(admin, d + 'review', open),
+    n = await checked(admin, d + 'review', { action: 'create', market: 'north', label: 'North sample' });
+  const record = () => checked(admin, d + 'subject?id=' + s.id);
+  const command = async (action, fields) =>
+    checked(admin, d + 'review', { action, id: s.id, version: (await record()).version, ...fields });
+  assert.equal((await guest(d + 'subjects')).status, 401);
+  assert.equal((await support(d + 'routes')).status, 403);
+  assert.deepEqual((await record()).required, ['age', 'photo', 'address']);
+  assert.deepEqual((await checked(admin, d + 'subject?id=' + n.id)).required, ['age', 'photo']);
+  assert.equal((await checked(player, 'me/review-demo')).subject.market, 'south');
+  assert.equal((await guest('me/review-demo')).status, 401);
+  await command('evidence', { type: 'age' });
+  const pending = { action: 'callback', id: s.id, cycle: 1, eventId: 'p1', outcome: 'pending' };
+  const pend = await checked(admin, d + 'review', pending);
+  assert.deepEqual(await checked(admin, d + 'review', pending), pend);
+  const send = { ...pending, eventId: 'r1', outcome: 'review' };
+  assert.equal((await admin(d + 'review', send)).data.error, 'reviewIncomplete');
+  await command('evidence', { type: 'photo' });
+  let publicView = (await checked(player, 'me/review-demo')).subject;
+  await checked(player, 'me/review-demo', {
+    type: 'address',
+    version: publicView.version,
+    cycle: publicView.cycle,
+  });
+  const ack = await checked(admin, d + 'review', send);
+  assert.deepEqual(await checked(admin, d + 'review', send), ack);
+  assert.equal((await admin(d + 'review', { ...send, outcome: 'pending' })).status, 409);
+  assert.equal((await checked(admin, d + 'subjects?state=review')).total, 1);
+  const supportView = await checked(support, d + 'subject?id=' + s.id);
+  assert.equal(supportView.documents, undefined);
+  assert.equal(supportView.risks, undefined);
+  assert.ok(supportView.timeline.items.every((e) => !('detail' in e)));
+  assert.equal(
+    (await support(d + 'review', { action: 'decide', id: s.id, outcome: 'approved' })).status,
+    403,
+  );
+  const approved = await command('decide', { outcome: 'approved', reason: 'confirmed' });
+  assert.ok(approved.decision);
+  const accountId = (await record()).id;
+  const createPayout = () =>
+    admin(d + 'cashier', {
+      action: 'initiate',
+      subject: accountId,
+      key: randomUUID(),
+      direction: 'withdrawal',
+      route: 'wallet',
+      asset: 'TST',
+      minor: 1000,
+    });
+  assert.equal((await createPayout()).data.error, 'cashierFunds');
+  await command('expire', {});
+  assert.equal((await createPayout()).data.error, 'identity_required');
+  assert.equal((await checked(admin, d + 'subjects?state=expired')).total, 1);
+  await command('recheck', {});
+  for (const type of ['age', 'photo', 'address']) await command('evidence', { type });
+  await command('callback', { cycle: 2, eventId: 'r2', outcome: 'review' });
+  const accepted = await command('decide', { outcome: 'approved', reason: 'corrected' });
+  assert.notEqual(approved.decision, accepted.decision);
+  assert.equal((await record()).eligibility.decision, accepted.decision);
+  publicView = (await checked(player, 'me/review-demo')).subject;
+  assert.equal(publicView.state, 'approved');
+  assert.ok(!JSON.stringify(publicView).includes('corrected'));
+  assert.ok(!JSON.stringify(publicView).includes('reviewer'));
+  await checked(admin, d + 'review', {
+    action: 'policy',
+    market: 'south',
+    version: 0,
+    days: 7,
+    documents: ['age', 'photo'],
+  });
+  assert.equal((await record()).state, 'expired');
+  assert.equal((await createPayout()).data.error, 'identity_required');
+  db.exec(
+    "INSERT INTO tenants VALUES('desk-second','desk-second','Desk Two','active',1); UPDATE tenant_domains SET tenant_id='desk-second' WHERE host='localhost'; INSERT INTO tenant_staff_memberships(tenant_id,staff_id,role,status,created_at) SELECT 'desk-second',staff_id,'operator_admin','active',1 FROM tenant_staff_memberships WHERE tenant_id='sandbox' AND role='operator_admin';",
+  );
+  await checked(other, 'admin/login', staffCredentials, 'localhost');
+  assert.equal((await checked(other, d + 'subjects', undefined, 'localhost')).total, 0);
+  assert.equal((await other(d + 'subject?id=' + s.id, undefined, 'localhost')).status, 404);
+  assert.equal((await other(d + 'cashier?id=' + s.id, undefined, 'localhost')).status, 404);
+  assert.equal(
+    (await checked(other, d + 'policies', undefined, 'localhost')).items.find(
+      (i) => i.market === 'south',
+    ).version,
+    0,
+  );
+});
+
+test('D15 screening keeps shared signals independent, carries list history, and lifts only the selected withdrawal hold', async (t) => {
+  const { base } = await startSandbox(t),
+    admin = client(base),
+    backup = client(base),
+    d = 'admin/desk/';
+  await checked(admin, 'admin/login', staffCredentials);
+  const creds = { email: 'other-reviewer@example.test', password: 'reviewer-password-2' };
+  await checked(admin, 'admin/staff', { ...creds, role: 'operator_admin' });
+  await checked(backup, 'admin/login', creds);
+  const create = async (label) =>
+    (await checked(admin, d + 'review', { action: 'create', market: 'north', label })).id;
+  const a = await create('Sample A'),
+    b = await create('Sample B');
+  const detail = (who) => checked(admin, d + 'subject?id=' + who);
+  const edit = async (id, action, extra, actor = admin) =>
+    checked(actor, d + 'review', { id, version: (await detail(id)).version, action, ...extra });
+  for (const type of ['age', 'photo']) await edit(a, 'evidence', { type });
+  await edit(a, 'callback', { cycle: 1, eventId: 'review', outcome: 'review' });
+  await edit(a, 'decide', { outcome: 'approved', reason: 'confirmed' });
+  const signal = { kind: 'shared_device', marker: 'sample-a', eventId: 'shared-1' },
+    r1 = await edit(a, 'signal', signal),
+    r2 = await edit(b, 'signal', signal);
+  assert.deepEqual(await edit(a, 'signal', signal), r1);
+  assert.notEqual(r1.risk, r2.risk);
+  await edit(b, 'risk_decide', { risk: r2.risk, outcome: 'cleared', reason: 'inspected' });
+  const p1 = await edit(a, 'signal', {
+    kind: 'screening',
+    marker: 'sample-b',
+    listVersion: 1,
+    eventId: 'list1',
+  });
+  await edit(a, 'risk_decide', { risk: p1.risk, outcome: 'cleared', reason: 'inspected' });
+  const p2 = await edit(a, 'signal', {
+    kind: 'screening',
+    marker: 'sample-b',
+    listVersion: 2,
+    eventId: 'list2',
+  });
+  assert.equal(
+    (
+      await edit(a, 'signal', {
+        kind: 'screening',
+        marker: 'sample-b',
+        listVersion: 2,
+        eventId: 'list2b',
+      })
+    ).risk,
+    p2.risk,
+  );
+  const a1 = await detail(a);
+  assert.equal(a1.risks.find((k) => k.id === p2.risk).prior, p1.risk);
+  assert.equal(a1.risks.find((k) => k.id === p1.risk).reason, 'inspected');
+  const h1 = await edit(a, 'hold', { risk: r1.risk, reason: 'risk_confirmed' }),
+    h2 = await edit(a, 'hold', { risk: p2.risk, reason: 'incomplete' });
+  assert.equal((await detail(a)).eligibility.reason, 'payout_hold');
+  assert.equal(
+    (
+      await backup(d + 'review', {
+        id: a,
+        version: (await detail(a)).version,
+        action: 'release',
+        risk: r1.risk,
+        hold: h1.hold,
+        reason: 'corrected',
+      })
+    ).status,
+    403,
+  );
+  await edit(a, 'release', { risk: r1.risk, hold: h1.hold, reason: 'corrected' });
+  assert.equal((await detail(a)).eligibility.hold, h2.hold);
+  await edit(a, 'risk_claim', { risk: p2.risk, reason: 'inspected' }, backup);
+  await edit(a, 'release', { risk: p2.risk, hold: h2.hold, reason: 'inspected' }, backup);
+  const final = await detail(a);
+  assert.equal(final.eligibility.allowed, true);
+  assert.equal(final.holds.length, 2);
+  assert.ok(final.holds.every((h) => h.ended));
+  assert.equal((await detail(b)).risks[0].status, 'cleared');
+});
+
+test('D18 payment methods, confirmation, uncertain withdrawal, decline and chargeback reconcile one sandbox wallet', async (t) => {
+  const { base, database } = await startSandbox(t),
+    admin = client(base),
+    second = client(base),
+    d = 'admin/desk/';
+  await checked(admin, 'admin/login', staffCredentials);
+  await checked(second, 'admin/login', staffCredentials);
+  const id = (
+    await checked(admin, d + 'review', { action: 'create', label: 'Cashier test', market: 'north' })
+  ).id;
+  const wallet = () => checked(admin, d + 'cashier?id=' + id),
+    file = () => checked(admin, d + 'subject?id=' + id);
+  const edit = async (action, extra) =>
+    checked(admin, d + 'review', { id, version: (await file()).version, action, ...extra });
+  const routes = (await checked(admin, d + 'routes')).items;
+  assert.equal(routes.length, 2);
+  const simulate = (minor, asset = 'TST', direction = 'deposit') =>
+    checked(admin, d + 'options?' + new URLSearchParams({ direction, market: 'north', asset, minor }));
+  assert.deepEqual((await simulate(1000)).eligible, ['cards', 'wallet']);
+  assert.equal((await simulate(1000, 'CAD')).routes[0].reason, 'route_currency');
+  await checked(admin, d + 'cashier', { action: 'route', ...routes[0], enabled: false });
+  assert.equal((await simulate(1000)).routes.find((r) => r.key === 'cards').reason, 'route_disabled');
+  assert.deepEqual((await simulate(200001)).eligible, []);
+  assert.equal((await simulate(200001)).routes.find((r) => r.key === 'wallet').reason, 'route_max');
+  const create = (direction, minor, key = randomUUID()) => ({
+    action: 'initiate',
+    subject: id,
+    key,
+    direction,
+    minor,
+    asset: 'TST',
+    route: 'wallet',
+  });
+  assert.equal((await admin(d + 'cashier', create('withdrawal', 2000))).data.error, 'identity_required');
+  const dep = create('deposit', 5000),
+    created = await checked(admin, d + 'cashier', dep);
+  assert.deepEqual(await checked(admin, d + 'cashier', dep), created);
+  assert.equal((await admin(d + 'cashier', { ...dep, minor: 1000 })).status, 409);
+  const read = (id) => checked(admin, d + 'intent?id=' + id);
+  const step = async (id, action) =>
+    checked(admin, d + 'cashier', { id, action, version: (await read(id)).version });
+  const evt = async (id, outcome, eventId) => {
+    const r = await read(id);
+    return {
+      id,
+      action: 'event',
+      outcome,
+      eventId,
+      processorRef: r.processorRef,
+      route: r.route,
+      minor: r.minor,
+      asset: r.asset,
+    };
+  };
+  await step(created.id, 'return');
+  assert.equal((await wallet()).balance.available, 0);
+  const credited = await evt(created.id, 'success', 'deposit-settled');
+  assert.equal((await admin(d + 'cashier', { ...credited, minor: 4999 })).status, 400);
+  const [one, two] = await Promise.all([
+    checked(admin, d + 'cashier', credited),
+    checked(second, d + 'cashier', credited),
+  ]);
+  assert.deepEqual(one, two);
+  assert.equal((await wallet()).balance.available, 5000);
+  assert.equal((await admin(d + 'cashier', { ...credited, outcome: 'decline' })).status, 409);
+  for (const type of ['age', 'photo']) await edit('evidence', { type });
+  await edit('callback', { cycle: 1, eventId: 's1', outcome: 'review' });
+  const approval = await edit('decide', { outcome: 'approved', reason: 'confirmed' });
+  const [a, b] = await Promise.all([
+    admin(d + 'cashier', create('withdrawal', 3000)),
+    second(d + 'cashier', create('withdrawal', 3000)),
+  ]);
+  assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+  const withdraw = (a.status === 200 ? a : b).data;
+  assert.equal((await wallet()).balance.held, 3000);
+  await edit('expire', {});
+  assert.equal(
+    (await admin(d + 'cashier', { id: withdraw.id, action: 'send', version: 1 })).data.error,
+    'identity_required',
+  );
+  await edit('recheck', {});
+  for (const type of ['age', 'photo']) await edit('evidence', { type });
+  await edit('callback', { cycle: 2, eventId: 's2', outcome: 'review' });
+  const refreshed = await edit('decide', { outcome: 'approved', reason: 'corrected' });
+  await step(withdraw.id, 'send');
+  const sent = await read(withdraw.id);
+  assert.equal(sent.decision, approval.decision);
+  assert.equal(sent.authorizedDecision, refreshed.decision);
+  await step(withdraw.id, 'timeout');
+  const pending = await read(withdraw.id);
+  assert.equal(pending.processorRef, sent.processorRef);
+  assert.equal(pending.status, 'unknown');
+  assert.equal((await wallet()).balance.held, 3000);
+  await edit('expire', {});
+  const late = await evt(withdraw.id, 'success', 'payout-success');
+  const paid = await checked(admin, d + 'cashier', late);
+  assert.deepEqual(await checked(admin, d + 'cashier', late), paid);
+  assert.equal((await wallet()).balance.held, 0);
+  await edit('recheck', {});
+  for (const type of ['age', 'photo']) await edit('evidence', { type });
+  await edit('callback', { cycle: 3, eventId: 's3', outcome: 'review' });
+  await edit('decide', { outcome: 'approved', reason: 'confirmed' });
+  const bad = await checked(admin, d + 'cashier', create('withdrawal', 2000));
+  await step(bad.id, 'send');
+  await step(bad.id, 'timeout');
+  await checked(admin, d + 'cashier', await evt(bad.id, 'decline', 'payout-declined'));
+  assert.deepEqual((await wallet()).balance, { available: 2000, held: 0, clearing: -2000, game: 0 });
+  const top = await checked(admin, d + 'cashier', create('deposit', 1000));
+  await checked(admin, d + 'cashier', await evt(top.id, 'success', 'top-ok'));
+  const reverse = await evt(top.id, 'chargeback', 'top-reversed');
+  const reversed = await checked(admin, d + 'cashier', reverse);
+  assert.deepEqual(await checked(admin, d + 'cashier', reverse), reversed);
+  assert.equal((await wallet()).balance.available, 2000);
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  assert.equal(db.prepare('SELECT count(*) AS n FROM ledger').get().n, 0);
+  assert.equal((await checked(admin, 'admin/operator/pilots')).total, 0);
+  const run = db.prepare('SELECT wallet FROM review_subjects WHERE id=?').get(id).wallet;
+  assert.equal((await admin('admin/operator/pilot?id=' + run)).status, 404);
+  assert.equal(
+    db
+      .prepare(
+        'SELECT count(*) AS n FROM (SELECT ref FROM pilot_postings GROUP BY run,ref HAVING sum(minor)<>0)',
+      )
+      .get().n,
+    0,
+  );
+});
+test('Market-specific age and optional face checks require passed samples, and a two-reviewer hold survives the first release', async (t) => {
+  const { base } = await startSandbox(t),
+    admin = client(base),
+    second = client(base),
+    help = client(base),
+    d = 'admin/desk/';
+  await checked(admin, 'admin/login', staffCredentials);
+  for (const [account, name, role] of [
+    [second, 'second', 'operator_admin'],
+    [help, 'help', 'operator_support'],
+  ]) {
+    const login = { email: name + '-v25@example.test', password: 'fixture-only-password' };
+    await checked(admin, 'admin/staff', { ...login, role });
+    await checked(account, 'admin/login', login);
+  }
+  await checked(admin, d + 'review', {
+    action: 'policy',
+    market: 'north',
+    documents: ['age', 'face', 'liveness'],
+    days: 30,
+    minAge: 21,
+    dualRelease: true,
+    version: 0,
+  });
+  const { id } = await checked(admin, d + 'review', {
+    action: 'create',
+    market: 'north',
+    label: 'QA actor',
+  });
+  const detail = () => checked(admin, d + 'subject?id=' + id);
+  const call = async (actor, action, extra) =>
+    actor(d + 'review', { id, action, version: (await detail()).version, ...extra });
+  const action = async (actor, k, fields) => {
+    const x = await call(actor, k, fields);
+    assert.equal(x.status, 200, JSON.stringify(x.data));
+    return x.data;
+  };
+  for (const [type, sample] of [
+    ['age', 'sample-19'],
+    ['face', 'mismatch'],
+    ['liveness', 'match'],
+  ])
+    await action(admin, 'evidence', { type, sample });
+  await action(admin, 'callback', { cycle: 1, outcome: 'review', eventId: 'first' });
+  assert.equal(
+    (await call(admin, 'decide', { outcome: 'approved', reason: 'confirmed' })).data.error,
+    'reviewSampleFailed',
+  );
+  await action(admin, 'decide', { outcome: 'more', reason: 'mismatch' });
+  for (const [type, sample] of [
+    ['face', 'match'],
+    ['age', 'sample-30'],
+  ])
+    await action(admin, 'evidence', { type, sample });
+  await action(admin, 'callback', { cycle: 1, outcome: 'review', eventId: 'resubmit' });
+  await action(admin, 'decide', { outcome: 'approved', reason: 'corrected' });
+  const { risk } = await action(admin, 'signal', {
+    kind: 'screening',
+    marker: 'sample-a',
+    listVersion: 4,
+    eventId: 'r4',
+  });
+  assert.equal((await detail()).risks[0].provider, 'fixture-watchlist');
+  const { hold } = await action(admin, 'hold', { risk, reason: 'risk_confirmed' });
+  await action(admin, 'release', { risk, hold, reason: 'corrected' });
+  assert.equal((await detail()).eligibility.reason, 'payout_hold');
+  assert.equal(
+    (await call(admin, 'release', { risk, hold, reason: 'corrected' })).data.error,
+    'reviewSecond',
+  );
+  await action(second, 'release', { risk, hold, reason: 'inspected' });
+  assert.equal((await detail()).eligibility.reason, 'eligible');
+  const dep = await checked(admin, d + 'cashier', {
+    action: 'initiate',
+    direction: 'deposit',
+    subject: id,
+    key: 'dep',
+    route: 'wallet',
+    minor: 5000,
+    asset: 'TST',
+  });
+  const val = await checked(admin, d + 'intent?id=' + dep.id);
+  await checked(admin, d + 'cashier', {
+    action: 'event',
+    id: val.id,
+    eventId: 'fund',
+    processorRef: val.processorRef,
+    route: val.route,
+    minor: val.minor,
+    asset: val.asset,
+    outcome: 'success',
+  });
+  const withdrawal = await checked(admin, d + 'cashier', {
+    action: 'initiate',
+    direction: 'withdrawal',
+    subject: id,
+    key: 'out',
+    route: 'wallet',
+    minor: 2000,
+    asset: 'TST',
+  });
+  await checked(admin, d + 'cashier', { action: 'send', id: withdrawal.id, version: 1 });
+  await checked(admin, d + 'cashier', { action: 'timeout', id: withdrawal.id, version: 2 });
+  const summary = await checked(help, d + 'subject?id=' + id);
+  assert.deepEqual(
+    summary.withdrawals.map((x) => [x.id, x.status, x.lastAction, typeof x.updated]),
+    [[withdrawal.id, 'unknown', 'timeout', 'number']],
+  );
+  assert.equal(summary.results, undefined);
+  assert.equal(summary.withdrawals[0].processorRef, undefined);
+  assert.equal((await help(d + 'cashier?id=' + id)).status, 403);
+});

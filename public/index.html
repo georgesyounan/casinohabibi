@@ -89,6 +89,7 @@
         </ul>
         <p data-copy="adminSettings"></p>
         <ul>
+          <li><a href="#review-desk" data-admin-link data-admin-primary data-copy="reviewDesk"></a></li>
           <li><a href="#operator-workspace" data-admin-link data-admin-primary data-copy="opWorkspace"></a></li>
           <li><a href="#casino-settings" data-admin-link data-admin-primary data-copy="adminNavWebsite"></a></li>
           <li><a href="#staff-management" data-admin-link data-admin-primary data-copy="adminNavStaff"></a></li>
@@ -373,6 +374,17 @@
           <small id="support-totals"></small><p id="support-summary" role="status"></p><p role="status" id="support-inbox-status"></p>
           <div id="support-tickets"></div>
           <div id="support-pages" class="case-pager" hidden><button type="button" id="support-previous" class="ghost" data-copy="playerPrevious"></button><span id="support-page"></span><button type="button" id="support-next" class="ghost" data-copy="playerNext"></button></div>
+        </section>
+        <section id="review-desk" class="admin-page" data-admin-view data-roles="operator_admin,operator_support" aria-labelledby="review-desk-title" hidden>
+          <h2 id="review-desk-title" data-admin-heading data-copy="reviewDesk" tabindex="-1"></h2>
+          <nav class="admin-subnav discovery-tabs" aria-labelledby="review-desk-title">
+            <a href="#review-subjects" data-admin-link data-copy="reviewSubjects"></a>
+            <a href="#review-cashier" data-admin-link data-copy="reviewCashier" data-roles="operator_admin"></a>
+            <a href="#review-settings" data-admin-link data-copy="reviewSettings" data-roles="operator_admin"></a>
+          </nav>
+          <section id="review-subjects" class="admin-panel" data-admin-panel aria-labelledby="review-subjects-title" hidden><h3 id="review-subjects-title" data-admin-heading data-copy="reviewSubjects" tabindex="-1"></h3><div id="review-subjects-body"></div></section>
+          <section id="review-cashier" class="admin-panel" data-admin-panel data-roles="operator_admin" aria-labelledby="review-cashier-title" hidden><h3 id="review-cashier-title" data-admin-heading data-copy="reviewCashier" tabindex="-1"></h3><div id="review-cashier-body"></div></section>
+          <section id="review-settings" class="admin-panel" data-admin-panel data-roles="operator_admin" aria-labelledby="review-settings-title" hidden><h3 id="review-settings-title" data-admin-heading data-copy="reviewSettings" tabindex="-1"></h3><div id="review-settings-body"></div></section>
         </section>
         <section id="operator-workspace" class="admin-page" data-admin-view aria-labelledby="operator-workspace-title" hidden>
           <h2 id="operator-workspace-title" data-admin-heading data-copy="opWorkspace" tabindex="-1"></h2>

@@ -14,6 +14,15 @@ Le catalogue de démonstration compte 13 modules techniques et 12 modules d’in
 
 [Revue des 28 modules du cahier](docs/development-review.md) · [Critères et état des 88 tickets](docs/development-backlog.csv)
 
+## Vérifications et caisse
+
+| Outil | Parcours disponible |
+| --- | --- |
+| Dossiers fictifs | Rechercher un dossier, déposer des spécimens, revoir l’identité et suivre le motif et l’historique. Un dossier lié à un joueur de test apparaît dans son profil. |
+| Risques | Comparer les versions de la liste fictive, attribuer une enquête, bloquer un retrait et suivre les approbations de levée. |
+| Caisse de test | Consulter le disponible et la réserve en TST. Simuler un retour, une confirmation, un refus, une contrepassation ou une réponse tardive. |
+| Politiques et moyens de paiement | Régler l’âge fictif, les pièces, la validité et le nombre de réviseurs. Configurer les moyens, marchés, minimums, maximums et priorités. |
+
 ## Modules techniques
 
 | Module | Fonction | Où la vérifier |
