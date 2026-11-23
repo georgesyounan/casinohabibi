@@ -1,6 +1,6 @@
 import { createContactList, campaignLabels, campaignLanguage, audiencePreview, campaignResults } from './contact-views.js';
 import { uiKit } from './discovery.js';
-const templates=['offer','Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09'];
+const templates=['offer','Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09','Q10'];
 const toLocal=t=>{if(!t)return '';const d=new Date(t);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
 export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHref,appPath}) {
   const ui=uiKit(french);
@@ -20,6 +20,26 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
       if(gen!==generation)return;
       const isProgram=kind==='programs';
       const items=result.items;
+      if(isProgram && result.daily) {
+        const daily=result.daily,details=el('details','','discovery-card'),form=el('form','','discovery-form');
+        const title=l('Daily demo bonus','Bonus quotidien démo');
+        details.append(el('summary',title+' · '+new Intl.NumberFormat(french()?'fr-CA':'en-CA',{style:'currency',currency:'CAD'}).format(daily.amount/100)+' · '+(daily.enabled?l('Active','Actif'):l('Paused','En pause'))));
+        const amount=field(form,'dailyAmount',l('Amount in demo CAD','Montant en CAD fictifs'),{type:'number',value:daily.amount/100,min:0.01,max:10000,required:true});
+        amount.step='0.01';amount.disabled=!publish();
+        const label=el('label','','discovery-choice'),enabled=el('input');enabled.type='checkbox';enabled.name='dailyEnabled';enabled.checked=daily.enabled;enabled.disabled=!publish();
+        label.append(enabled,document.createTextNode(l('Enable daily claims','Activer les réclamations quotidiennes')));
+        form.append(label,el('p',l('Changes apply to unclaimed bonuses. Previous credits keep their value.','Les changements s’appliquent aux bonus à réclamer. Les crédits déjà versés conservent leur valeur.')));
+        if(publish()){
+          const save=el('button',l('Save bonus','Enregistrer le bonus'));save.type='submit';form.append(save);
+          form.addEventListener('submit',async event=>{
+            event.preventDefault();if(save.disabled)return;save.disabled=true;
+            try{await api('admin/discovery/daily',{version:daily.version,amount:Math.round(amount.valueAsNumber*100),enabled:enabled.checked});
+              if(gen===generation){await load(kind);root.querySelector('.discovery-feedback').textContent=l('Bonus saved.','Bonus enregistré.');}}
+            catch(e){if(gen===generation){error(e);save.disabled=false;}}
+          });
+        }
+        details.append(form);body.append(details);
+      }
       if(isProgram&&result.previewCount<3&&result.threeSaveQuest){
         const note=el('aside','','discovery-card');
         note.append(el('p',result.enabled?l(`${result.previewCount} of 3 previews are available for the three-save quest.`,`${result.previewCount} ${result.previewCount>1?'fiches disponibles':'fiche disponible'} sur 3 pour la quête des favoris.`):
@@ -52,7 +72,7 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
         const input=(key,label,options={})=>controls[key]=field(form,key,label,{value:s[key],...options});
         const labels=items=>items.map(([k,en,fr])=>[k,l(en,fr)]);
         if(isProgram){
-          const templateLabels=[l('Free offer','Offre gratuite'),'Lobby Curator','Backstage Pass','Catalogue Guide','Preview Passport','Community Curator','Seasonal Collector','Collection Crew','Activity Explorer','Double Feature'];
+          const templateLabels=[l('Free offer','Offre gratuite'),'Lobby Curator','Backstage Pass','Catalogue Guide','Preview Passport','Community Curator','Seasonal Collector','Collection Crew','Activity Explorer','Double Feature',l('House picks','Mes incontournables')];
           input('template',l('Quest template','Modèle de quête'),{items:templates.map((k,i)=>[k,(i?k+' · ':'')+templateLabels[i]]),value:s.template||'Q01'});
           input('titleEn',l('English title','Titre anglais'),{required:true,maxLength:100});input('titleFr',l('French title','Titre français'),{required:true,maxLength:100});
           input('slot',l('Cosmetic type','Type d’article'),{items:labels([['badge','Badge','Badge'],['theme','Theme','Thème'],['frame','Frame','Cadre']]),value:s.slot||'badge'});

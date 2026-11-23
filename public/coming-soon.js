@@ -196,7 +196,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
         nextCover.src = next.artwork;
         nextCover.decode().catch(() => {});
       }
-      spotlightRotation ||= createRotation(() => stepSpotlight(1),isFrench,9100);
+      spotlightRotation ||= createRotation(() => stepSpotlight(1),isFrench,5200);
       spotlightRotation.attach(spotlight);
       spotlightRotation.sync();
     } else spotlightRotation?.attach(null);

@@ -547,6 +547,7 @@ export function createLobbySections({
     const active = enabled() && Boolean(view);
     homeCampaign(enabled() && !active);
     lobby.toggleAttribute('data-hub-open', active);
+    lobby.toggleAttribute('data-club-promotions', active && view==='promotions');
     panel.hidden = !active;
     panel.removeAttribute('aria-busy');
     // These nodes carry live API updates and event handlers even while another section is open.
@@ -608,18 +609,8 @@ export function createLobbySections({
     }
     if (view === 'promotions') {
       const area = el('div', '', 'hub-offers');
-      const empty = note(l('No public offer is currently active.', 'Aucune offre publique en cours.'));
-      empty.classList.add('hub-empty');
-      const loading = note(l('Loading offers…', 'Chargement des offres…'));
-      loading.classList.add('hub-offers-loading');
-      area.append(offers, loading, empty);
+      area.append(offers);
       panel.append(area);
-      const buttons = el('div', '', 'hub-choices');
-      buttons.append(
-        button(l('View challenges', 'Voir les défis'), () => club('quests')),
-        button(l('My rewards', 'Mes récompenses'), () => club('rewards'), true)
-      );
-      panel.append(buttons);
     }
     if (view === 'invite') {
       const card = box();

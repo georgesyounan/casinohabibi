@@ -13,6 +13,7 @@ import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
+import { createClubHome } from './player-club.js';
 import { discoveryCopy, createDiscoveryPlayer } from './discovery.js';
 import {growthCopy,createGrowthPlayer} from './growth-player.js';
 import {createGrowthAdmin} from './growth-admin.js';
@@ -31,6 +32,10 @@ const copy = {
   ...playerAccessCopy, ...playerSignInCopy,
   ...accountBreakCopy,
   ...discoveryCopy,...growthCopy,
+  clubOfferChanged:['The daily offer has changed. Check its updated terms.','L’offre du jour a changé. Consultez les nouvelles conditions.'],
+  club_daily_settings:['Daily demo bonus updated','Bonus quotidien démo modifié'],
+  dailyDemoBonus:['Daily demo bonus','Bonus quotidien démo'],
+  clubDayChanged:['A new daily bonus is available. Refresh and claim it.','Un nouveau bonus quotidien est disponible. Actualisez pour le réclamer.'],
   supportLinkedRef: ['Related reference (optional)', 'Référence liée (facultative)'],
   ...dashboardCopy,
   ...websiteContentCopy,
@@ -487,6 +492,9 @@ function element(tag, value, className) {
   return node;
 }
 
+function isClubBonus(raw) {
+  try { return JSON.parse(raw)?.type==='club_daily'; } catch { return false; }
+}
 function demoBalanceResetDetails(rawOutcome) {
   if (typeof rawOutcome !== 'string' || !rawOutcome) return null;
   try {
@@ -870,6 +878,7 @@ function historyEntryElement(entry, showSupport = true) {
       const date = entry.createdAt ? ` · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}` : '';
       return element('li', `${t('demoBalanceResetHistory').replace('{balance}', money(reset.newBalance))}${date}`);
     }
+    if (isClubBonus(entry.outcome)) return element('li', `${t('dailyDemoBonus')} · +${money(entry.amount)} · ${new Date(entry.createdAt).toLocaleDateString(language?'fr-CA':'en-CA')}`);
     return element('li', `${t('starter')} · +${money(entry.amount)}`);
   }
   const date = entry.createdAt ? ` · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}` : '';
@@ -969,10 +978,10 @@ let supportTicket;
 let supportRequest=0;
 let afterSignIn;
 let requestedClubTab;
-function openClub(tab) {
+function openClub(tab,questId) {
   clearDemoSelection();
   if (player) {
-    discoveryPlayer.openTab(tab, player.id);
+    discoveryPlayer.openTab(tab, player.id,questId);
     openPanel('discovery');
   } else {
     requestedClubTab = tab;
@@ -1081,7 +1090,7 @@ async function resumePlayerEntry(access) {
           return;
         }
       }
-      if (['discovery','support'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
+      if (['discovery','support','clubHome'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
       if (typeof saved.requestedClubTab==='string') requestedClubTab=saved.requestedClubTab;
     } catch {}
     sessionStorage.removeItem('habibi-auth-destination');
@@ -1116,10 +1125,12 @@ async function finishPlayerSignIn(auth, openDestination=true) {
       return;
     }
   }
+  const pendingClubSection=requestedClubTab;
   clearPendingDemo();
   afterSignIn = undefined;
   requestedClubTab = undefined;
-  if (target === 'support') openSupportCenter(); else openPanel(target);
+  if (target === 'clubHome') { $('#dialog').close(); clubHome.select(pendingClubSection); }
+  else if (target === 'support') openSupportCenter(); else openPanel(target);
 }
 const playerLoginUi=createPlayerSignInUi({
   element,action,api,t,locale:()=>language?'fr-CA':'en-CA',open:openPanel,complete:finishPlayerSignIn,
@@ -1635,7 +1646,7 @@ function renderDialog() {
         const reset = demoBalanceResetDetails(entry.outcome);
         return [
           entry.createdAt ? new Date(entry.createdAt).toISOString() : '',
-          reset ? t('demoBalanceResetCsv') : roundTitle(entry) || (language ? 'Crédit de départ' : 'Starting credit'),
+          reset ? t('demoBalanceResetCsv') : isClubBonus(entry.outcome) ? t('dailyDemoBonus') : roundTitle(entry) || (language ? 'Crédit de départ' : 'Starting credit'),
           reset ? t('demoBalanceResetCsvDetail').replace('{balance}', money(reset.newBalance)) : describeOutcome(entry.game, entry.outcome),
           (entry.wager / 100).toFixed(2),
           (entry.amount / 100).toFixed(2),
@@ -1783,7 +1794,7 @@ function openPanel(next) {
     breakTimer = setInterval(refreshOpenBreak, 15_000);
   }
 }
-$('#dialog').addEventListener('close', () => { playerLoginUi.reset(); ++supportRequest; clearInterval(breakTimer); ++breakRefresh; });
+$('#dialog').addEventListener('close', () => { playerLoginUi.reset(); ++supportRequest; clearInterval(breakTimer); ++breakRefresh; if(!accountPending)void clubHome.sync(true); });
 window.addEventListener('focus', refreshOpenBreak);
 document.addEventListener('visibilitychange', refreshOpenBreak);
 
@@ -1836,6 +1847,7 @@ async function toggleFavorite(key) {
     guestFavorites = new Set();
     cacheGuestFavorites();
     announceFavorite('favoritesSynced', saved.activityId);
+    void clubHome.sync(true);
   } catch {
     favorites = previous;
     announceFavorite('favoriteSaveFailed');
@@ -1995,6 +2007,7 @@ function renderCatalog() {
     link?.focus({preventScroll:true});link?.scrollIntoView({block:'nearest'});
   }
   lobbySections.render();
+  if (!accountPending) void clubHome.sync();
 }
 
 let providerStatus;
@@ -2026,6 +2039,11 @@ const comingSoonUi = createComingSoonUi({
 });
 
 const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
+const clubHome = createClubHome({
+  root:$('#player-club'),api,base:appBasePath,french:()=>Boolean(language),account:()=>player,translate:t,openClub,openGame:startDemo,
+  signIn(section){clearDemoSelection();requestedClubTab=section;afterSignIn='clubHome';openPanel('signin');},
+  updateAccount(fresh){player=fresh;updateAccount();}
+});
 const lobbySections = createLobbySections({
   french: () => Boolean(language), appPath, catalogue: comingSoonUi, providers: () => providerGames,
   house: () => ({name:demoProviderName(), count:games.length}), account: () => player, club:openClub, roundTitle, money,

@@ -9,8 +9,9 @@ test('the first Habibi paint exposes real, localized campaign destinations and a
     const home = homeCampaignExtras(fr,'/casinohabibi');
     assert.ok(home.includes('/casinohabibi/?lang='+locale+'&amp;category=slots#games'));
     assert.ok(home.includes('/casinohabibi/?lang='+locale+'&amp;view=sports'));
-    assert.equal([...home.matchAll(/data-campaign-select=/g)].length,3);
-    assert.equal([...home.matchAll(/data-campaign-panel="\d+" hidden/g)].length,2);
+    assert.equal([...home.matchAll(/data-campaign-select=/g)].length,4);
+    assert.equal([...home.matchAll(/data-campaign-panel="\d+" hidden/g)].length,3);
+    assert.ok(home.includes('view=promotions&amp;club=quests#player-club'));
     const board = sportsMarkup(fr);
     const wire = board.match(/<div class="wire-track">([\s\S]*?)<\/div>/)[1];
     for (const match of matches) {
