@@ -82,9 +82,10 @@ export function createClubHome({root,api,base,french,account,accountPending=()=>
   const boot=document.getElementById('club-public-model');
   let snapshot=boot ? JSON.parse(boot.textContent) : null;
   const params=new URLSearchParams(location.search);
-  let board=null,selection=clubSection(params.get('view'),params.get('club')),locationKey='',owner=snapshot?0:undefined;
+  const routeKey=query=>location.pathname+'?'+(query.get('view')||'')+'/'+(query.get('club')||'');
+  let board=null,selection=clubSection(params.get('view'),params.get('club')),locationKey=routeKey(params),owner=snapshot?0:undefined;
   let version=0,reading=false,busy=false,status='',timer;
-  let signature='',boardRequest=0,modelLocale,freshUntil=0;
+  let signature='',boardRequest=0,boardLoading,modelLocale,freshUntil=0;
   if(snapshot)root.dataset.personal='false';
   const auth=()=>account()?.id||0;
   const msg=(en,fr)=>french()?fr:en;
@@ -116,12 +117,15 @@ export function createClubHome({root,api,base,french,account,accountPending=()=>
   }
   async function readBoard(){
     if(selection!=='league')return;
-    const ticket=++boardRequest, current=auth();
+    const current=auth();
+    if(boardLoading?.owner===current && boardLoading.ticket===boardRequest)return;
+    const ticket=++boardRequest;boardLoading={ticket,owner:current};
     try{const next=await api('discovery/standings',undefined,'GET');if(ticket===boardRequest&&current===auth()){board=next;paint();}}
     catch(e){if(ticket===boardRequest&&current===auth()){showError(e);}}
+    finally{if(boardLoading?.ticket===ticket)boardLoading=null;}
   }
   async function sync(force=false){
-    const params=new URLSearchParams(location.search), view=params.get('view'),key=location.pathname+'?'+(view||'')+'/'+(params.get('club')||'');
+    const params=new URLSearchParams(location.search), view=params.get('view'),key=routeKey(params);
     const lobby=document.getElementById('lobby');
     if(document.body.dataset.lobbyBrand!=='habibi' || !document.body.classList.contains('player-home') || (view && view!=='promotions') || (view!=='promotions'&&lobby.hasAttribute('data-filtered')))return;
     root.hidden=false;
