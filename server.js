@@ -2543,6 +2543,7 @@ const assets = {
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
   '/page-blocks.js':['page-blocks.js','text/javascript'],
+  '/page-layout.css':['page-layout.css','text/css'],
   '/layout-editor.js':['layout-editor.js','text/javascript'],
   '/studio-replay.mp4':['studio-replay.mp4','video/mp4'],
   '/website-content.js': ['website-content.js', 'text/javascript'],
