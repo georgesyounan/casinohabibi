@@ -84,6 +84,14 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS platform_events (id INTEGER PRIMARY KEY, tenant_id TEXT REFERENCES tenants(id), action TEXT NOT NULL, target TEXT NOT NULL, created_at INTEGER NOT NULL, correlation_id TEXT);
   CREATE TABLE IF NOT EXISTS staff_accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL, mfa_secret TEXT, mfa_enabled INTEGER NOT NULL DEFAULT 0 CHECK(mfa_enabled IN (0, 1)));
   CREATE TABLE IF NOT EXISTS tenant_staff_memberships (tenant_id TEXT NOT NULL REFERENCES tenants(id), staff_id INTEGER NOT NULL REFERENCES staff_accounts(id), role TEXT NOT NULL CHECK(role IN ('operator_admin', 'operator_content', 'operator_provider', 'operator_support')), status TEXT NOT NULL CHECK(status IN ('active', 'disabled')), created_at INTEGER NOT NULL, PRIMARY KEY(tenant_id, staff_id));
+  CREATE TABLE IF NOT EXISTS staff_login_names (
+    tenant_id TEXT NOT NULL,
+    staff_id INTEGER NOT NULL,
+    username TEXT NOT NULL COLLATE NOCASE,
+    PRIMARY KEY (tenant_id, username),
+    UNIQUE (tenant_id, staff_id),
+    FOREIGN KEY (tenant_id, staff_id) REFERENCES tenant_staff_memberships(tenant_id, staff_id) ON DELETE CASCADE
+  );
   CREATE TABLE IF NOT EXISTS staff_sessions (token TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), staff_id INTEGER NOT NULL REFERENCES staff_accounts(id), expires INTEGER NOT NULL, created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS staff_events (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), actor_id INTEGER NOT NULL REFERENCES staff_accounts(id), action TEXT NOT NULL, target TEXT NOT NULL, created_at INTEGER NOT NULL, correlation_id TEXT);
   CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, email_verified INTEGER NOT NULL DEFAULT 1 CHECK(email_verified IN (0, 1)), preferred_locale TEXT NOT NULL DEFAULT 'en-CA' CHECK(preferred_locale IN ('en-CA', 'fr-CA')));
@@ -1264,9 +1272,16 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'POST /api/admin/login') {
     if (!adminEnabled) fail(503, 'adminDisabled');
     limitAuthAttempts(req, route);
-    const { email, password, code } = await body(req);
-    if (typeof email !== 'string' || typeof password !== 'string' || password.length > 128) fail(401, 'staffCredentials');
-    const staff = db.prepare('SELECT id, password_hash, mfa_enabled, mfa_secret FROM staff_accounts WHERE email = ?').get(email.trim().toLowerCase());
+    const input = await body(req);
+    const { password, code } = input;
+    const identifier = input.identifier ?? input.email;
+    if (typeof identifier !== 'string' || identifier.length > 254 || typeof password !== 'string' || password.length > 128) fail(401, 'staffCredentials');
+    const login = identifier.trim().toLowerCase();
+    const staff = login.includes('@')
+      ? db.prepare('SELECT id, email, password_hash, mfa_enabled, mfa_secret FROM staff_accounts WHERE email = ?').get(login)
+      : db.prepare(`SELECT a.id, a.email, a.password_hash, a.mfa_enabled, a.mfa_secret
+          FROM staff_login_names n JOIN staff_accounts a ON a.id = n.staff_id
+          WHERE n.tenant_id = ? AND n.username = ?`).get(tenantId, login);
     const salt = staff?.password_hash.split(':')[0] || '00000000000000000000000000000000';
     const candidate = `${salt}:${scryptSync(password.slice(0, 128), salt, 64).toString('hex')}`;
     if (!staff || !matches(candidate, staff.password_hash) || (staff.mfa_enabled && (!staff.mfa_secret || !verifyTotp(decryptStaffSecret(staff.mfa_secret), code)))) fail(401, 'staffCredentials');
@@ -1278,7 +1293,7 @@ async function api(req, res, path, tenantId, requestId) {
       staffAudit.record(tenantId, staff.id, 'staff_login', 'session', requestId);
     });
     res.setHeader('Set-Cookie', `northplay_staff=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=28800${secureCookie}`);
-    return staffSession({ ...staff, email: email.trim().toLowerCase(), ...membership }, tenantId);
+    return staffSession({ ...staff, ...membership }, tenantId);
   }
   if (route === 'GET /api/admin/session') {
     return staffSession(staffContext(req, tenantId, staffRoles), tenantId);
@@ -1380,10 +1395,12 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (['GET /api/admin/staff', 'POST /api/admin/staff', 'POST /api/admin/staff/disable', 'POST /api/admin/staff/role'].includes(route)) {
     staffContext(req, tenantId);
-    if (route === 'GET /api/admin/staff') return db.prepare(`SELECT a.email, a.mfa_enabled AS mfaEnabled, m.role, m.status,
+    if (route === 'GET /api/admin/staff') return db.prepare(`SELECT a.email, n.username, a.mfa_enabled AS mfaEnabled, m.role, m.status,
       m.publish_website AS publishWebsite, m.publish_catalogue AS publishCatalogue, m.manage_player_access AS managePlayerAccess, m.created_at AS createdAt,
       (SELECT max(e.created_at) FROM staff_events e WHERE e.tenant_id = m.tenant_id AND e.actor_id = a.id) AS lastActivityAt
-      FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id WHERE m.tenant_id = ? ORDER BY m.created_at`).all(tenantId)
+      FROM tenant_staff_memberships m JOIN staff_accounts a ON a.id = m.staff_id
+      LEFT JOIN staff_login_names n ON n.tenant_id = m.tenant_id AND n.staff_id = m.staff_id
+      WHERE m.tenant_id = ? ORDER BY m.created_at`).all(tenantId)
       .map((member) => ({ ...member, ...staffPermissions(member) }));
     const input = await body(req);
     const { email, password, role, publishWebsite, publishCatalogue, managePlayerAccess, reason: reasonInput } = input ?? {};
@@ -1396,6 +1413,8 @@ async function api(req, res, path, tenantId, requestId) {
         (managePlayerAccess !== undefined && (typeof managePlayerAccess !== 'boolean' || (managePlayerAccess && role !== 'operator_support'))) ||
         (reasonInput !== undefined && (typeof reasonInput !== 'string' || reasonInput.length > 240))) fail(400, 'invalid');
     const normalizedEmail = email.trim().toLowerCase();
+    const username = input.username;
+    if (username !== undefined && (disable || changeRole || !validPlayerName(username))) fail(400, 'invalid');
     const reason = reasonInput?.trim();
     return auditedChange(['operator_admin'], input, (actor) => {
       let target = db.prepare('SELECT id FROM staff_accounts WHERE email = ?').get(normalizedEmail);
@@ -1431,6 +1450,12 @@ async function api(req, res, path, tenantId, requestId) {
           role = excluded.role, status = excluded.status, publish_website = excluded.publish_website,
           publish_catalogue = excluded.publish_catalogue, manage_player_access = excluded.manage_player_access`)
         .run(tenantId, target.id, next.role, next.status, Date.now(), next.publishWebsite, next.publishCatalogue, next.managePlayerAccess);
+      if (username !== undefined) {
+        const owner = db.prepare('SELECT staff_id FROM staff_login_names WHERE tenant_id = ? AND username = ?').get(tenantId, username);
+        if (owner && owner.staff_id !== target.id) fail(409, 'staffUsernameTaken');
+        db.prepare(`INSERT INTO staff_login_names(tenant_id, staff_id, username) VALUES (?, ?, ?)
+          ON CONFLICT(tenant_id, staff_id) DO UPDATE SET username = excluded.username`).run(tenantId, target.id, username);
+      }
       if (disable) db.prepare('DELETE FROM staff_sessions WHERE tenant_id = ? AND staff_id = ?').run(tenantId, target.id);
       const action = disable ? 'staff_disabled' : changeRole ? 'staff_role_changed' : member ? 'staff_reenabled' : 'staff_created';
       const auditId = staffAudit.record(tenantId, actor.id, action, normalizedEmail, requestId, {
