@@ -103,7 +103,9 @@ export function createClubHome({root,api,base,french,account,accountPending=()=>
     const focused=document.activeElement, hadFocus=root.contains(focused);
     const key=hadFocus && (focused.dataset.clubCard || focused.dataset.clubAction);
     const id=hadFocus && focused.dataset.program;
+    const prizeOpen=root.querySelector('[data-prize-program]')?.open;
     root.innerHTML=html; signature=html;
+    const prizePanel=root.querySelector('[data-prize-program]');if(prizeOpen&&prizePanel)prizePanel.open=true;
     if(key){
       const candidates=[...root.querySelectorAll('[data-club-card],[data-club-action]')];
       const next=candidates.find(el=>(el.dataset.clubCard===key||el.dataset.clubAction===key)&&el.dataset.program===id&&!el.disabled)

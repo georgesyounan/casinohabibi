@@ -34,7 +34,7 @@ export function marketPanel(data,fr,tab,base) {
       act('prize-request',l('Request a demo prize','Demander un prix fictif')+' · '+p.rules.threshold,'data-amount="'+p.rules.threshold+'"',p.prize<p.rules.threshold)+
       p.claims.map(c=>'<p>#'+c.id+' · '+c.amount+' · '+claimState[c.state]+'</p>').join(''):
       act('prize-join',l('Join the prize demo','Rejoindre le programme fictif'));
-    awards='<details class="club-tourney"><summary>'+l('Free entries and demo prizes','Participations gratuites et prix fictifs')+'</summary><p>'+l('Join for 100 play coins and 5 prize units. Each free entry grants ','À l’inscription, recevez 100 jetons loisir et 5 unités de prix. Chaque participation gratuite ajoute ')+p.rules.freeUnits+
+    awards='<details class="club-tourney" data-prize-program><summary>'+l('Free entries and demo prizes','Participations gratuites et prix fictifs')+'</summary><p>'+l('Join for 100 play coins and 5 prize units. Each free entry grants ','À l’inscription, recevez 100 jetons loisir et 5 unités de prix. Chaque participation gratuite ajoute ')+p.rules.freeUnits+
       l(' prize units. Daily reset in ',' unités de prix. Journée selon le fuseau ')+safe(p.rules.zone)+'.</p>'+controls+'</details>';
   }
   return awards+'<h3>'+l('Club tournaments','Tournois du Club')+'</h3>'+ (cards.join('')||'<p>'+l('No tournaments scheduled.','Aucun tournoi programmé.')+'</p>');
