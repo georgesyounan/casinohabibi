@@ -120,7 +120,7 @@
 </main>
 <main id="admin" class="shell admin" tabindex="-1" hidden>
   <section id="staff-login"><div class="login-identity"><span class="admin-emblem" aria-hidden="true">✦</span><strong>Casino Habibi</strong></div><h1 data-copy="staffLogin"></h1><p data-copy="staffLoginHelp"></p>
-  <form id="staff-login-form"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="username"></label>
+  <form id="staff-login-form"><label><span data-copy="staffLoginIdentifier"></span><input name="identifier" type="text" required maxlength="254" autocapitalize="none" spellcheck="false" autocomplete="username"></label>
   <div class="password-field"><label for="staff-login-password" data-copy="staffPassword"></label><div class="password-control"><input id="staff-login-password" name="password" type="password" minlength="12" required autocomplete="current-password"><button type="button" class="ghost password-toggle" data-staff-password-toggle aria-label="Show password" aria-pressed="false" data-copy="showPassword"></button></div></div>
   <label><span data-copy="mfaCode"></span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"><small data-copy="mfaLoginHint"></small></label>
   <button type="submit" data-copy="staffSignIn"></button></form><p role="status" id="staff-login-status"></p></section>
@@ -670,7 +670,7 @@
           <details class="admin-disclosure admin-add-staff">
             <summary data-copy="adminAddStaff"></summary>
             <div class="admin-detail-body">
-              <form id="staff-create"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="off"></label><label><span data-copy="temporaryPassword"></span><input name="password" type="password" minlength="12" autocomplete="new-password"></label>
+              <form id="staff-create"><label><span data-copy="staffEmail"></span><input name="email" type="email" required autocomplete="off"></label><label><span data-copy="staffOptionalUsername"></span><input name="username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,23}" autocapitalize="none" spellcheck="false" autocomplete="off"></label><label><span data-copy="temporaryPassword"></span><input name="password" type="password" minlength="12" autocomplete="new-password"></label>
               <label><span data-copy="staffRole"></span><select name="role"><option value="operator_admin" data-copy="roleAdmin"></option><option value="operator_content" data-copy="roleContent"></option><option value="operator_provider" data-copy="roleProvider"></option><option value="operator_support" data-copy="roleSupport"></option></select></label>
               <p id="staff-role-help" class="staff-role-help"></p>
               <div class="staff-publishing-grants" id="staff-create-grants" hidden>

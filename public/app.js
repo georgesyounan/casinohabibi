@@ -198,7 +198,10 @@ const copy = {
   saveDraft: ['Save draft', 'Enregistrer le brouillon'], publishConfig: ['Publish version', 'Publier la version'],
   draftSaved: ['Draft saved.', 'Brouillon enregistré.'], configPublished: ['Configuration published.', 'Configuration publiée.'],
   staffLogin: ['Staff sign in', 'Connexion du personnel'],
-  staffLoginHelp: ['Sign in to your workspace with your staff email.', 'Accédez à votre espace avec votre courriel professionnel.'],
+  staffLoginHelp: ['Sign in with your staff account.', 'Connectez-vous avec votre compte du personnel.'],
+  staffLoginIdentifier: ['Username or email', 'Nom d’utilisateur ou courriel'],
+  staffOptionalUsername: ['Username (optional)', 'Nom d’utilisateur (facultatif)'],
+  staffUsernameTaken: ['This username is already in use.', 'Ce nom d’utilisateur est déjà utilisé.'],
   staffEmail: ['Staff email', 'Courriel du membre du personnel'], staffPassword: ['Password', 'Mot de passe'],
   staffChangePasswordTitle: ['Change my staff password', 'Changer mon mot de passe du personnel'],
   staffChangePasswordHelp: ['Enter your current password and choose a new one. Other staff sessions will be signed out.', 'Saisissez votre mot de passe actuel et choisissez-en un nouveau. Les autres sessions du personnel seront fermées.'],
@@ -211,7 +214,7 @@ const copy = {
   staffManagement: ['Staff access', 'Accès du personnel'], temporaryPassword: ['Initial password for a new account (12 characters minimum); leave blank for an existing account', 'Mot de passe initial pour un nouveau compte (au moins 12 caractères); laissez vide pour un compte existant'],
   staffRole: ['Role', 'Rôle'], staffCreate: ['Add staff member', 'Ajouter un membre du personnel'], staffDisable: ['Disable', 'Désactiver'], staffAccountsHeading: ['Staff accounts', 'Comptes du personnel'],
   roleAdminHelp: ['Full access to staff, casino settings, provider tools, support and audit history.', 'Accès complet au personnel, aux paramètres du casino, aux outils des fournisseurs, au soutien et à l’historique d’audit.'], roleContentHelp: ['Edit website content and catalogue drafts. Assign publishing rights for this brand below.', 'Modifier le contenu du site et les brouillons du catalogue. Attribuez les droits de publication de cette marque ci-dessous.'], roleProviderHelp: ['Manage provider records, stored credentials and catalog previews.', 'Gérer les dossiers des fournisseurs, les identifiants enregistrés et les aperçus du catalogue.'], roleSupportHelp: ['Manage player support requests, assignments, private notes and replies.', 'Gérer les demandes de soutien, les attributions, les notes internes et les réponses.'],
-  staffSearch: ['Search staff email', 'Rechercher un courriel du personnel'], staffFilterRole: ['Filter by role', 'Filtrer par rôle'], staffFilterStatus: ['Filter by status', 'Filtrer par état'], staffFilterMfa: ['Filter by two-step verification', 'Filtrer par vérification en deux étapes'], staffFilterMfaEnabled: ['Enabled', 'Activée'], staffFilterMfaDisabled: ['Not enabled', 'Non activée'], staffFilterAll: ['All', 'Tous'], staffNoMatches: ['No staff accounts match these filters.', 'Aucun compte du personnel ne correspond à ces filtres.'], staffCount: ['Showing {shown} of {total} staff accounts', 'Membres du personnel affichés : {shown} sur {total}'], staffSort: ['Sort by', 'Trier par'], staffSortNewest: ['Newest first', 'Les plus récents'], staffSortOldest: ['Oldest first', 'Les plus anciens'], staffSortEmail: ['Email A to Z', 'Courriel de A à Z'], staffAddedOn: ['Added (UTC) {date}', 'Ajouté le {date} (UTC)'], staffLastActivity: ['Last recorded activity (UTC): {date}', 'Dernière activité enregistrée (UTC) : {date}'], staffNoActivity: ['No recorded activity', 'Aucune activité enregistrée'],
+  staffSearch: ['Search staff username or email', 'Rechercher un nom d’utilisateur ou un courriel'], staffFilterRole: ['Filter by role', 'Filtrer par rôle'], staffFilterStatus: ['Filter by status', 'Filtrer par état'], staffFilterMfa: ['Filter by two-step verification', 'Filtrer par vérification en deux étapes'], staffFilterMfaEnabled: ['Enabled', 'Activée'], staffFilterMfaDisabled: ['Not enabled', 'Non activée'], staffFilterAll: ['All', 'Tous'], staffNoMatches: ['No staff accounts match these filters.', 'Aucun compte du personnel ne correspond à ces filtres.'], staffCount: ['Showing {shown} of {total} staff accounts', 'Membres du personnel affichés : {shown} sur {total}'], staffSort: ['Sort by', 'Trier par'], staffSortNewest: ['Newest first', 'Les plus récents'], staffSortOldest: ['Oldest first', 'Les plus anciens'], staffSortEmail: ['Email A to Z', 'Courriel de A à Z'], staffAddedOn: ['Added (UTC) {date}', 'Ajouté le {date} (UTC)'], staffLastActivity: ['Last recorded activity (UTC): {date}', 'Dernière activité enregistrée (UTC) : {date}'], staffNoActivity: ['No recorded activity', 'Aucune activité enregistrée'],
   staffSortActivity: ['Most recently active', 'Activité la plus récente'],
   staffFilterActivity: ['Filter by recorded activity', 'Filtrer selon l’activité enregistrée'], staffActivityHas: ['Has recorded activity', 'Activité enregistrée'], staffActivityNone: ['No recorded activity', 'Aucune activité enregistrée'],
   staffMfaEnabled: ['Two-step verification enabled', 'Vérification en deux étapes activée'], staffMfaDisabled: ['Two-step verification not enabled', 'Vérification en deux étapes non activée'],
@@ -236,7 +239,7 @@ const copy = {
   mfaEnable: ['Enable two-step verification', 'Activer la vérification en deux étapes'], mfaDisable: ['Disable two-step verification', 'Désactiver la vérification en deux étapes'],
   mfaEnabled: ['Two-step verification enabled.', 'Vérification en deux étapes activée.'], mfaDisabled: ['Two-step verification disabled.', 'Vérification en deux étapes désactivée.'],
   mfaConfirmDisable: ['Disable two-step verification for this account? Sign-in will no longer require an authenticator code.', 'Désactiver la vérification en deux étapes pour ce compte ? L’ouverture de session ne demandera plus de code d’authentification.'],
-  staffCredentials: ['Email, password, or authenticator code is incorrect.', 'Le courriel, le mot de passe ou le code est incorrect.'],
+  staffCredentials: ['Username, email, password, or authenticator code is incorrect.', 'L’identifiant, le mot de passe ou le code est incorrect.'],
   staffAuth: ['Please sign in again.', 'Veuillez vous reconnecter.'], staffForbidden: ['Your account does not have permission for this action.', 'Votre compte n’a pas la permission d’effectuer cette action.'],
   staffLifecycle: ['This staff account cannot be changed in its current state.', 'Ce compte du personnel ne peut pas être modifié dans son état actuel.'],
   staffExists: ['This staff member already has access to this casino.', 'Cette personne a déjà accès à ce casino.'],
@@ -2563,7 +2566,7 @@ function getFilteredStaffMembers() {
   const selectedMfa = $('#staff-filter-mfa').value;
   const selectedActivity = $('#staff-filter-activity').value;
   const sort = $('#staff-sort').value;
-  return staffMemberCache.filter((member) => member.email.toLocaleLowerCase(language ? 'fr-CA' : 'en-CA').includes(query) && (selectedRole === 'all' || member.role === selectedRole) && (selectedStatus === 'all' || member.status === selectedStatus) && (selectedMfa === 'all' || Boolean(member.mfaEnabled) === (selectedMfa === 'enabled')) && (selectedActivity === 'all' || Boolean(member.lastActivityAt) === (selectedActivity === 'has'))).sort((a, b) => sort === 'email' ? a.email.localeCompare(b.email, language ? 'fr-CA' : 'en-CA') : sort === 'activity' ? (b.lastActivityAt || 0) - (a.lastActivityAt || 0) : sort === 'oldest' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt);
+  return staffMemberCache.filter((member) => (member.email.toLowerCase().includes(query) || member.username?.toLowerCase().includes(query)) && (selectedRole === 'all' || member.role === selectedRole) && (selectedStatus === 'all' || member.status === selectedStatus) && (selectedMfa === 'all' || Boolean(member.mfaEnabled) === (selectedMfa === 'enabled')) && (selectedActivity === 'all' || Boolean(member.lastActivityAt) === (selectedActivity === 'has'))).sort((a, b) => sort === 'email' ? a.email.localeCompare(b.email, language ? 'fr-CA' : 'en-CA') : sort === 'activity' ? (b.lastActivityAt || 0) - (a.lastActivityAt || 0) : sort === 'oldest' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt);
 }
 function renderStaffList() {
   const filteredMembers = getFilteredStaffMembers();
@@ -2573,7 +2576,8 @@ function renderStaffList() {
   $('#staff-list').replaceChildren(...(filteredMembers.length ? filteredMembers : [null]).map((member) => {
     if (!member) return element('li', t('staffNoMatches'));
     const roleLabel = staffRoleLabel(member.role);
-    const item = element('li', `${member.email} · ${roleLabel} · ${t(member.status)}`, 'staff-list-item');
+    const identity = member.username ? `${member.username} (${member.email})` : member.email;
+    const item = element('li', `${identity} · ${roleLabel} · ${t(member.status)}`, 'staff-list-item');
     const dateLocale = language ? 'fr-CA' : 'en-CA';
     const addedDate = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(member.createdAt));
     item.append(element('small', t('staffAddedOn').replace('{date}', addedDate), 'staff-created-at'));
@@ -3128,13 +3132,13 @@ $('#staff-login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const submit = form.querySelector('button[type=submit]');
-  const { email, password, code } = Object.fromEntries(new FormData(form));
+  const { identifier, password, code } = Object.fromEntries(new FormData(form));
   submit.disabled = true;
   submit.textContent = t('staffSigningIn');
   form.setAttribute('aria-busy', 'true');
   $('#staff-login-status').textContent = '';
   try {
-    const session = await api('admin/login', { email, password, code });
+    const session = await api('admin/login', { identifier, password, code });
     showStaffSession(session, true);
     form.reset();
     $('#staff-login-status').textContent = '';
@@ -3189,12 +3193,12 @@ $('#staff-create select[name="role"]').addEventListener('change', updateStaffRol
 $('#staff-create').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
-  const { email, password, role, reason } = Object.fromEntries(new FormData(form));
+  const { email, username, password, role, reason } = Object.fromEntries(new FormData(form));
   const access = staffGrants($('#staff-create-grants'), role);
   const button = form.querySelector('button[type=submit]');
   button.disabled = true;
   try {
-    await api('admin/staff', { email, password, role, reason, ...access });
+    await api('admin/staff', { email, ...(username.trim() && { username: username.trim() }), password, role, reason, ...access });
     form.reset();
     updateStaffRoleHelp();
     $('#staff-status').textContent = t('staffAdded');

@@ -150,6 +150,33 @@ test('the mounted lobby renders its brand and artwork and respects a newly publi
   assert.match(updated, /<h1 data-copy="headline">Une table &lt;ouverte&gt;<\/h1>/);
 });
 
+test('staff usernames open the same staff account within their assigned brand', async (t) => {
+  const { base: origin, database } = await startSandbox(t, { appBasePath: '/casinohabibi' });
+  const base = origin + '/casinohabibi';
+  const staff = client(base);
+  const original = (await staff('admin/login', staffCredentials)).data;
+  const db = new DatabaseSync(database);
+  t.after(() => db.close());
+  db.prepare('INSERT INTO staff_login_names(tenant_id,staff_id,username) VALUES(?,?,?)').run('sandbox', original.id, 'admin');
+  const alias = { identifier: ' AdMiN ', password: staffCredentials.password };
+  assert.deepEqual((await staff('admin/login', alias)).data, original);
+  assert.deepEqual((await staff('admin/session')).data, original);
+  assert.equal((await staff('admin/login', { ...alias, password: 'incorrect-password' })).status, 401);
+  const page = await (await fetch(base + '/admin?lang=fr')).text();
+  assert.match(page, /Nom d’utilisateur ou courriel<\/span><input name="identifier" type="text"/);
+  const helper = { email: 'operator@example.test', password: 'operator-test-password', username: 'Equipe', role: 'operator_support' };
+  assert.equal((await staff('admin/staff', helper)).status, 200);
+  const operator = client(base);
+  assert.equal((await operator('admin/login', { identifier: 'equipe', password: helper.password })).data.role, helper.role);
+  assert.equal((await staff('admin/staff', { ...helper, email: 'duplicate@example.test', username: 'eQuiPe' })).status, 409);
+  assert.equal((await staff('admin/staff/disable', { email: helper.email, reason: 'End of shift' })).status, 200);
+  assert.equal((await operator('admin/login', { identifier: 'equipe', password: helper.password })).status, 403);
+  db.exec("INSERT INTO tenants(id,slug,name,status,created_at) VALUES('second','second','Second','active',1); UPDATE tenant_domains SET tenant_id='second' WHERE host='localhost';");
+  assert.equal((await client(base)('admin/login', alias, 'localhost')).status, 401);
+  db.prepare('UPDATE staff_accounts SET mfa_enabled=1 WHERE id=?').run(original.id);
+  assert.equal((await staff('admin/login', alias)).status, 401);
+});
+
 test('player and provider sandbox flows', async (t) => {
   const { base, database } = await startSandbox(t);
   const request = client(base);
