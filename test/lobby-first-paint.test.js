@@ -36,3 +36,27 @@ test('the initial home cover, filters and counts use only eligible published con
   assert.doesNotMatch(home(),/data-initial-slug|Voie &lt;rapide&gt;/);
   assert.equal(db.prepare('SELECT count(*) AS n FROM coming_soon_visits').get().n,0);
 });
+
+test('opening the league during startup preserves the chosen panel when the account finishes loading', async t=>{
+  const {createClubHome}=await import('../public/player-club.js');
+  t.mock.timers.enable({apis:['setTimeout']});
+  const snapshot={day:'2026-11-23',next:Date.now()+120000,amount:500,enabled:true,claimed:false,points:null,items:[],trending:[]};
+  const globals={location:new URL('https://example.test/casinohabibi/?view=promotions&club=daily'),
+    window:new EventTarget(),document:Object.assign(new EventTarget(),{
+      body:{dataset:{lobbyBrand:'habibi'},classList:{contains:()=>true}},activeElement:null,
+      getElementById:id=>id==='club-public-model'?{textContent:JSON.stringify(snapshot)}:{hasAttribute:()=>false}
+    })};
+  for(const [key,value] of Object.entries(globals)){
+    const old=Object.getOwnPropertyDescriptor(globalThis,key);Object.defineProperty(globalThis,key,{value,configurable:true});
+    t.after(()=>{if(old)Object.defineProperty(globalThis,key,old);else delete globalThis[key];});
+  }
+  let click;
+  const root={dataset:{},contains:()=>false,addEventListener(name,fn){if(name==='click')click=fn;}};
+  const api=async path=>path.includes('standings')?{rows:[],own:null}:snapshot;
+  const club=createClubHome({root,api,base:'/casinohabibi',account:()=>null,french:()=>true,translate:x=>x});
+  await click({button:0,preventDefault(){},target:{closest:s=>s==='[data-club-card]'?{dataset:{clubCard:'league'}}:null}});
+  assert.match(root.innerHTML,/id="club-link-league"[^>]+aria-expanded="true"/);
+  await club.sync();
+  assert.match(root.innerHTML,/id="club-link-league"[^>]+aria-expanded="true"/);
+  assert.match(root.innerHTML,/Aucun point enregistré/);
+});
