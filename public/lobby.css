@@ -312,6 +312,7 @@ body[data-lobby-brand="habibi"]:not(:has(#admin:not([hidden]))) {
 }
 
 /* Keep the two products within thumb reach and the secondary menu out of the mobile catalogue. */
+.home-tools { display: contents; }
 .home-products, .home-nav-group, #home-menu { display: none; }
 body:not([data-lobby-brand="habibi"]) .lobby-rail [data-home-view] { display: none; }
 .player-home[data-lobby-brand="habibi"] > header .bar {
@@ -409,4 +410,74 @@ body:not([data-lobby-brand="habibi"]) [data-house-games] { display: none; }
 @media (max-width: 620px) {
   .home-shortcuts a { flex: 1 1 auto; justify-content: center; padding: 7px 4px; font-size: .65rem; }
   .home-shortcuts .ui-icon { font-size: 13px; }
+}
+
+/* Reserve the featured slot while its personalized catalogue request is in flight. */
+.player-home[data-lobby-brand="habibi"] { --home-accent: var(--published-lobby-accent, #83ffd4); }
+.player-home[data-edition-pending] .home-showcase:has(.spotlight[hidden]) { grid-template-columns: minmax(0,1.92fr) minmax(205px,.85fr); }
+.player-home[data-edition-pending] .home-showcase:has(.spotlight[hidden])::after {
+  content: ""; border: 1px solid #393044; border-radius: 15px;
+  background: linear-gradient(125deg,#221b32,#30253e 65%,#1d1928);
+}
+.player-home[data-edition-pending] :is(#catalog-summary, #catalog-empty) { visibility: hidden; }
+.player-home[data-edition-pending] #catalog-summary { display: block !important; min-height: 1.45em; }
+.player-home[data-lobby-brand="habibi"] .lobby-rail { overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #4d4962 transparent; }
+.player-home[data-lobby-brand="habibi"] :is(#hub-title, #home-originals, #games, #play-safely) { scroll-margin-top: 82px; }
+.hub-sports .fixture { padding: clamp(15px,2vw,23px); }
+.hub-sports .fixture h2 { display: flex; align-items: baseline; flex-wrap: wrap; gap: .55rem; }
+.fixture h2 small { color: #aaa7bb; font-size: .74rem; font-weight: 500; }
+.fixture .market-label { margin: 14px 0 6px; color: #bcbacb; font-size: .78rem; }
+.hub-sports .hub-markets button { min-height: 47px; }
+.hub-slip { border-top: 2px solid var(--home-accent); }
+.hub-slip h2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.slip-count { min-width: 1.55em; padding: 2px 6px; border-radius: 5px; color: #b6f6dc; background: #26352e; text-align: center; font: 650 .8rem/1.45 Inter,system-ui,sans-serif; }
+.hub-slip .hub-note { margin-bottom: 0; }
+.hub-slip button[data-hub-control="confirm"] { width: 100%; margin: 10px 0 0; }
+@media (min-width: 851px) {
+  .player-home[data-lobby-brand="habibi"] { --rail-width: clamp(165px,14vw,212px); }
+  .player-home[data-lobby-brand="habibi"] .lobby-rail { padding-block: 19px 14px; }
+  .player-home[data-lobby-brand="habibi"] .lobby-rail :is(button,a) { min-height: 37px; padding-block: 6px; }
+  .player-home[data-lobby-brand="habibi"] .rail-library { margin-top: 9px; padding-top: 13px; }
+  .player-home[data-lobby-brand="habibi"] .hub-slip { position: sticky; top: 84px; }
+}
+@media (max-width: 850px) {
+  .player-home[data-lobby-brand="habibi"] :is(#hub-title, #home-originals, #games, #play-safely) { scroll-margin-top: 12px; }
+}
+@media (max-width: 620px) {
+  .player-home[data-edition-pending] .home-showcase:has(.spotlight[hidden]) { grid-template-columns: minmax(0,1fr); }
+  .player-home[data-edition-pending] .home-showcase:has(.spotlight[hidden])::after { min-height: 74px; border-radius: 10px; }
+  .player-home[data-lobby-brand="habibi"] > header .bar {
+    grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "brand account" "tools tools";
+    gap: 7px 8px; padding-block: 8px;
+  }
+  .player-home[data-lobby-brand="habibi"] > header .brand { grid-area: brand; justify-self: start; }
+  .player-home[data-lobby-brand="habibi"] > header .habibi-wordmark { white-space: nowrap; overflow-wrap: normal; }
+  .player-home[data-lobby-brand="habibi"] > header .actions { grid-area: account; flex-wrap: nowrap; white-space: nowrap; }
+  .player-home[data-lobby-brand="habibi"] > header .actions button { white-space: nowrap; }
+  .player-home[data-lobby-brand="habibi"] .home-tools { grid-area: tools; position: relative; display: flex; align-items: center; gap: 8px; }
+  .player-home[data-lobby-brand="habibi"] > header .home-products { flex: none; flex-direction: row; flex-wrap: nowrap; }
+  .player-home[data-lobby-brand="habibi"] > header .home-products :is(a,button) { flex: none; min-height: 34px; padding-inline: 6px; gap: 3px; }
+  .player-home[data-lobby-brand="habibi"] .home-search { flex: 1; width: auto; height: 42px; gap: 5px; padding-inline: 8px; }
+  .player-home[data-lobby-brand="habibi"] .home-search:focus-within { position: absolute; inset: 0; z-index: 1; }
+}
+@media (max-width: 370px) {
+  .player-home[data-lobby-brand="habibi"] > header .home-products .ui-icon { display: none; }
+}
+
+.hub-offers .hub-offers-loading, .hub-offers:has([aria-busy="true"]) .hub-empty { display: none; }
+.hub-offers:has([aria-busy="true"]) .hub-offers-loading { display: block; }
+@media (max-width: 620px) {
+  .player-home[data-lobby-brand="habibi"] .home-search:not(:focus-within) { position: relative; }
+  .player-home[data-lobby-brand="habibi"] .home-search:not(:focus-within) input::placeholder { color: transparent; }
+  .player-home[data-lobby-brand="habibi"] .home-search:not(:focus-within):has(input:placeholder-shown)::after {
+    content: attr(data-compact); position: absolute; left: 30px; right: 4px; pointer-events: none;
+    color: #bcbacb; font-size: .79rem; white-space: nowrap;
+  }
+}
+@media (max-width: 370px) {
+  .player-home[data-lobby-brand="habibi"] :is(#language,#account,#join-home) { padding-inline: .39rem; font-size: .73rem; }
+  .player-home[data-lobby-brand="habibi"] header .actions { gap: 3px; }
+  .player-home[data-lobby-brand="habibi"] header .habibi-wordmark { font-size: 1.03rem; }
+  .player-home[data-lobby-brand="habibi"] header .brand-logo { width: 25px; height: 25px; }
+  .player-home[data-lobby-brand="habibi"] .hero-content { width: 75%; }
 }

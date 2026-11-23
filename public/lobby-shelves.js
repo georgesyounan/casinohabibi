@@ -1,4 +1,5 @@
 import { uiKit } from './discovery.js';
+import { lobbyView, viewTitle, matches, sportsMarkup } from './lobby-navigation.js';
 import { shareLink } from './referral-views.js';
 
 export const shelfCopy = {
@@ -371,7 +372,11 @@ export function createLobbySections({
   club,
   support,
   roundTitle,
-  money
+  money,
+  ready,
+  editionFailed,
+  retryEdition,
+  onNavigate
 }) {
   const ui = uiKit(french);
   const { el, l, button } = ui;
@@ -380,18 +385,12 @@ export function createLobbySections({
   const menu = document.getElementById('home-menu');
   const offers = document.getElementById('campaign-placement');
   const help = document.querySelector('.faq-section');
-  const views = {
-    sports: ['Sports demo', 'Sports en démo'],
-    new: ['New releases', 'Nouveautés'],
-    studios: ['Studios & providers', 'Studios et fournisseurs'],
-    promotions: ['Promotions', 'Promotions'],
-    invite: ['Invite a friend', 'Inviter un ami'],
-    activity: ['Game activity', 'Activité des jeux'],
-    help: ['Guides & support', 'Guides et assistance']
-  };
-  const wanted = new URLSearchParams(location.search).get('view');
-  const view = Object.hasOwn(views, wanted) ? wanted : '';
-  const local = (pair) => l(...pair);
+  const locationView = () => lobbyView(new URL(location.href).searchParams.get('view'));
+  const offersHome = document.createComment('Campaign placement');
+  const guideHome = document.createComment('Casino FAQ');
+  offers.before(offersHome);
+  help.before(guideHome);
+  let view = locationView();
   const enabled = () =>
     document.body.classList.contains('player-home') && document.body.dataset.lobbyBrand === 'habibi';
   const href = (params = {}, hash = '') =>
@@ -399,6 +398,7 @@ export function createLobbySections({
   let sport = 'football',
     period = 7,
     ticketSaved = false;
+  let renderedSports = '';
   const picks = new Map();
   function closeMenu() {
     lobby.removeAttribute('data-menu-open');
@@ -407,8 +407,8 @@ export function createLobbySections({
   menu.addEventListener('click', () =>
     menu.setAttribute('aria-expanded', String(lobby.toggleAttribute('data-menu-open')))
   );
-  lobby.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && lobby.hasAttribute('data-menu-open')) {
+  document.addEventListener('keydown', (event) => {
+    if (enabled() && event.key === 'Escape' && lobby.hasAttribute('data-menu-open')) {
       closeMenu();
       menu.focus();
     }
@@ -445,106 +445,30 @@ export function createLobbySections({
     }
     return nav;
   }
-  const matches = [
-    { id: 'marina', sport: 'football', teams: ['Marina FC', 'Atlas 04'], odds: [2.15, 3.2, 2.7] },
-    { id: 'union', sport: 'football', teams: ['Union Nord', 'Rivage SC'], odds: [2.45, 3.1, 2.3] },
-    { id: 'comets', sport: 'basketball', teams: ['Metro Comets', 'Port Waves'], odds: [1.78, 2.05] },
-    { id: 'bears', sport: 'basketball', teams: ['North Bears', 'City Sparks'], odds: [1.92, 1.86] }
-  ];
-  function outcome(match, i) {
-    if (match.odds.length === 3 && i === 1) return l('Draw', 'Nul');
-    return match.teams[i === 0 ? 0 : 1];
-  }
-  function sportsPage() {
-    panel.append(
-      note(
-        l(
-          'Fictional fixtures and odds. Build a practice slip without using your balance.',
-          'Matchs et cotes fictifs. Composez un coupon d’entraînement sans utiliser votre solde.'
-        )
-      )
-    );
-    panel.append(
-      options(
-        [
-          ['football', l('Soccer', 'Soccer')],
-          ['basketball', l('Basketball', 'Basketball')]
-        ],
-        sport,
-        (id) => {
-          sport = id;
-        }
-      )
-    );
-    const layout = el('div', '', 'hub-sports'),
-      grid = el('div', '', 'hub-list'),
-      slip = box();
-    const decimal = new Intl.NumberFormat(l('en-CA', 'fr-CA'), {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-    for (const m of matches.filter((item) => item.sport === sport)) {
-      const card = box(),
-        markets = el('div', '', 'hub-markets');
-      card.append(el('h2', m.teams.join('  /  ')), note(l('Match result', 'Résultat du match')));
-      m.odds.forEach((odd, i) => {
-        const b = control(
-          '',
-          () => {
-            ticketSaved = false;
-            if (picks.get(m.id) === i) picks.delete(m.id);
-            else picks.set(m.id, i);
-            render();
-          },
-          m.id + '-' + i
-        );
-        b.append(el('span', outcome(m, i)), el('strong', decimal.format(odd)));
-        b.setAttribute('aria-pressed', String(picks.get(m.id) === i));
-        markets.append(b);
-      });
-      card.append(markets);
-      grid.append(card);
+  panel.addEventListener('click', event => {
+    if (view !== 'sports') return;
+    const control = event.target.closest('button[data-hub-control]');
+    if (!control || !panel.contains(control)) return;
+    const id = control.dataset.hubControl;
+    if (id === 'football' || id === 'basketball') {
+      sport = id;
+    } else if (id === 'confirm') {
+      ticketSaved = picks.size > 0;
+    } else if (id.startsWith('remove-')) {
+      picks.delete(id.slice(7));
+      ticketSaved = false;
+    } else {
+      const [match, index] = id.split('-');
+      const fixture = matches.find(item => item.id === match);
+      const selection = Number(index);
+      if (!fixture || !Number.isInteger(selection) || fixture.odds[selection] === undefined) return;
+      if (picks.get(match) === selection) picks.delete(match);
+      else picks.set(match, selection);
+      ticketSaved = false;
     }
-    slip.append(el('h2', l('Practice slip', 'Coupon démo')));
-    if (!picks.size)
-      slip.append(note(l('Select a price to add a pick.', 'Sélectionnez une cote pour ajouter un choix.')));
-    for (const [id, i] of picks) {
-      const m = matches.find((item) => item.id === id),
-        line = el('div', '', 'hub-slip-line');
-      const remove = control(
-        '×',
-        () => {
-          picks.delete(id);
-          ticketSaved = false;
-          render();
-        },
-        'remove-' + id
-      );
-      remove.setAttribute('aria-label', l('Remove ', 'Retirer ') + outcome(m, i));
-      line.append(el('span', outcome(m, i) + ' · ' + decimal.format(m.odds[i])), remove);
-      slip.append(line);
-    }
-    if (picks.size && !ticketSaved)
-      slip.append(
-        control(
-          l('Confirm practice slip', 'Valider le coupon démo'),
-          () => {
-            ticketSaved = true;
-            render();
-          },
-          'confirm'
-        )
-      );
-    if (ticketSaved) {
-      const receipt = note(
-        l('Demo slip confirmed for this visit.', 'Coupon démo validé pour cette visite.')
-      );
-      receipt.setAttribute('role', 'status');
-      slip.append(receipt);
-    }
-    layout.append(grid, slip);
-    panel.append(layout);
-  }
+    render();
+    if (id === 'confirm') panel.querySelector('[role="status"]')?.focus({ preventScroll: true });
+  });
   function directory() {
     const counts = new Map();
     const add = (key, n = 1) => counts.set(key, (counts.get(key) || 0) + n);
@@ -608,10 +532,49 @@ export function createLobbySections({
       rows.length ? list : note(l('No rounds in this period.', 'Aucune partie pour cette période.'))
     );
   }
+  // Keep the document, sidebar scroll and practice slip when moving between lobby sections.
+  function navigate(target, push = true) {
+    if (!enabled()) return false;
+    const url = new URL(target, location.href);
+    if (url.origin !== location.origin || url.pathname !== appPath('/')) return false;
+    if (push && url.href !== location.href) {
+      history.replaceState({ ...history.state, lobbyScroll: window.scrollY }, '', location.href);
+      history.pushState({ lobbyScroll: 0 }, '', url);
+    }
+    view = locationView();
+    closeMenu();
+    onNavigate(url);
+    const targetId = url.hash.slice(1);
+    const anchor = targetId && document.getElementById(targetId);
+    const heading = view ? document.getElementById('hub-title') : lobby;
+    const focus = anchor || heading;
+    if (focus && !focus.hasAttribute('tabindex')) focus.tabIndex = -1;
+    focus?.focus({ preventScroll: true });
+    if (!push && Number.isFinite(history.state?.lobbyScroll)) {
+      window.scrollTo({ top: history.state.lobbyScroll, behavior: 'instant' });
+    } else if (anchor) {
+      anchor.scrollIntoView({ block: 'start', behavior: 'instant' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    return true;
+  }
+  document.addEventListener('click', event => {
+    if (!enabled() || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest('a[data-home-view], a[data-house-games], a.hub-link, a.rail-safety, header a.brand');
+    if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
+    const target = link.matches('.rail-safety') ? href({}, '#play-safely') : link.matches('header .brand') ? href() : link.href;
+    if (navigate(target)) event.preventDefault();
+  });
+  window.addEventListener('popstate', () => { if (enabled()) navigate(location.href, false); });
   function render() {
     const active = enabled() && Boolean(view);
     lobby.toggleAttribute('data-hub-open', active);
     panel.hidden = !active;
+    panel.removeAttribute('aria-busy');
+    // These nodes carry live API updates and event handlers even while another section is open.
+    if (view !== 'promotions' && panel.contains(offers)) offersHome.after(offers);
+    if (view !== 'help' && panel.contains(help)) guideHome.after(help);
     if (!enabled()) return;
     for (const a of document.querySelectorAll('[data-home-view]')) {
       const key = a.dataset.homeView;
@@ -621,16 +584,40 @@ export function createLobbySections({
       else a.removeAttribute('aria-current');
     }
     document.querySelector('[data-house-games]').href = href({}, '#home-originals');
+    if (!active || view !== 'sports') renderedSports = '';
     if (!active) return;
     for (const filter of document.querySelectorAll('#filters [data-filter]')) filter.setAttribute('aria-pressed', 'false');
     const focused = panel.contains(document.activeElement)
       ? document.activeElement.dataset.hubControl
       : null;
-    const title = el('h1', local(views[view]));
-    title.id = 'hub-title';
-    title.tabIndex = -1;
-    panel.replaceChildren(title);
-    if (view === 'sports') sportsPage();
+    let title = document.getElementById('hub-title');
+    if (!title) {
+      title = el('h1');
+      title.id = 'hub-title';
+      title.tabIndex = -1;
+      panel.prepend(title);
+    }
+    title.textContent = viewTitle(view, french());
+    if (view === 'sports') {
+      const signature = JSON.stringify([french(), sport, [...picks], ticketSaved]);
+      if (signature === renderedSports) return;
+      renderedSports = signature;
+    }
+    while (title.nextSibling) title.nextSibling.remove();
+    if (view === 'sports') panel.insertAdjacentHTML('beforeend', sportsMarkup(french(), sport, picks, ticketSaved));
+    const waiting = (view === 'new' || view === 'studios' || view === 'activity') && !ready(view);
+    if (waiting) {
+      panel.setAttribute('aria-busy', 'true');
+      const loading = note(l('Loading…', 'Chargement…'));
+      loading.setAttribute('role', 'status');
+      panel.append(loading);
+      return;
+    }
+    if (view === 'new' && editionFailed()) {
+      panel.append(note(l('New releases could not be loaded.', 'Impossible de charger les nouveautés.')),
+        button(l('Try again', 'Réessayer'), retryEdition, true));
+      return;
+    }
     if (view === 'studios') directory();
     if (view === 'activity') activity();
     if (view === 'new') {
@@ -647,7 +634,9 @@ export function createLobbySections({
       const area = el('div', '', 'hub-offers');
       const empty = note(l('No public offer is currently active.', 'Aucune offre publique en cours.'));
       empty.classList.add('hub-empty');
-      area.append(offers, empty);
+      const loading = note(l('Loading offers…', 'Chargement des offres…'));
+      loading.classList.add('hub-offers-loading');
+      area.append(offers, loading, empty);
       panel.append(area);
       const buttons = el('div', '', 'hub-choices');
       buttons.append(
@@ -689,5 +678,5 @@ export function createLobbySections({
         .find((n) => n.dataset.hubControl === focused)
         ?.focus({ preventScroll: true });
   }
-  return { render, closeMenu, active: () => enabled() && Boolean(view), homeUrl: href };
+  return { render, navigate, closeMenu, active: () => enabled() && Boolean(view), homeUrl: href };
 }
