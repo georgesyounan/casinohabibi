@@ -4,6 +4,9 @@ import { createDistribution } from './lib/catalogue-distribution.js';
 import { createLobbyShelves } from './lib/lobby-shelves.js';
 import { createReviewDesk } from './lib/review-desk.js';
 import { createCashierDesk } from './lib/cashier-desk.js';
+import {createPartnerSites} from './lib/partner-sites.js';
+import {createPlayerNotices} from './lib/player-notices.js';
+import {createRoundProof} from './lib/round-proof.js';
 import {createFinanceOperations} from './lib/finance-operations.js';
 import { createFinancePilot } from './lib/finance-pilot.js';
 import { createOperatorProducts } from './lib/operator-products.js';
@@ -19,6 +22,8 @@ import { games } from './public/catalog.js';
 import { createComingSoon, installComingSoon } from './lib/coming-soon.js';
 import { configureTransactionalEmail } from './lib/transactional-email.js';
 import { createDashboard } from './lib/dashboard.js';
+import {createPageLayouts} from './lib/page-layouts.js';
+import {drawLayout,pageRoles} from './public/page-blocks.js';
 import { createWebsiteContent } from './lib/website-content.js';
 import { createPublicPages, guideBody, pageHead, sitemapXml } from './lib/public-pages.js';
 import { createPublicationFollowup } from './lib/publication-followup.js';
@@ -31,7 +36,7 @@ import { createSportsBook } from './lib/sports-book.js';
 import { createMembership } from './lib/club-membership.js';
 import { createPlayerClub } from './lib/player-club.js';
 import { createLobbyEvents } from './lib/lobby-events.js';
-import { createGiftRewards, slotRoll } from './lib/gift-rewards.js';
+import { createGiftRewards } from './lib/gift-rewards.js';
 import { createMonthlyTelegram } from './lib/monthly-telegram.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
@@ -328,6 +333,8 @@ installPlayerAccess(db, transaction);
 const dashboard = createDashboard(db, { transaction, fail });
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
 const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath, transaction });
+const pageLayouts=createPageLayouts(db,{fail,audit:staffAudit.record});
+function layoutRoles(t){const c=publishedTenantConfig(t).config;return Object.keys(pageRoles).filter(r=>(r!=='faq'||c.enabledSections.faq)&&(r!=='bonuses'||clubEnabled(t))&&(r!=='deposit'||testCredits.available(t)));}
 const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath,
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
@@ -343,9 +350,12 @@ const lobbyEvents = transaction(() => createLobbyEvents(db,{fail,accountBreaks,s
 const monthlyTelegram=transaction(()=>createMonthlyTelegram(db,{fail,transaction,
   seal:(tenant,value)=>encryptProviderKey('monthly-telegram:'+tenant,value),
   unseal:(tenant,value)=>decryptStaffSecret(value,'monthly-telegram:'+tenant)}));
-const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,telegram:monthlyTelegram,fail}));
+const playerNotices=transaction(()=>createPlayerNotices(db,{fail}));
+const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,telegram:monthlyTelegram,playerNotices,fail}));
 const membership=transaction(()=>createMembership(db,{fail,accountBreaks}));
-const sportsBook=transaction(()=>createSportsBook(db,{fail,balance:(id,tenant)=>balance(id,tenant),dailyWagered,accountBreaks}));
+const partnerSites=transaction(()=>createPartnerSites(db,{fail}));
+const roundProof=transaction(()=>createRoundProof(db,{fail}));
+const sportsBook=transaction(()=>createSportsBook(db,{fail,balance:(id,tenant)=>balance(id,tenant),dailyWagered,accountBreaks,playerNotices}));
 function clubModel(tenant,player,locale,days=1) {
   return {...playerClub.home(tenant,player,locale,Date.now(),days),membership:{...membership.view(tenant,player),
     telegram:player?monthlyTelegram.connection(tenant,player):null}};
@@ -792,7 +802,7 @@ function account(id, tenantId) {
     history: historyRows,
     historyNextCursor: hasMoreHistory ? historyRows.at(-1).id : null,
     favorites,
-    safety: { accountBreak: accountBreaks.at(tenantId, id), pausedUntil: safety.pause_until || null, coolingOffUntil: safety.cooling_off_until || null, excluded: Boolean(safety.excluded_at), dailyLimit: safety.daily_limit_cents ?? 2500, dailyWagered: dailyWagered(id, tenantId), sessionReminderMinutes: safety.session_reminder_minutes ?? 60 },
+    safety: { ...(playerNotices.nowActive(tenantId,id)&&{notice:playerNotices.nowActive(tenantId,id)}),accountBreak: accountBreaks.at(tenantId, id), pausedUntil: safety.pause_until || null, coolingOffUntil: safety.cooling_off_until || null, excluded: Boolean(safety.excluded_at), dailyLimit: safety.daily_limit_cents ?? 2500, dailyWagered: dailyWagered(id, tenantId), sessionReminderMinutes: safety.session_reminder_minutes ?? 60 },
     marketingEmailConsent: Boolean(marketingConsent?.granted),
     supportReplies
   };
@@ -980,6 +990,16 @@ async function api(req, res, path, tenantId, requestId) {
       );
     }
     fail(404, 'opMissing');
+  }
+  const noticePath=path.match(/^\/api\/admin\/players\/([1-9][0-9]{0,14})\/notice$/);
+  if(noticePath){
+    const id=Number(noticePath[1]),roles=['operator_admin','operator_support'];
+    if(req.method==='GET'){staffContext(req,tenantId,roles);return {notice:playerNotices.nowActive(tenantId,id)};}
+    if(req.method==='POST'){const input=await body(req);return auditedChange(roles,input,actor=>{
+      const ref=input.action==='lift'?playerNotices.lift(tenantId,id,input.id):playerNotices.create(tenantId,id,input);
+      staffAudit.record(tenantId,actor.id,'player_notice_'+(input.action==='lift'?'lift':'create'),'player-'+id,requestId,{fields:['notice']});
+      return {id:ref,notice:playerNotices.nowActive(tenantId,id)};
+    },'managePlayerAccess');}
   }
   if(path==='/api/admin/operator/finance-operations'){
     staffContext(req,tenantId,['operator_admin']);
@@ -1362,6 +1382,13 @@ async function api(req, res, path, tenantId, requestId) {
     if(player) transaction(()=>rewards.observe(tenantId,player,'guide',page.slug,'guide-'+page.slug));
     return page;
   }
+  if (path==='/api/admin/website-content/layout'){
+    staffContext(req,tenantId,websiteRoles);
+    const roles=layoutRoles(tenantId);
+    if(req.method==='GET'){const role=params.get('role')||'home';if(!roles.includes(role))fail(404,'invalid');return {...pageLayouts.state(tenantId,role),roles};}
+    if(req.method==='POST'){const input=await body(req,96*1024);if(!roles.includes(input.role))fail(404,'invalid');
+      return auditedChange(websiteRoles,input,staff=>pageLayouts.change(tenantId,staff.id,requestId,input),input.action==='save'?undefined:'publishWebsite');}
+  }
   if (route === 'GET /api/admin/website-content') {
     staffContext(req, tenantId, websiteRoles);
     return websiteContent.adminList(tenantId, publishedTenantConfig(tenantId).config);
@@ -1697,18 +1724,24 @@ async function api(req, res, path, tenantId, requestId) {
         FROM tenants t LEFT JOIN tenant_domains d ON d.tenant_id = t.id GROUP BY t.id ORDER BY t.created_at DESC`).all()
         .map((tenant) => ({ ...tenant, domains: JSON.parse(tenant.domains) }));
     }
+    if(route==='GET /api/platform/tenants/workspace')return partnerSites.workspace(params.get('tenant'),params.get('q')||'');
+    if(route==='POST /api/platform/tenants/launch'){
+      const input=await body(req);return transaction(()=>partnerSites.launch(input.tenant,input,requestId));
+    }
     if (route === 'GET /api/platform/audit') {
       return db.prepare('SELECT tenant_id AS tenantId, action, target, created_at AS createdAt, correlation_id AS correlationId FROM platform_events ORDER BY id DESC LIMIT 200').all();
     }
     if (route === 'POST /api/platform/tenants') {
-      const { slug, name } = await body(req);
+      const input=await body(req),{slug,name}=input;
+      const setup=partnerSites.settings(input);
       if (typeof slug !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/.test(slug) ||
           typeof name !== 'string' || !name.trim() || name.trim().length > 64) fail(400, 'invalid');
       const id = randomUUID();
       try {
         transaction(() => {
           db.prepare("INSERT INTO tenants(id, slug, name, status, created_at) VALUES (?, ?, ?, 'pending', ?)").run(id, slug, name.trim(), Date.now());
-          const config = { ...defaultTenantConfig, brandName: name.trim() };
+          partnerSites.defaults(id,setup);
+          const config = { ...defaultTenantConfig, brandName:name.trim(),primaryLocale:setup.locales[0],enabledLocales:setup.locales,reportingTimeZone:setup.zone };
           db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, 1, ?, 'published', ?)").run(id, JSON.stringify(config), Date.now());
           rewards.seed(id);
           if(clubEnabled(id)) seedClubBrand(id);
@@ -2372,6 +2405,10 @@ async function api(req, res, path, tenantId, requestId) {
     res.setHeader('Set-Cookie', `northplay=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie}`);
     return { pausedUntil: null, excluded: true };
   }
+  if(route==='POST /api/safety/acknowledge'){
+    if(!player)fail(401,'signin');const input=await body(req);
+    return transaction(()=>{req.assertPlayerSession();playerNotices.ack(tenantId,player,input.id);return account(player,tenantId);});
+  }
   if (route === 'POST /api/safety/limit') {
     if (!player) fail(401, 'signin');
     const { dailyLimit } = await body(req);
@@ -2387,9 +2424,14 @@ async function api(req, res, path, tenantId, requestId) {
     db.prepare('INSERT INTO player_safety(player, session_reminder_minutes) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET session_reminder_minutes = excluded.session_reminder_minutes').run(player, minutes);
     return account(player, tenantId);
   }
+  if(path==='/api/account/round-commitment' && req.method==='POST'){
+    if(!player)fail(401,'signin');return transaction(()=>{req.assertPlayerSession();return roundProof.prepare(tenantId,player);});
+  }
+  const verifiedRound=path.match(/^\/api\/account\/round-proof\/([1-9][0-9]{0,14})$/);
+  if(verifiedRound && req.method==='GET'){if(!player)fail(401,'signin');return roundProof.get(tenantId,player,Number(verifiedRound[1]));}
   if (route === 'POST /api/play') {
     if (!player) fail(401, 'signin');
-    const { game, wager, requestId, choice, previewSlug, locale } = await body(req);
+    const { game, wager, requestId, choice, previewSlug, locale, drawProof } = await body(req);
     if (previewSlug !== undefined && (typeof previewSlug !== 'string' || previewSlug.length>64 ||
         !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(previewSlug) || !['fr-CA','en-CA'].includes(locale))) fail(400,'invalid');
     if (!games.some(({ id }) => id === game) || ![100, 500, 1000].includes(wager) ||
@@ -2408,6 +2450,7 @@ async function api(req, res, path, tenantId, requestId) {
             (game === 'roulette' && previous.choice !== choice)) fail(409, 'invalid');
         return { ...account(player, tenantId), amount: existing.amount, outcome: existing.outcome };
       }
+      playerNotices.block(tenantId,player,Date.now());
       let preview;
       if (previewSlug !== undefined) {
         const card = publishedCataloguePreview(tenantId,previewSlug,locale);
@@ -2417,47 +2460,11 @@ async function api(req, res, path, tenantId, requestId) {
       const wagered = dailyWagered(player, tenantId);
       if (wagered + wager > (safety?.daily_limit_cents ?? 2500)) fail(409, 'dailyLimit');
       if (balance(player, tenantId) < wager) fail(409, 'balance');
-      let amount;
-      let outcome;
-      if (game === 'roulette') {
-        const number = randomInt(37);
-        const redNumbers = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-        const color = number === 0 ? 'green' : redNumbers.has(number) ? 'red' : 'black';
-        amount = color === choice ? wager : -wager;
-        outcome = { number, color, choice };
-      } else if (game === 'gold' || game === 'aurora') {
-        outcome = slotRoll();
-        amount = wager * (outcome.multiplier - 1);
-      } else if (game === 'blackjack') {
-        const suits = ['♠', '♥', '♦', '♣'];
-        const ranks = Array.from({ length: 13 }, (_, index) => index + 2);
-        const deck = suits.flatMap((suit) => ranks.map((rank) => ({ rank, suit })));
-        for (let index = deck.length - 1; index > 0; index -= 1) {
-          const swapIndex = randomInt(index + 1);
-          [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
-        }
-        const draw = () => deck.pop();
-        const score = (hand) => {
-          let total = hand.reduce((sum, card) => sum + (card.rank === 14 ? 11 : Math.min(card.rank, 10)), 0);
-          let aces = hand.filter((card) => card.rank === 14).length;
-          while (total > 21 && aces > 0) { total -= 10; aces -= 1; }
-          return total;
-        };
-        const label = ({ rank, suit }) => `${rank === 14 ? 'A' : rank === 13 ? 'K' : rank === 12 ? 'Q' : rank === 11 ? 'J' : rank}${suit}`;
-        const playerHand = [draw(), draw()];
-        const dealerHand = [draw(), draw()];
-        while (score(dealerHand) < 17) dealerHand.push(draw());
-        const playerScore = score(playerHand);
-        const dealerScore = score(dealerHand);
-        const verdict = playerScore > 21 || (dealerScore <= 21 && dealerScore > playerScore) ? 'loss'
-          : playerScore === dealerScore ? 'push' : 'win';
-        amount = verdict === 'win' ? wager : verdict === 'loss' ? -wager : 0;
-        outcome = { playerCards: playerHand.map(label), dealerCards: dealerHand.map(label), playerScore, dealerScore, verdict };
-      } else {
-        amount = randomInt(2) === 1 ? wager : -wager;
-      }
+      const proof=roundProof.consume(tenantId,player,drawProof,requestId,Date.now());
+      const {amount,outcome}=roundProof.draw(proof,game,wager,choice);
       const receipt = outcome ? JSON.stringify(preview ? { ...outcome, preview } : outcome) : null;
-      db.prepare('INSERT INTO ledger(player, game, wager, amount, request_id, created_at, outcome, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(player, game, wager, amount, requestId, Date.now(), receipt, tenantId);
+      const posting=db.prepare('INSERT INTO ledger(player, game, wager, amount, request_id, created_at, outcome, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(player, game, wager, amount, requestId, Date.now(), receipt, tenantId);
+      roundProof.save(Number(posting.lastInsertRowid),proof);
       return { ...account(player, tenantId), amount, outcome: receipt };
     });
   }
@@ -2535,6 +2542,10 @@ const assets = {
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
+  '/page-blocks.js':['page-blocks.js','text/javascript'],
+  '/page-layout.css':['page-layout.css','text/css'],
+  '/layout-editor.js':['layout-editor.js','text/javascript'],
+  '/studio-replay.mp4':['studio-replay.mp4','video/mp4'],
   '/website-content.js': ['website-content.js', 'text/javascript'],
   '/activity-feed.js': ['activity-feed.js', 'text/javascript'],
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
@@ -2560,6 +2571,12 @@ const assets = {
   '/player-signin.webp': ['player-signin.webp', 'image/webp'],
   '/sports-marina.webp': ['sports-marina.webp', 'image/webp'],
   '/finance-operations.js':['finance-operations.js','text/javascript'],
+  '/platform.css':['platform.css','text/css'],
+  '/platform.html':['platform.html','text/html; charset=utf-8'],
+  '/platform.js':['platform.js','text/javascript'],
+  '/safety-notice.js':['safety-notice.js','text/javascript'],
+  '/round-rules.js':['round-rules.js','text/javascript'],
+  '/round-verifier.js':['round-verifier.js','text/javascript'],
   '/sport-tickets.js': ['sport-tickets.js', 'text/javascript'],
   '/sports-centre.js': ['sports-centre.js', 'text/javascript'],
   '/lobby-navigation.js': ['lobby-navigation.js', 'text/javascript'],
@@ -2706,6 +2723,12 @@ createServer(async (req, res) => {
         const quest=requestUrl.searchParams.get('quest');
         const target=/^[1-9]\d{0,14}$/.test(quest||'')?appBasePath+'/?lang='+view.page.locale.slice(0,2)+'&quest='+quest+'#games':null;
         content=guideBody(content.toString(),view.page,target);
+      }
+      if(path==='/'){
+        const requested=requestUrl.searchParams.get('page'),hub=requestUrl.searchParams.get('view');
+        const role=requested||(hub==='promotions'?'bonuses':hub==='help'?'faq':hub?'':requestUrl.searchParams.has('category')?'games':'home');
+        if(role&&layoutRoles(tenantId).includes(role)&&(!['deposit','profile','transactions'].includes(role)||signedPlayer(req,tenantId))){
+          const fr=(view.meta?.locale||'').startsWith('fr');content=content.toString().replace('<!-- page-layout -->',()=>drawLayout(pageLayouts.published(tenantId,role),appBasePath,fr));}
       }
       if (view.meta) content = pageHead(content.toString(), view.meta, new URL(playerLinkBase(req, tenantId)).origin);
       if (view.noindex || view.status === 404 || ['reset','verify','email-change','preview','editContent','editCard'].some((key) => requestUrl.searchParams.has(key))) {
