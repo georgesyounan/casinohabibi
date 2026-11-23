@@ -103,7 +103,7 @@ export function createSportsCentre(panel, french, account) {
     const end = track.scrollLeft + track.clientWidth >= track.scrollWidth-3;
     const next = [...track.children].find(card => card.offsetLeft > track.scrollLeft+3);
     track.scrollTo({left:end ? 0 : next?.offsetLeft || 0,behavior:'smooth'});
-  }, french);
+  }, french, 3000);
   function storageKey() {
     return 'habibi-sports-v1:' + location.pathname + ':' + (account()?.id || 'guest');
   }
