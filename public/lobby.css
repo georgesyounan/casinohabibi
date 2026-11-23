@@ -464,7 +464,6 @@ body:not([data-lobby-brand="habibi"]) [data-house-games] { display: none; }
 .sports-centre button { margin: 0; font-family: inherit; }
 .sport-tabs { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 3px 2px 7px; margin: -4px 0 9px; scrollbar-width: thin; scrollbar-color: #49465b transparent; }
 .sport-tabs .sport-tab { display: inline-flex; align-items: center; flex: none; gap: 7px; white-space: nowrap; padding: 8px 12px; min-height: 39px; border: 1px solid #383747; background: #1c1c29; color: #deddeb; border-radius: 8px; font-size: .81rem; }
-.sport-tab i { font: normal 1.02rem/1 system-ui,sans-serif; }
 .sport-tabs .sport-tab[aria-pressed="true"] { background: #223630; border-color: #4f8a78; color: #c7ffed; }
 .sports-feature { display: flex; align-items: center; position: relative; isolation: isolate; overflow: hidden; padding: clamp(17px,2.2vw,30px); margin: 0 0 20px; min-height: clamp(185px,15vw,222px); border-radius: 15px; border: 1px solid #364149; background: #111d25 url('sports-marina.webp') center 9% / cover no-repeat; }
 .sports-feature::before { content: ''; z-index: -1; position: absolute; inset: 0; background: linear-gradient(90deg,#10151dea 0%,#101822ae 31%,transparent 66%); }

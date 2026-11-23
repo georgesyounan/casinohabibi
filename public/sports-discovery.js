@@ -1,4 +1,6 @@
-import { sports, leagues, byId, prices, programTime, outcome, frameOf } from './sports-data.js';
+import { sports, leagues, matches, byId, prices, programTime, outcome, frameOf } from './sports-data.js';
+
+import { rotationButton } from './banner-motion.js';
 
 export const icon = name => `<i class="sport-icon si-${name}" aria-hidden="true"></i>`;
 const entities = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
@@ -46,7 +48,7 @@ const slides = [
   ['The reel challenge','Le défi des rouleaux']
 ];
 
-export function carousel(state, fr) {
+export function carouselContent(state, fr) {
   const lang = Number(fr), t = (en, french) => fr ? french : en;
   const score = frameOf(byId.get('marina'), state.step);
   const pause = state.paused ? t('Resume simulation','Reprendre la simulation') : t('Pause simulation','Mettre la simulation en pause');
@@ -56,12 +58,29 @@ export function carousel(state, fr) {
   const target = ['show-weekend','feature','open-slots'][state.slide];
   const action = [t('See the three picks','Voir les trois choix'),t('Follow match','Suivre le match'),t('Try the challenge','Essayer le défi')][state.slide];
   const label = [t('Featured combo','Combiné à la une'),t('Simulated live','Direct simulé'),t('Casino demo','Casino démo')][state.slide];
+  return `<div class="feature-inner" aria-live="off"><div class="feature-meta"><span class="${live ? 'sport-live' : 'promo-kicker'}">${live ? '<i></i>' : ''}${label}</span>${live ? '<span>'+leagues.coast[lang]+'</span>' : ''}</div>
+    ${title}<div class="feature-action"><button type="button" data-hub-control="${target}">${action} <span aria-hidden="true">→</span></button>${live ? `<span data-clock="marina">${score[0]}</span><button type="button" class="simulation-toggle" data-hub-control="pause" aria-pressed="${state.paused}" aria-label="${pause}" title="${pause}">${state.paused ? '▶' : 'Ⅱ'}</button>` : ''}</div></div>`;
+}
+
+export function carousel(state, fr) {
+  const lang = Number(fr), t = (en,french) => fr ? french : en;
   const dots = slides.map((s,i)=>`<button type="button" data-hub-control="slide-${i}" aria-label="${t('Slide','Bannière')} ${i+1} · ${s[lang]}"${state.slide === i ? ' aria-current="true"' : ''}></button>`).join('');
   return `<section class="sports-feature sports-carousel slide-${state.slide}" aria-roledescription="${t('carousel','carrousel')}" aria-label="${t('Sports highlights','Sports à la une')}">
-    <div class="feature-inner" aria-live="off"><div class="feature-meta"><span class="${live ? 'sport-live' : 'promo-kicker'}">${live ? '<i></i>' : ''}${label}</span>${live ? '<span>'+leagues.coast[lang]+'</span>' : ''}</div>
-    ${title}<div class="feature-action"><button type="button" data-hub-control="${target}">${action} <span aria-hidden="true">→</span></button>${live ? `<span data-clock="marina">${score[0]}</span><button type="button" class="simulation-toggle" data-hub-control="pause" aria-pressed="${state.paused}" aria-label="${pause}" title="${pause}">${state.paused ? '▶' : 'Ⅱ'}</button>` : ''}</div></div>
+    <div class="campaign-images" aria-hidden="true"><i class="campaign-match"></i><i class="campaign-live"></i><i class="campaign-reels"></i></div>
+    ${carouselContent(state,fr)}
     <button type="button" class="slide-arrow previous" data-hub-control="slide-prev" aria-label="${t('Previous slide','Bannière précédente')}">${icon('chevron-left')}</button><button type="button" class="slide-arrow next" data-hub-control="slide-next" aria-label="${t('Next slide','Bannière suivante')}">${icon('chevron-right')}</button>
-    <div class="slide-dots">${dots}</div></section>`;
+    <div class="slide-dots">${dots}</div>${rotationButton(fr)}</section>`;
+}
+
+export function scoreWire(state, fr) {
+  const title = fr ? 'Direct simulé' : 'Simulated live';
+  const cards = matches.filter(match => match.frames).map(match => {
+    const frame = frameOf(match,state.step);
+    const name = match.teams.join(fr ? ' contre ' : ' vs ');
+    return `<button type="button" class="wire-card" data-sport="${match.sport}" data-hub-control="wire-${match.id}" title="${name}">
+      ${icon(sports[match.sport].icon)}<span class="wire-team">${match.teams[0]}</span><b data-score="${match.id}-0">${frame[1]}</b><span class="wire-dash" aria-hidden="true">–</span><b data-score="${match.id}-1">${frame[2]}</b><span class="wire-team">${match.teams[1]}</span></button>`;
+  }).join('');
+  return `<section class="score-wire" aria-label="${title}"><strong class="wire-label"><i aria-hidden="true"></i>${title}</strong><div class="wire-track">${cards}</div></section>`;
 }
 
 function bundleCard(id, state, fr) {

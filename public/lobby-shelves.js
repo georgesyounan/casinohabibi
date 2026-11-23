@@ -1,5 +1,6 @@
 import { uiKit } from './discovery.js';
 import { lobbyView, viewTitle } from './lobby-navigation.js';
+import { createHomeCampaign } from './banner-motion.js';
 import { createSportsCentre } from './sports-centre.js';
 import { shareLink } from './referral-views.js';
 
@@ -398,6 +399,7 @@ export function createLobbySections({
     appPath('/?') + new URLSearchParams({ lang: l('en', 'fr'), ...params }) + hash;
   let period = 7;
   const sports = createSportsCentre(panel, french, account);
+  const homeCampaign = createHomeCampaign(document.getElementById('default-lobby-hero'), french, appPath(''));
   function closeMenu() {
     lobby.removeAttribute('data-menu-open');
     menu.setAttribute('aria-expanded', 'false');
@@ -543,6 +545,7 @@ export function createLobbySections({
   window.addEventListener('popstate', () => { if (enabled()) navigate(location.href, false); });
   function render() {
     const active = enabled() && Boolean(view);
+    homeCampaign(enabled() && !active);
     lobby.toggleAttribute('data-hub-open', active);
     panel.hidden = !active;
     panel.removeAttribute('aria-busy');
