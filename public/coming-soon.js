@@ -164,6 +164,29 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     return node;
   }
 
+  let spotlightTitles = [], spotlightSlug = '';
+  const spotlight = $('lobby-spotlight');
+  function showSpotlight() {
+    const title = spotlightTitles.find((item) => item.slug === spotlightSlug) || spotlightTitles[0];
+    spotlight.hidden = !title;
+    if (!title) return;
+    spotlightSlug = title.slug;
+    const image = $('spotlight-image');
+    if (title.artwork && image.getAttribute('src') !== title.artwork) image.src = title.artwork;
+    image.hidden = !title.artwork;
+    $('spotlight-link').href = publicUrl(title);
+    $('spotlight-name').textContent = titleName(title);
+    $('spotlight-type').textContent = [collectionName(title), t(title.demoGame ? 'playableDemo' : 'comingSoon')].filter(Boolean).join(' · ');
+    spotlight.querySelector('.spotlight-nav').hidden = spotlightTitles.length < 2;
+  }
+  function stepSpotlight(direction) {
+    const index = spotlightTitles.findIndex((item) => item.slug === spotlightSlug);
+    spotlightSlug = spotlightTitles[(index + direction + spotlightTitles.length) % spotlightTitles.length].slug;
+    showSpotlight();
+  }
+  $('spotlight-prev').addEventListener('click', () => stepSpotlight(-1));
+  $('spotlight-next').addEventListener('click', () => stepSpotlight(1));
+
   function showRow(id, items) {
     const row = $(id);
     row.hidden = !items.length;
@@ -182,10 +205,15 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     selector.value = collection;
     $('catalog-collection-control').hidden = !collection && !options.length;
     if (!lobbyEnabled()) {
+      spotlightTitles = [];
+      showSpotlight();
       $('coming-soon').hidden = true;
       return { count: 0, playable: 0, available: 0, hasFavorites: false };
     }
     const bySlug = new Map(lobby.titles.map((title) => [title.slug, title]));
+    const ordered = new Set([...lobby.featured, ...lobby.discover]);
+    spotlightTitles = [...ordered].map(slug => bySlug.get(slug)).filter(Boolean);
+    showSpotlight();
     const stars = lobby.titles.filter((title) => isFavorite(title.favoriteKey));
     const normal = filter === 'all' && !search.trim() && !collection;
     const filtered = normal ? [] : lobby.titles.filter((title) => {

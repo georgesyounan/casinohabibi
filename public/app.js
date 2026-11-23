@@ -1,3 +1,4 @@
+import { casinoPageTitle } from './guide-metadata.js';
 import { createReviewUi, reviewCopy } from './review-desk.js';
 import { createPartnerUi, partnerLobbyCopy } from './partner-lobby.js';
 import { createPublicShelf, createShelfEditor, shelfCopy } from './lobby-shelves.js';
@@ -33,6 +34,14 @@ const copy = {
   ...websiteContentCopy,
   ...followupCopy,
   ...adminWorkspaceCopy,
+  homeExplore: ['Browse', 'Explorer'], homeAll: ['Casino lobby', 'Hall du casino'],
+  homeLive: ['Live casino', 'Casino en direct'], homeLibrary: ['My library', 'Ma bibliothèque'],
+  homeSpotlight: ['In the spotlight', 'À la une'], homePrev: ['Previous featured game', 'Jeu vedette précédent'],
+  homeNext: ['Next featured game', 'Jeu vedette suivant'], homeOrder: ['Sort previews', 'Trier les aperçus'],
+  homeFilters: ['Filters', 'Filtres'],
+  homeOriginals: ['House games', 'Jeux maison'], homeProviders: ['Provider previews', 'Aperçus des fournisseurs'],
+  homeSafer: ['Responsible play', 'Jeu responsable'],
+  homeSafetyIntro: ['Manage your play time, set a demo wager limit or take a break.', 'Gérez votre temps de jeu, fixez une limite de mises fictives ou prenez une pause.'],
   lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
   skipToContent: ['Skip to main content', 'Passer au contenu principal'],
@@ -604,6 +613,7 @@ function applyTenant(config) {
   tenantCopy = {
     headline: [config.heroTitleEn || copy.headline[0], config.heroTitleFr || copy.headline[1]],
     intro: [config.heroIntroEn || copy.intro[0], config.heroIntroFr || copy.intro[1]],
+    pageDescription: [config.heroIntroEn || copy.intro[0], config.heroIntroFr || copy.intro[1]],
     announcement: [config.announcementEn || '', config.announcementFr || ''],
     disclaimer: [config.footerTextEn || copy.disclaimer[0], config.footerTextFr || copy.disclaimer[1]]
   };
@@ -615,6 +625,14 @@ function applyTenant(config) {
   updateDocumentTitle();
   for (const node of document.querySelectorAll('[data-copy="headline"], [data-copy="intro"]')) node.textContent = t(node.dataset.copy);
   document.documentElement.style.setProperty('--green', config.accentColor);
+  if (currentRoute === '/') {
+    const channels = config.accentColor.slice(1).match(/../g).map(pair => {
+      const value = parseInt(pair, 16) / 255;
+      return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+    });
+    const lightness = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+    document.body.style.setProperty('--button-ink', lightness > .179 ? '#080d10' : '#ffffff');
+  }
   document.querySelector('meta[name="theme-color"]').content = config.accentColor;
   for (const brand of document.querySelectorAll('.brand')) {
     const mark = config.brandLogo ? element('img') : element('span', '✧');
@@ -773,7 +791,7 @@ function updateDocumentTitle() {
   if ((publicWebsite.isHelp || comingSoonUi.isDetail) && document.querySelector('link[rel="canonical"]')) return;
   document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
     : publicWebsite.isHelp && publicWebsite.title() ? publicWebsite.title() + ' · ' + tenantBrandName
-    : language ? `Casino ${tenantBrandName}` : `${tenantBrandName} Casino`;
+    : casinoPageTitle(tenantBrandName, Boolean(language));
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
 
@@ -1735,20 +1753,30 @@ function renderCatalog() {
   const editorial = comingSoonUi.renderLobby(filter, searchQuery, selectedCollection, recentPreviews);
   const previewTitle = comingSoonUi.renderDetail();
   if (previewTitle && !document.querySelector('link[rel="canonical"]')) document.title = `${previewTitle} · ${tenantBrandName}`;
-  const catalog = $('#catalog');
-  catalog.replaceChildren();
+  const filtering = filter !== 'all' || Boolean(searchQuery.trim() || selectedCollection);
+  $('#lobby').toggleAttribute('data-filtered', filtering);
+  $('#home-showcase').hidden = filtering;
+  $('#home-games-heading').textContent = t(filter === 'all' ? 'games' : filter === 'recent' ? 'recentGames' : filter === 'live' ? 'homeLive' : filter);
+  const originals = $('#home-originals .cards');
+  const providers = $('#home-providers .cards');
+  providers.replaceChildren();
   const createArt = (icon, theme) => {
     const art = element('span', '', `art ${theme}`);
-    art.setAttribute('aria-hidden', 'true');
-    art.append(element('span', icon, 'art-icon'));
+    const mark = element('span', icon, 'art-icon');
+    mark.setAttribute('aria-hidden', 'true');
+    art.append(mark);
     return art;
   };
-  const addFavoriteButton = (art, key, name) => {
+  const updateFavoriteButton = (button, key, name) => {
     const isFavorite = favorites.has(key);
-    const button = action(isFavorite ? '★' : '☆', () => { void toggleFavorite(key); }, 'favorite-toggle');
+    button.textContent = isFavorite ? '★' : '☆';
     button.disabled = favoriteSavePending;
     button.setAttribute('aria-pressed', String(isFavorite));
     button.setAttribute('aria-label', t(isFavorite ? 'removeFavorite' : 'addFavorite').replace('{game}', name));
+  };
+  const addFavoriteButton = (art, key, name) => {
+    const button = action('', () => { void toggleFavorite(key); }, 'favorite-toggle');
+    updateFavoriteButton(button, key, name);
     art.append(button);
   };
   const demoGames = games.filter((game) => {
@@ -1773,6 +1801,9 @@ function renderCatalog() {
   const hasCatalogue = Boolean(games.length || providerGames.length || editorial.available);
   $('#catalog-controls').hidden = !hasCatalogue && !selectedCollection;
   $('#provider-sort-control').hidden = !providerGames.length || Boolean(selectedCollection);
+  const options = $('#home-options');
+  options.hidden = $('#catalog-collection-control').hidden && $('#provider-sort-control').hidden;
+  options.querySelector('summary').toggleAttribute('data-applied', Boolean(selectedCollection || (!$('#provider-sort-control').hidden && providerSort !== 'recent')));
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
   $('#catalog-summary').textContent = t('catalogResultSummary')
@@ -1788,17 +1819,35 @@ function renderCatalog() {
   $('#clear-game-search').hidden = hasListings || !searchQuery.trim() || noFavorites || noRecentGames;
   $('[data-copy="catalogEmptyTitle"]').textContent = noFavorites ? t('noFavoriteGamesTitle') : noRecentGames ? t('noRecentGamesTitle') : (hasCatalogue || selectedCollection) ? t('catalogNoMatchesTitle') : t('catalogEmptyTitle');
   $('[data-copy="catalogEmpty"]').textContent = noFavorites ? t('noFavoriteGames') : noRecentGames ? t('noRecentGames') : (hasCatalogue || selectedCollection) ? t('catalogNoMatches') : t('catalogEmpty');
-  for (const game of demoGames) {
+  function demoCard(game) {
     const card = element('article', '', 'card demo-card');
-    const art = createArt(game.icon, game.id);
-    addFavoriteButton(art, `demo:${game.id}`, gameName(game));
+    const art = element('span', '', 'art demo-cover');
+    const image = element('img');
+    image.src = appPath('/game-' + game.id + '.webp');
+    image.alt = '';
+    image.width = 464;
+    image.height = 300;
+    image.decoding = 'async';
+    art.append(image);
     const info = element('span', '', 'card-info');
-    if (tenantFeaturedGameIds.includes(game.id)) info.append(element('small', t('featuredBadge'), 'featured-label'));
-    info.append(element('small', t('demoGameLabel'), 'catalog-label'), element('strong', gameName(game)), element('small', `${t(game.type)} · ${demoProviderName()}`));
-    const play = action(t('playNow'), () => startDemo(game.id), 'ghost demo-play');
-    info.append(play);
-    card.append(art, info);
-    catalog.append(card);
+    if (tenantFeaturedGameIds.includes(game.id)) art.append(element('small', t('featuredBadge'), 'featured-label'));
+    info.append(element('strong', gameName(game)), element('small', t(game.type)));
+    info.append(element('span', t('playNow'), 'home-play-label'));
+    const play = action('', () => startDemo(game.id), 'home-game-launch demo-play');
+    play.setAttribute('aria-label', t('playNow') + ' · ' + gameName(game));
+    play.append(art, info);
+    card.append(play);
+    addFavoriteButton(card, 'demo:' + game.id, gameName(game));
+    return card;
+  }
+  const layout = JSON.stringify([language, tenantFeaturedGameIds, demoGames.map(game => game.id)]);
+  if (originals.dataset.layout !== layout) {
+    originals.replaceChildren(...demoGames.map(demoCard));
+    originals.dataset.layout = layout;
+  } else {
+    demoGames.forEach((game, index) => {
+      updateFavoriteButton(originals.children[index].querySelector('.favorite-toggle'), 'demo:' + game.id, gameName(game));
+    });
   }
   const perPage=8,pages=Math.max(1,Math.ceil(visibleGames.length/perPage));
   const key=JSON.stringify([filter,searchQuery,selectedCollection,providerSort,language]);
@@ -1820,8 +1869,10 @@ function renderCatalog() {
     const info = element('span', '', 'card-info');
     info.append(element('small', t('catalogListing'), 'catalog-label'), element('strong', language ? game.titleFr : game.titleEn), element('small', `${t(game.category)} · ${game.provider}`));
     card.append(art, info);
-    catalog.append(card);
+    providers.append(card);
   }
+  $('#home-originals').hidden = !demoGames.length;
+  $('#home-providers').hidden = !visibleGames.length;
   if(linkedIndex>=0){
     const link=document.getElementById('provider-game-'+linkedProviderId);linkedProviderId=0;
     link?.focus({preventScroll:true});link?.scrollIntoView({block:'nearest'});
@@ -1939,7 +1990,8 @@ function render() {
   $('header nav').setAttribute('aria-label', t('primaryNav'));
   $('footer nav').setAttribute('aria-label', t('footerNav'));
   updatePolicyLinks();
-  $('.welcome-rail').setAttribute('aria-label', t('infoLabel'));
+  $('#game-search').placeholder = t('searchGames');
+  $('#open-discovery').title = t('discovery');
   $('#language').textContent = language ? 'EN' : 'FR';
   $('#language').setAttribute('aria-label', t(language ? 'switchToEnglish' : 'switchToFrench'));
   if (languageChanged && currentStaffEmail && currentStaffRole) {
@@ -2045,7 +2097,31 @@ $('#close').addEventListener('click', () => {
   $('#dialog').close();
 });
 $('#game-search').value = searchQuery;
-for (const button of $('#filters').children) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
+const filterButtons = [...document.querySelectorAll('#filters [data-filter]')];
+function markSelectedFilter() {
+  for (const button of filterButtons) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
+}
+markSelectedFilter();
+document.addEventListener('click', (event) => {
+  const options = $('#home-options');
+  if (options.open && !options.contains(event.target)) options.open = false;
+});
+$('#home-options').addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !event.currentTarget.open) return;
+  event.currentTarget.open = false;
+  event.currentTarget.querySelector('summary').focus();
+});
+$('#home-search').addEventListener('submit', (event) => {
+  event.preventDefault();
+  $('#games').focus();
+  $('#games').scrollIntoView({ block: 'start' });
+});
+document.addEventListener('keydown', (event) => {
+  if (currentRoute !== '/' || event.key !== '/' || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey ||
+      event.defaultPrevented || $('#dialog').open || event.target.closest('input, textarea, select, [contenteditable]')) return;
+  event.preventDefault();
+  $('#game-search').focus();
+});
 $('#catalog-collection').addEventListener('change', (event) => {
   selectedCollection = event.currentTarget.value;
   if(player&&selectedCollection)void api('discovery/visit',{kind:'collection',key:selectedCollection,locale:language?'fr-CA':'en-CA'}).catch(()=>{});
@@ -2053,11 +2129,12 @@ $('#catalog-collection').addEventListener('change', (event) => {
   renderCatalog();
 });
 $('#filters').addEventListener('click', (event) => {
-  if (!event.target.dataset.filter) return;
-  filter = event.target.dataset.filter;
+  const button = event.target.closest('button[data-filter]');
+  if (!button) return;
+  filter = button.dataset.filter;
   if(player&&filter==='favorites')void api('discovery/visit',{kind:'shelf'}).catch(()=>{});
   rememberCatalogue();
-  for (const button of $('#filters').children) button.setAttribute('aria-pressed', button === event.target);
+  markSelectedFilter();
   renderCatalog();
 });
 $('#browse-all-games').addEventListener('click', () => {
@@ -2066,7 +2143,7 @@ $('#browse-all-games').addEventListener('click', () => {
   selectedCollection = '';
   rememberCatalogue();
   $('#game-search').value = '';
-  for (const button of $('#filters').children) button.setAttribute('aria-pressed', String(button.dataset.filter === 'all'));
+  markSelectedFilter();
   renderCatalog();
 });
 $('#clear-game-search').addEventListener('click', () => {
@@ -3110,6 +3187,7 @@ $('#mfa-disable').addEventListener('click', async () => {
 });
 
 document.body.classList.toggle('admin-route', isAdminPage);
+document.body.classList.toggle('player-home', currentRoute === '/');
 $('#admin-view-lobby').hidden = !isAdminPage;
 $('#lobby').hidden = isAdminPage || comingSoonUi.isDetail || publicWebsite.isHelp;
 $('#site-public-help').hidden = !publicWebsite.isHelp;

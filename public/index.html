@@ -9,48 +9,83 @@
 <link id="tenant-favicon" rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/admin.css">
+<link rel="stylesheet" href="/lobby.css">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
 <a id="skip-link" class="skip-link" href="#lobby" data-copy="skipToContent"></a>
 <header><div class="shell bar">
 <a class="brand" href="/"><span aria-hidden="true">✧</span> NORTHPLAY</a>
+<form class="home-search" id="home-search" role="search"><label class="home-sr" for="game-search" data-copy="searchGames"></label><i class="ui-icon ico-search" aria-hidden="true"></i><input id="game-search" type="search" maxlength="120" autocomplete="off"><kbd aria-hidden="true">/</kbd></form>
 <nav aria-label="Navigation"><a href="/#games" data-copy="lobby"></a><a href="/#play-safely" data-copy="playSafely"></a><a href="/admin" data-copy="admin"></a></nav>
 <div class="actions"><a id="admin-view-lobby" href="/" data-copy="adminViewLobby" hidden></a><button id="language" class="ghost" type="button"></button><button id="account" type="button" data-copy="signin"></button></div>
 </div></header>
 <div id="session-reminder" class="session-reminder shell" role="status" aria-live="polite" hidden></div>
 <main id="lobby" class="shell" tabindex="-1">
+<aside class="lobby-rail" aria-labelledby="home-browse">
+  <p id="home-browse" class="rail-heading" data-copy="homeExplore"></p>
+  <div id="filters" class="lobby-nav" role="group" aria-labelledby="home-browse">
+    <button type="button" data-filter="all" aria-pressed="true"><i class="ui-icon ico-overview" aria-hidden="true"></i><span data-copy="homeAll"></span></button>
+    <button type="button" data-filter="slots" aria-pressed="false"><i class="ui-icon ico-catalogue" aria-hidden="true"></i><span data-copy="slots"></span></button>
+    <button type="button" data-filter="table" aria-pressed="false"><i class="ui-icon ico-layers" aria-hidden="true"></i><span data-copy="table"></span></button>
+    <button type="button" data-filter="live" aria-pressed="false"><i class="ui-icon ico-active" aria-hidden="true"></i><span data-copy="homeLive"></span></button>
+    <p class="rail-heading rail-library" data-copy="homeLibrary"></p>
+    <button type="button" data-filter="favorites" aria-pressed="false"><i class="ui-icon ico-save" aria-hidden="true"></i><span data-copy="favorites"></span></button>
+    <button type="button" data-filter="recent" aria-pressed="false"><i class="ui-icon ico-audit" aria-hidden="true"></i><span data-copy="recentGames"></span></button>
+  </div>
+  <a class="rail-safety" href="#play-safely"><i class="ui-icon ico-security" aria-hidden="true"></i><span data-copy="homeSafer"></span></a>
+</aside>
+<div class="lobby-content">
 <div id="lobby-announcement" class="lobby-announcement" role="status" aria-live="polite" hidden></div>
-<div id="site-public-banner" hidden></div>
+<div class="home-showcase" id="home-showcase">
+  <div class="home-lead">
+    <div id="site-public-banner" hidden></div>
+    <section class="hero" id="default-lobby-hero">
+      <div class="hero-content"><p class="hero-mode" data-copy="sandbox"></p>
+        <h1 data-copy="headline"></h1><p class="hero-description" data-copy="intro"></p>
+        <a class="button hero-browse" href="#games"><span data-copy="browse"></span><i class="ui-icon ico-next" aria-hidden="true"></i></a>
+      </div>
+    </section>
+  </div>
+  <section id="lobby-spotlight" class="spotlight" aria-labelledby="spotlight-label" hidden>
+    <a id="spotlight-link"><img id="spotlight-image" alt="" hidden><div class="spotlight-shade"></div>
+      <div class="spotlight-caption"><p id="spotlight-label" data-copy="homeSpotlight"></p><strong id="spotlight-name"></strong><span id="spotlight-type"></span></div>
+    </a>
+    <div class="spotlight-nav" hidden><button type="button" id="spotlight-prev" data-copy="homePrev" class="spotlight-prev" aria-label="Previous featured game"></button><button type="button" id="spotlight-next" data-copy="homeNext" aria-label="Next featured game"></button></div>
+  </section>
+</div>
 <aside id="campaign-placement" class="discovery-card" hidden></aside>
-<section class="hero" id="default-lobby-hero">
-<div class="hero-content"><p class="eyebrow" data-copy="sandbox"></p>
-<h1 data-copy="headline"></h1><p data-copy="intro"></p>
-<a class="button" href="#games" data-copy="browse"></a></div>
-</section>
-<section class="welcome-rail" aria-label="Key information"><div><span class="rail-mark">CAD</span><span data-copy="cadDisplay"></span></div><div><span class="rail-mark">EN / FR</span><span data-copy="twoLanguages"></span></div><div><span class="rail-mark">DEMO</span><span data-copy="simulatedOnly"></span></div></section>
 <section id="scheduled-shelf" aria-live="polite" hidden></section>
-<section id="games" class="games"><div class="section-title"><div><p class="eyebrow" data-copy="lobbyEyebrow"></p><h2 data-copy="games"></h2><p class="section-intro" data-copy="gamesIntro"></p></div></div>
-<button id="open-discovery" type="button" class="ghost discovery-launch" data-copy="discovery"></button>
-<div id="catalog-controls" class="catalog-controls" hidden><label class="game-search"><span data-copy="searchGames"></span><input id="game-search" type="search" maxlength="120" autocomplete="off"></label>
-<label id="catalog-collection-control" class="provider-sort" hidden><span data-copy="catalogueCollection"></span><select id="catalog-collection"></select></label>
-<label id="provider-sort-control" class="provider-sort" hidden><span data-copy="providerSortLabel"></span><select id="provider-sort"><option value="recent" data-copy="providerSortRecent"></option><option value="alpha" data-copy="providerSortAlpha"></option></select></label>
-<div class="filters" id="filters"><button data-filter="all" data-copy="all" aria-pressed="true"></button><button data-filter="slots" data-copy="slots" aria-pressed="false"></button><button data-filter="table" data-copy="table" aria-pressed="false"></button><button data-filter="live" data-copy="live" aria-pressed="false"></button><button data-filter="favorites" data-copy="favorites" aria-pressed="false"></button><button data-filter="recent" data-copy="recentGames" aria-pressed="false"></button></div></div>
+<section id="games" class="games" aria-labelledby="home-games-heading" tabindex="-1">
+  <div class="catalog-toolbar">
+    <div class="catalog-title"><h2 id="home-games-heading" data-copy="games"></h2>
+  <button id="open-discovery" type="button" class="home-discovery"><i class="ui-icon ico-engagement" aria-hidden="true"></i><span data-copy="discovery"></span></button>
+    </div>
+    <details id="home-options" class="home-options" hidden><summary><i class="ui-icon ico-listing" aria-hidden="true"></i><span data-copy="homeFilters"></span></summary>
+    <div id="catalog-controls" class="catalog-controls" hidden>
+      <label id="catalog-collection-control" class="provider-sort" hidden><span data-copy="catalogueCollection"></span><select id="catalog-collection"></select></label>
+      <label id="provider-sort-control" class="provider-sort" hidden><span data-copy="homeOrder"></span><select id="provider-sort"><option value="recent" data-copy="providerSortRecent"></option><option value="alpha" data-copy="providerSortAlpha"></option></select></label>
+    </div></details>
+  </div>
 <p id="catalog-summary" class="catalog-summary" role="status" aria-live="polite" hidden></p>
 <p id="favorites-status" role="status" aria-live="polite"></p>
-<div id="catalog-empty" class="empty-state" hidden><span aria-hidden="true">✧</span><div><h3 data-copy="catalogEmptyTitle"></h3><p data-copy="catalogEmpty"></p><button id="browse-all-games" type="button" class="ghost" data-copy="browseAllGames" hidden></button><button id="clear-game-search" type="button" class="ghost" data-copy="clearGameSearch" hidden></button></div></div><div id="catalog" class="cards"></div><nav id="provider-pages" class="case-pager" hidden><button type="button" id="provider-prev" class="ghost" data-copy="playerPrevious"></button><span id="provider-page-label" role="status"></span><button type="button" id="provider-next" class="ghost" data-copy="playerNext"></button></nav>
+<div id="catalog-empty" class="empty-state" hidden><span aria-hidden="true">✧</span><div><h3 data-copy="catalogEmptyTitle"></h3><p data-copy="catalogEmpty"></p><button id="browse-all-games" type="button" class="ghost" data-copy="browseAllGames" hidden></button><button id="clear-game-search" type="button" class="ghost" data-copy="clearGameSearch" hidden></button></div></div><div id="catalog">
+  <section class="catalog-group" id="home-originals" aria-labelledby="home-originals-title" hidden><h3 id="home-originals-title" data-copy="homeOriginals"></h3><div class="cards"></div></section>
 <section id="coming-soon" class="coming-soon" hidden aria-labelledby="coming-soon-heading">
   <h2 id="coming-soon-heading" data-copy="comingSoon"></h2>
   <p id="coming-soon-empty" data-copy="comingSoonEmpty" hidden></p>
   <section id="coming-soon-featured" hidden><h3 data-copy="comingSoonFeatured"></h3><div class="cards"></div></section>
   <section id="coming-soon-discover" hidden><h3 data-copy="comingSoonDiscover"></h3><div class="cards"></div></section>
   <div id="coming-soon-filtered" hidden><div class="cards"></div></div>
-</section></section>
-<section class="steps-section"><div class="section-heading"><p class="eyebrow" data-copy="simpleEyebrow"></p><h2 data-copy="simpleHeading"></h2><p data-copy="simpleIntro"></p></div>
-<div class="steps-grid"><article class="info-card"><span class="step-number">01</span><h3 data-copy="stepOneTitle"></h3><p data-copy="stepOneText"></p></article><article class="info-card"><span class="step-number">02</span><h3 data-copy="stepTwoTitle"></h3><p data-copy="stepTwoText"></p></article><article class="info-card"><span class="step-number">03</span><h3 data-copy="stepThreeTitle"></h3><p data-copy="stepThreeText"></p></article></div></section>
-<section id="play-safely" class="safety-section"><div class="safety-copy"><p class="eyebrow" data-copy="safetyEyebrow"></p><h2 data-copy="safetyHeading"></h2><p data-copy="safetyIntro"></p><button id="safety-controls" type="button" data-copy="safetyCta"></button></div>
-<div class="safety-tools"><article><span aria-hidden="true">◷</span><div><h3 data-copy="breakTitle"></h3><p data-copy="breakText"></p></div></article><article><span aria-hidden="true">⌁</span><div><h3 data-copy="limitTitle"></h3><p data-copy="limitText"></p></div></article><article><span aria-hidden="true">◎</span><div><h3 data-copy="excludeTitle"></h3><p data-copy="excludeText"></p></div></article></div></section>
-<section id="faq" class="faq-section"><div class="section-heading"><p class="eyebrow" data-copy="helpEyebrow"></p><h2 data-copy="faqTitle"></h2></div><div id="faq-list" class="faq-list"></div><ul id="site-help-links" class="site-help-links" hidden></ul></section>
+</section>
+  <section class="catalog-group" id="home-providers" aria-labelledby="home-providers-title" hidden><h3 id="home-providers-title" data-copy="homeProviders"></h3><div class="cards"></div></section>
+</div><nav id="provider-pages" class="case-pager" hidden><button type="button" id="provider-prev" class="ghost" data-copy="playerPrevious"></button><span id="provider-page-label" role="status"></span><button type="button" id="provider-next" class="ghost" data-copy="playerNext"></button></nav>
+</section>
+<div class="lobby-help">
+  <section id="play-safely" class="home-safety"><i class="ui-icon ico-security" aria-hidden="true"></i><div><h2 data-copy="homeSafer"></h2><p data-copy="homeSafetyIntro"></p><button id="safety-controls" type="button" data-copy="safetyCta"></button></div></section>
+  <section id="faq" class="faq-section"><h2 data-copy="faqTitle"></h2><div id="faq-list" class="faq-list"></div><ul id="site-help-links" class="site-help-links" hidden></ul></section>
+</div>
+</div>
 </main>
 <main id="coming-soon-detail" class="shell coming-soon-detail" tabindex="-1" hidden>
   <a id="preview-back-to-results" href="/#games" data-copy="comingSoonBackToCatalogue"></a>

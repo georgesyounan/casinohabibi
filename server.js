@@ -470,6 +470,16 @@ function publishedTenantConfig(tenantId) {
   return { version: row.version, config: { ...defaultBrandOptions, ...JSON.parse(row.config) } };
 }
 
+function lobbyPresentation(tenantId) {
+  const published = publishedTenantConfig(tenantId);
+  // The original seed on this mount predates its public brand.
+  if (tenantId === 'sandbox' && appBasePath === '/casinohabibi' && published.version === 1 &&
+      published.config.brandName === defaultTenantConfig.brandName) {
+    published.config.brandName = 'Casino Habibi';
+  }
+  return published;
+}
+
 function catalogueAudience(tenantId, locale) {
   const row = db.prepare(`SELECT json_extract(config, '$.displayMarket') AS market, json_extract(config, '$.enabledLocales') AS locales,
     json_extract(config, '$.primaryLocale') AS primaryLocale FROM tenant_config_versions WHERE tenant_id = ? AND status = 'published' ORDER BY version DESC LIMIT 1`).get(tenantId);
@@ -1483,7 +1493,7 @@ async function api(req, res, path, tenantId, requestId) {
     fail(404, 'invalid');
   }
   if (route === 'GET /api/tenant') {
-    const published = publishedTenantConfig(tenantId);
+    const published = lobbyPresentation(tenantId);
     return { tenant: db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId).name, ...published };
   }
   if (['GET /api/admin/config', 'POST /api/admin/config', 'POST /api/admin/config/publish'].includes(route)) {
@@ -1494,7 +1504,7 @@ async function api(req, res, path, tenantId, requestId) {
       const draft = getDraft();
       return draft
         ? { version: draft.version, config: { ...defaultBrandOptions, ...JSON.parse(draft.config) }, status: 'draft' }
-        : { ...publishedTenantConfig(tenantId), status: 'published' };
+        : { ...lobbyPresentation(tenantId), status: 'published' };
     }
     const input = await body(req, 96 * 1024);
     const { version: expectedVersion, config: proposed } = input ?? {};
@@ -2198,6 +2208,11 @@ const assets = {
   '/': ['index.html', 'text/html'],
   '/admin': ['index.html', 'text/html'],
   '/style.css': ['style.css', 'text/css'],
+  '/lobby.css': ['lobby.css', 'text/css'],
+  '/lobby-coast.webp': ['lobby-coast.webp', 'image/webp'],
+  ...Object.fromEntries(['gold','blackjack','roulette','aurora'].map(id => [
+    '/game-' + id + '.webp', ['game-' + id + '.webp', 'image/webp']
+  ])),
   '/admin.css': ['admin.css', 'text/css'],
   '/admin-inter.woff2': ['admin-inter.woff2', 'font/woff2'],
   '/admin-icons.woff2': ['admin-icons.woff2', 'font/woff2'],
@@ -2306,7 +2321,8 @@ createServer(async (req, res) => {
         .replace(/\b(href|src)="\/(?!\/)/g, (_match, attribute) => `${attribute}="${appBasePath}/`);
     }
     if (type === 'text/html') {
-      const view = transaction(() => describePublicPage(tenantId, publishedTenantConfig(tenantId).config, {
+      if (path === '/') content = content.toString().replace('<body>', '<body class="player-home">');
+      const view = transaction(() => describePublicPage(tenantId, lobbyPresentation(tenantId).config, {
         path, params: requestUrl.searchParams, helpSlug: help?.[1], previewSlug: preview?.[1]
       }), { readOnly: true });
       if (view.destination) {

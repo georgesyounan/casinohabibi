@@ -1,3 +1,8 @@
+export function casinoPageTitle(brand, french) {
+  if (/\bcasino\b/i.test(brand)) return brand;
+  return french ? 'Casino ' + brand : brand + ' Casino';
+}
+
 export function guideAddress(content, recordSlug, locale) {
   return content[locale === 'fr-CA' ? 'addressFr' : 'addressEn'] || recordSlug;
 }
