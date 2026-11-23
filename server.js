@@ -1,3 +1,4 @@
+import { createPlayerSignIn, validPlayerName } from './lib/player-signin.js';
 import { createPartnerLobby } from './lib/partner-lobby.js';
 import { createLobbyShelves } from './lib/lobby-shelves.js';
 import { createReviewDesk } from './lib/review-desk.js';
@@ -378,6 +379,8 @@ const platformAdminEnabled = typeof platformAdminToken === 'string' && platformA
 const secureCookie = process.env.SECURE_COOKIES === '1' ? '; Secure' : '';
 const authAttempts = new Map();
 let authRequestCount = 0;
+const playerSignIn = createPlayerSignIn({db, fail, transaction, register:registerPlayer, session:openPlayerSession,
+  emailPreview:localRecoveryPreview, requireMail:requireEmailDelivery, deliver:deliverTransactionalEmail, publicBaseUrl, cookiePath, secureCookie});
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const matches = (a, b) => timingSafeEqual(Buffer.from(hash(a)), Buffer.from(hash(b)));
 const balance = (id, tenantId) => db.prepare('SELECT coalesce(sum(amount), 0) AS total FROM ledger WHERE player = ? AND tenant_id = ?').get(id, tenantId).total;
@@ -722,6 +725,7 @@ function account(id, tenantId) {
   if (hasMoreHistory) historyRows.pop();
   return {
     ...db.prepare('SELECT id, email, email_verified AS emailVerified, access_status AS status FROM players WHERE id = ? AND tenant_id = ?').get(id, tenantId),
+    username:db.prepare('SELECT username FROM player_login_names WHERE player_id=? AND tenant_id=?').get(id,tenantId)?.username || null,
     displayName: profile?.displayName || '',
     preferredLocale: profile?.preferredLocale || 'en-CA',
     balance: balance(id, tenantId),
@@ -732,6 +736,44 @@ function account(id, tenantId) {
     marketingEmailConsent: Boolean(marketingConsent?.granted),
     supportReplies
   };
+}
+
+// Called within the same transaction as any alias, referral or external identity.
+function registerPlayer(req, tenant, email, details, {verified, passwordHash}) {
+  if (db.prepare('SELECT 1 FROM players WHERE tenant_id=? AND email=?').get(tenant,email)) fail(409,'accountEmailUsed');
+  if (!passwordHash) {
+    const salt=randomBytes(16).toString('hex');
+    passwordHash=salt+':'+scryptSync(randomBytes(32),salt,64).toString('hex');
+  }
+  const locale=details.locale || 'en-CA';
+  const id=Number(db.prepare('INSERT INTO players(email,password,tenant_id,email_verified,preferred_locale) VALUES(?,?,?,?,?)')
+    .run(email,passwordHash,tenant,Number(verified),locale).lastInsertRowid);
+  db.prepare('INSERT INTO player_profiles(tenant_id,player_id,display_name,preferred_locale,updated_at) VALUES(?,?,?,?,?)').run(tenant,id,'',locale,Date.now());
+  if (details.username) db.prepare('INSERT INTO player_login_names(player_id,tenant_id,username,accepted_at,terms_version) VALUES(?,?,?,?,?)')
+    .run(id,tenant,details.username,Date.now(),'player-18-demo-v1');
+  db.prepare('INSERT INTO ledger(player,wager,amount,tenant_id) VALUES(?,0,10000,?)').run(id,tenant);
+  growth.signup(tenant,id,referralCookie(req),details.referralCode);
+  return id;
+}
+
+// All player authentication methods run these checks within their transaction.
+function openPlayerSession(req,res,tenant,id,expectedPassword) {
+  const row=db.prepare('SELECT access_status,email_verified,password FROM players WHERE id=? AND tenant_id=?').get(id,tenant);
+  if (!row || (expectedPassword!==undefined && row.password!==expectedPassword)) fail(401,'credentials');
+  if (row.access_status==='suspended') fail(403,'playerSuspended');
+  if (!row.email_verified) fail(403,'emailVerificationRequired');
+  if (db.prepare('SELECT excluded_at FROM player_safety WHERE player=?').get(id)?.excluded_at) fail(403,'excluded');
+  const old=req.headers.cookie?.match(/(?:^|;\s*)northplay=([a-f0-9]{64})(?:;|$)/)?.[1];
+  const raw=randomBytes(32).toString('hex'), sessionStartedAt=Date.now();
+  if (old) db.prepare('DELETE FROM sessions WHERE token=? AND tenant_id=?').run(hash(old),tenant);
+  db.prepare('INSERT INTO sessions(token,player,expires,tenant_id,created_at) VALUES(?,?,?,?,?)').run(hash(raw),id,sessionStartedAt+86400000,tenant,sessionStartedAt);
+  dashboard.recordVisit(tenant,id,sessionStartedAt);
+  return { ...account(id,tenant), sessionStartedAt, sessionToken:raw };
+}
+function deliverPlayerSession(res,auth) {
+  const {sessionToken,...accountData}=auth;
+  res.appendHeader('Set-Cookie','northplay='+sessionToken+'; Path='+cookiePath+'; HttpOnly; SameSite=Strict; Max-Age=86400'+secureCookie);
+  return accountData;
 }
 
 async function api(req, res, path, tenantId, requestId) {
@@ -1698,12 +1740,23 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (route === 'POST /api/account/profile') {
     if (!player) fail(401, 'signin');
-    const { displayName, locale } = await body(req);
+    const { displayName, locale, username } = await body(req);
     if (typeof displayName !== 'string' || displayName.length > 80 || !['en-CA', 'fr-CA'].includes(locale) || /[\u0000-\u001f\u007f]/.test(displayName)) fail(400, 'invalid');
     const normalizedName = displayName.trim().replace(/\s+/gu, ' ');
     if (normalizedName.length > 40) fail(400, 'invalid');
-    db.prepare('UPDATE player_profiles SET display_name = ?, preferred_locale = ?, updated_at = ? WHERE player_id = ? AND tenant_id = ?').run(normalizedName, locale, Date.now(), player, tenantId);
-    return account(player, tenantId);
+    return transaction(()=>{
+      if (username!==undefined) {
+        if (!validPlayerName(username)) fail(400,'invalidUsername');
+        const current=db.prepare('SELECT username FROM player_login_names WHERE tenant_id=? AND player_id=?').get(tenantId,player);
+        if (current && current.username.toLowerCase()!==username.toLowerCase()) fail(409,'invalidUsername');
+        if (!current) {
+          if (db.prepare('SELECT 1 FROM player_login_names WHERE tenant_id=? AND username=?').get(tenantId,username)) fail(409,'usernameTaken');
+          db.prepare('INSERT INTO player_login_names(tenant_id,player_id,username) VALUES(?,?,?)').run(tenantId,player,username);
+        }
+      }
+      db.prepare('UPDATE player_profiles SET display_name = ?, preferred_locale = ?, updated_at = ? WHERE player_id = ? AND tenant_id = ?').run(normalizedName, locale, Date.now(), player, tenantId);
+      return account(player, tenantId);
+    });
   }
   if (route === 'POST /api/account/sessions/revoke-others') {
     if (!player) fail(401, 'signin');
@@ -1749,6 +1802,10 @@ async function api(req, res, path, tenantId, requestId) {
   if (route === 'GET /api/account/export') {
     if (!player) fail(401, 'signin');
     const profile = db.prepare('SELECT p.email, p.email_verified AS emailVerified, profile.display_name AS displayName, profile.preferred_locale AS preferredLocale FROM players p JOIN player_profiles profile ON profile.player_id = p.id AND profile.tenant_id = p.tenant_id WHERE p.id = ? AND p.tenant_id = ?').get(player, tenantId);
+    const loginName=db.prepare('SELECT username,accepted_at AS termsAcceptedAt,terms_version AS termsVersion FROM player_login_names WHERE tenant_id=? AND player_id=?').get(tenantId,player);
+    if (loginName) Object.assign(profile,loginName);
+    const loginProviders=db.prepare('SELECT provider FROM player_login_identities WHERE tenant_id=? AND player_id=? ORDER BY provider').all(tenantId,player);
+    if (loginProviders.length) profile.loginProviders=loginProviders.map(row=>row.provider);
     const favorites = db.prepare('SELECT favorite_key AS key FROM player_favorites WHERE player_id = ? AND tenant_id = ? ORDER BY created_at, favorite_key').all(player, tenantId).map(({ key }) => key);
     const safety = db.prepare('SELECT pause_until AS pausedUntil, cooling_off_until AS coolingOffUntil, excluded_at AS excludedAt, daily_limit_cents AS dailyLimitCents, session_reminder_minutes AS sessionReminderMinutes FROM player_safety WHERE player = ?').get(player) || {};
     const dailyWagerDateUtc = new Date().toISOString().slice(0, 10);
@@ -1985,46 +2042,45 @@ async function api(req, res, path, tenantId, requestId) {
     });
   }
   if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category ' + publicCatalogueFrom + ' ORDER BY gc.title_en').all(tenantId);
+  if (route==='GET /api/player-auth/methods') return playerSignIn.methods(req);
+  if (route==='GET /api/player-auth/external/pending') return playerSignIn.pending(req,tenantId);
+  if (req.method==='POST' && path.startsWith('/api/player-auth/')) {
+    if (req.headers['content-type']?.split(';')[0]!=='application/json' || req.headers['sec-fetch-site']==='cross-site') fail(403,'invalid');
+    limitAuthAttempts(req,route);
+    const input=await body(req);
+    if (path==='/api/player-auth/code/start') return playerSignIn.startCode(req,tenantId,input);
+    if (path==='/api/player-auth/code/finish') return deliverPlayerSession(res,playerSignIn.finishCode(req,res,tenantId,input));
+    if (path==='/api/player-auth/external/start') return playerSignIn.startExternal(req,res,tenantId,input);
+    if (path==='/api/player-auth/external/finish') return deliverPlayerSession(res,playerSignIn.finishExternal(req,res,tenantId,input));
+    fail(404,'invalid');
+  }
   if (route === 'POST /api/signup' || route === 'POST /api/login') {
     limitAuthAttempts(req, route);
-    const { email, password, locale, referralCode } = await body(req);
-    if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ||
-        typeof password !== 'string' || password.length < 10 || password.length > 128 || (route.endsWith('signup') && locale !== undefined && !['en-CA', 'fr-CA'].includes(locale))) fail(400, 'credentials');
-    const cleanEmail = email.trim().toLowerCase();
-    let row = db.prepare('SELECT * FROM players WHERE email = ? AND tenant_id = ?').get(cleanEmail, tenantId);
-    const salt = route.endsWith('signup') ? randomBytes(16).toString('hex') : row?.password.split(':')[0] || '00000000000000000000000000000000';
-    const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
-    if (route.endsWith('signup')) {
+    const input = await body(req), signup = route.endsWith('signup');
+    const { email, password, locale, referralCode } = input;
+    const login = typeof (input.identifier ?? email) === 'string' ? (input.identifier ?? email).trim() : '';
+    const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (typeof password !== 'string' || password.length < 10 || password.length > 128) fail(400,'credentials');
+    if (signup) {
+      if (typeof email!=='string' || email.length>254 || !emailPattern.test(email) || (locale!==undefined && !['en-CA','fr-CA'].includes(locale))) fail(400,'credentials');
       requireEmailDelivery(req);
-      if (row) fail(409, 'credentials');
-      row = transaction(() => {
-        const { lastInsertRowid: id } = db.prepare('INSERT INTO players(email, password, tenant_id, email_verified, preferred_locale) VALUES (?, ?, ?, 0, ?)').run(cleanEmail, passwordHash, tenantId, locale || 'en-CA');
-        db.prepare('INSERT INTO player_profiles(tenant_id, player_id, display_name, preferred_locale, updated_at) VALUES (?, ?, ?, ?, ?)').run(tenantId, id, '', locale || 'en-CA', Date.now());
-        db.prepare('INSERT INTO ledger(player, wager, amount, tenant_id) VALUES (?, 0, 10000, ?)').run(id, tenantId);
-        growth.signup(tenantId,Number(id),referralCookie(req),referralCode);
-        return { id };
+      const clean=email.toLowerCase();
+      const branded=publishedTenantConfig(tenantId).config.brandName.trim().toLowerCase()==='casino habibi';
+      const id=transaction(()=>{
+        const details=branded || input.username!==undefined || input.accepted!==undefined ? playerSignIn.registration(tenantId,input) : {locale,referralCode};
+        if (db.prepare('SELECT 1 FROM players WHERE email=? AND tenant_id=?').get(clean,tenantId)) fail(409,branded?'accountEmailUsed':'credentials');
+        const salt=randomBytes(16).toString('hex'), passwordHash=salt+':'+scryptSync(password,salt,64).toString('hex');
+        return registerPlayer(req,tenantId,clean,details,{verified:false,passwordHash});
       });
-    } else if (!matches(passwordHash, row?.password || '')) {
-      fail(401, 'credentials');
+      const verifyUrl=await issuePlayerEmailVerification(req,id,tenantId,clean,locale || 'en-CA');
+      return {verificationRequired:true,...(verifyUrl ? {verifyUrl} : {})};
     }
-    if (route.endsWith('signup')) {
-      const verifyUrl = await issuePlayerEmailVerification(req, row.id, tenantId, cleanEmail, locale || 'en-CA');
-      return { verificationRequired: true, ...(verifyUrl ? { verifyUrl } : {}) };
-    }
-    const token = randomBytes(32).toString('hex');
-    const sessionStartedAt = Date.now();
-    transaction(() => {
-      const current = db.prepare('SELECT access_status, email_verified, password FROM players WHERE id = ? AND tenant_id = ?').get(row.id, tenantId);
-      if (!current || current.password !== row.password) fail(401, 'credentials');
-      if (current.access_status === 'suspended') fail(403, 'playerSuspended');
-      if (!current.email_verified) fail(403, 'emailVerificationRequired');
-      if (db.prepare('SELECT excluded_at FROM player_safety WHERE player = ?').get(row.id)?.excluded_at) fail(403, 'excluded');
-      if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
-      db.prepare('INSERT INTO sessions(token, player, expires, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)').run(hash(token), row.id, sessionStartedAt + 86400000, tenantId, sessionStartedAt);
-      dashboard.recordVisit(tenantId, row.id, sessionStartedAt);
-    });
-    res.setHeader('Set-Cookie', `northplay=${token}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=86400${secureCookie}`);
-    return { ...account(row.id, tenantId), sessionStartedAt };
+    if (login.length>254 || (!emailPattern.test(login) && !validPlayerName(login))) fail(400,'credentials');
+    const row = login.includes('@') ? db.prepare('SELECT id,password FROM players WHERE tenant_id=? AND email=?').get(tenantId,login.toLowerCase()) :
+      db.prepare('SELECT p.id,p.password FROM player_login_names n JOIN players p ON p.id=n.player_id AND p.tenant_id=n.tenant_id WHERE n.tenant_id=? AND n.username=?').get(tenantId,login);
+    const salt=row?.password.split(':')[0] || '00000000000000000000000000000000';
+    if (!matches(salt+':'+scryptSync(password,salt,64).toString('hex'),row?.password || '')) fail(401,'credentials');
+    return deliverPlayerSession(res,transaction(()=>openPlayerSession(req,res,tenantId,row.id,row.password)));
   }
   if (route === 'POST /api/logout') {
     if (cookie) db.prepare('DELETE FROM sessions WHERE token = ? AND tenant_id = ?').run(hash(cookie), tenantId);
@@ -2221,6 +2277,9 @@ const assets = {
   '/admin-icons.woff2': ['admin-icons.woff2', 'font/woff2'],
   '/admin-font-licenses.txt': ['admin-font-licenses.txt', 'text/plain'],
   '/support-queue.js': ['support-queue.js', 'text/javascript'],
+  '/player-google.png': ['player-google.png','image/png'],
+  '/player-discord.svg': ['player-discord.svg','image/svg+xml'],
+  '/player-signin-ui.js': ['player-signin-ui.js','text/javascript'],
   '/app.js': ['app.js', 'text/javascript'],
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
@@ -2311,6 +2370,12 @@ createServer(async (req, res) => {
       const lang=click.locale?.slice(0,2)||requested;
       res.setHeader('Set-Cookie',`habibi_ref=${click.token}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secureCookie}`);
       res.writeHead(302,{Location:appBasePath+click.path+(['fr','en'].includes(lang)?'?lang='+lang:''),'Cache-Control':'private, no-store','Referrer-Policy':'same-origin'});
+      return res.end();
+    }
+    const providerCallback=req.method==='GET' && path.match(/^\/api\/player-auth\/callback\/(google|discord)$/);
+    if (providerCallback) {
+      const result=await playerSignIn.callback(req,tenantId,providerCallback[1],requestUrl.searchParams);
+      res.writeHead(303,{Location:appBasePath+'/?access='+result,'X-Robots-Tag':'noindex'});
       return res.end();
     }
     if (path.startsWith('/api/')) {

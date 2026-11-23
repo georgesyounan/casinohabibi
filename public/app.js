@@ -1,3 +1,4 @@
+import { createPlayerSignInUi, playerSignInCopy } from './player-signin-ui.js';
 import { lobbyCopy, lobbyView, viewTitle } from './lobby-navigation.js';
 import { casinoPageTitle } from './guide-metadata.js';
 import { createReviewUi, reviewCopy } from './review-desk.js';
@@ -27,7 +28,7 @@ const currentRoute = location.pathname.startsWith(appPath('/'))
 const isAdminPage = currentRoute === '/admin';
 const copy = {
   ...comingSoonCopy,...providerCatalogCopy,...operatorCopy,...pilotCopy,...shelfCopy,...partnerLobbyCopy,...reviewCopy,
-  ...playerAccessCopy,
+  ...playerAccessCopy, ...playerSignInCopy,
   ...accountBreakCopy,
   ...discoveryCopy,...growthCopy,
   supportLinkedRef: ['Related reference (optional)', 'Référence liée (facultative)'],
@@ -822,6 +823,8 @@ function updateDocumentTitle() {
 function updateAccount() {
   const knownMember = accountPending && document.body.hasAttribute('data-member-pending');
   $('#join-home').hidden = Boolean(player) || knownMember || currentRoute !== '/' || document.body.dataset.lobbyBrand !== 'habibi';
+  const heroJoin=$('#hero-join');
+  if (heroJoin) {heroJoin.hidden=Boolean(player)||knownMember;heroJoin.textContent=t('signup');heroJoin.href=appPath('/?lang='+(language?'fr':'en')+'&access=signup');}
   $('#account').textContent = player ? money(player.balance) : t(knownMember ? 'account' : 'signin');
   const unreadSupport = player?.supportReplies || 0;
   $('#account').setAttribute('aria-label', player ? t('account') + ' · ' + money(player.balance) + (unreadSupport ? ' · ' + t('supportUnreadLabel').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(unreadSupport)) : '') : t(knownMember ? 'account' : 'signin'));
@@ -1058,55 +1061,79 @@ async function refreshOpenBreak() {
   }
 }
 
-function decorateAuthPanel(panel, title, signup) {
-  const fr = Boolean(language);
-  title.textContent = signup ? (fr ? 'Créer un compte' : 'Create an account') : (fr ? 'Se connecter à son compte' : 'Log in to your account');
-  const aside = element('aside', '', 'auth-portrait');
-  aside.setAttribute('aria-hidden','true');
-  const identity = element('div','','auth-wordmark');
-  const brand = document.querySelector('header .brand');
-  if (brand) for (const node of brand.childNodes) identity.append(node.cloneNode(true));
-  aside.append(identity);
-  const tabs = element('div','','auth-tabs');
-  tabs.setAttribute('role','tablist');
-  tabs.setAttribute('aria-label', fr ? 'Accès joueur' : 'Player access');
-  const formPanel = element('div','','auth-form-panel');
-  formPanel.id='auth-form-panel';
-  formPanel.setAttribute('role','tabpanel');
-  const switchTo = next => {
-    const email = panel.querySelector('input[name="email"]')?.value || '';
-    openPanel(next ? 'signup':'signin');
-    const input = panel.querySelector('input[name="email"]');
-    if (input) input.value=email;
-    panel.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll:true});
-  };
-  for (const join of [false,true]) {
-    const label = join ? (fr ? 'Inscription' : 'Register') : (fr ? 'Connexion' : 'Login');
-    const tab = action(label, () => { if (join!==signup) switchTo(join); },'auth-tab');
-    tab.id='auth-tab-'+(join?'signup':'signin');
-    tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(join===signup));
-    tab.setAttribute('aria-controls',formPanel.id);tab.tabIndex=join===signup?0:-1;
-    if (join===signup) formPanel.setAttribute('aria-labelledby',tab.id);
-    tab.addEventListener('keydown',event=>{
-      if (!['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) return;
-      event.preventDefault();
-      const target=event.key==='Home'?false:event.key==='End'?true:!join;
-      if (target!==join) switchTo(target);
-    });
-    tabs.append(tab);
+async function resumePlayerEntry(access) {
+  const clean=new URL(location.href);
+  clean.searchParams.delete('access');history.replaceState(history.state,'',clean);
+  if (['signup','signin'].includes(access)) openPanel(player?'account':access);
+  else {
+    try {
+      const saved=JSON.parse(sessionStorage.getItem('habibi-auth-destination') || '{}');
+      if(saved.page){
+        const previous=new URL(saved.page,location.origin),current=new URL(location.href);
+        const route=previous.pathname.slice(appBasePath.length);
+        if(previous.origin===location.origin && previous.pathname.startsWith(appPath('/')) && (/^\/$|^\/(coming-soon|help)\/[a-z0-9-]{1,64}$/.test(route)) && previous.href!==current.href){
+          previous.searchParams.set('access',access);
+          sessionStorage.setItem('habibi-auth-destination',JSON.stringify({...saved,page:null}));
+          location.replace(previous.href);
+          return;
+        }
+      }
+      if (['discovery','support'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
+      if (typeof saved.requestedClubTab==='string') requestedClubTab=saved.requestedClubTab;
+    } catch {}
+    sessionStorage.removeItem('habibi-auth-destination');
+    try {
+      if (access!=='return') throw new Error(({cancelled:'providerCancelled',expired:'providerExpired',unverified:'providerUnverified'})[access]);
+      await playerLoginUi.resume();
+    } catch(error) {openPanel('signin');$('#panel .auth-error').textContent=t(error.message);}
   }
-  formPanel.append(...Array.from(panel.childNodes));
-  const body=element('div','','auth-body');
-  body.append(tabs,formPanel);
-  panel.append(aside,body);
 }
 
+async function finishPlayerSignIn(auth, openDestination=true) {
+  player = auth;
+  const favoritesSynced = await adoptAccountFavorites(auth);
+  if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
+  playerSessionStartedAt = auth.sessionStartedAt;
+  const pendingSlug = sessionStorage.getItem('northplay-pending-preview');
+  if (!pendingSlug) language = publicLanguage(auth.preferredLocale);
+  if (publicLocales.includes(auth.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+  render();
+  if (!openDestination) return;
+  const target = afterSignIn || (selectedGame ? 'play' : 'account');
+  if (target === 'discovery' && requestedClubTab) discoveryPlayer.openTab(requestedClubTab, player.id);
+  if (target === 'play' && pendingSlug) {
+    try {
+      const fresh = await api('coming-soon/' + encodeURIComponent(pendingSlug) + '?locale=' + siteContentLocale(), undefined, 'GET');
+      if (fresh.demoGame !== selectedGame.id) throw new Error('demoUnavailable');
+      selectDemo(fresh.demoGame, fresh);
+    } catch {
+      clearDemoSelection();
+      openPanel('account');
+      $('#panel').prepend(element('p', t('demoUnavailable')));
+      return;
+    }
+  }
+  clearPendingDemo();
+  afterSignIn = undefined;
+  requestedClubTab = undefined;
+  if (target === 'support') openSupportCenter(); else openPanel(target);
+}
+const playerLoginUi=createPlayerSignInUi({
+  element,action,api,t,locale:()=>language?'fr-CA':'en-CA',open:openPanel,complete:finishPlayerSignIn,
+  verification(email,url){pendingVerificationEmail=email;pendingVerificationUrl=url;openPanel('emailVerification');},
+  policy:()=>tenantPolicyLinks[language?'termsUrlFr':'termsUrlEn'] || tenantPolicyLinks.termsUrlEn || tenantPolicyLinks.termsUrlFr,
+  saveIntent(){
+    const view=new URL(location.href);view.searchParams.delete('access');
+    sessionStorage.setItem('habibi-auth-destination',JSON.stringify({afterSignIn,requestedClubTab,page:view.pathname+view.search+view.hash}));
+  }
+});
 function renderDialog() {
   breakControls = undefined;
   const panel = $('#panel');
   panel.replaceChildren();
   const brandedAuth = document.body.dataset.lobbyBrand === 'habibi' && ['signin','signup'].includes(screen);
-  $('#dialog').classList.toggle('habibi-auth', brandedAuth);
+  const brandedRecovery=document.body.dataset.lobbyBrand==='habibi' && ['emailVerification','passwordReset'].includes(screen);
+  $('#dialog').classList.toggle('habibi-auth', brandedAuth || brandedRecovery);
   $('#dialog').dataset.screen = screen;
   $('#status').textContent = dialogError ? t(dialogError) : '';
   const title = element('h2', screen === 'play' ? (selectedPreview ? (language ? selectedPreview.titleFr : selectedPreview.titleEn) : gameName(selectedGame)) : screen === 'support' ? t('supportTitle') : screen === 'passwordReset' ? t('passwordResetTitle') : screen === 'emailVerification' ? t('emailVerification') : screen === 'emailChange' ? t('emailChangeTitle') : t(screen));
@@ -1115,6 +1142,10 @@ function renderDialog() {
   $('#dialog').setAttribute('aria-labelledby', title.id);
   panel.append(title);
   if ($('#dialog').open) title.focus();
+  if (brandedAuth) {
+    playerLoginUi.mount(panel,title,screen==='signup');
+    return;
+  }
   if (screen === 'signin' || screen === 'signup') {
     if (selectedPreview && !afterSignIn) panel.append(element('p', language ? selectedPreview.titleFr : selectedPreview.titleEn, 'demo-signin-title'));
     const signup = screen === 'signup';
@@ -1134,34 +1165,9 @@ function renderDialog() {
         openPanel('emailVerification');
         return;
       }
-      player = auth;
-      const favoritesSynced = await adoptAccountFavorites(auth);
-      if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
-      playerSessionStartedAt = auth.sessionStartedAt;
-      const pendingSlug = sessionStorage.getItem('northplay-pending-preview');
-      if (!pendingSlug) language = publicLanguage(auth.preferredLocale);
-      if (publicLocales.includes(auth.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
-      render();
-      const target = afterSignIn || (selectedGame ? 'play' : 'account');
-      if (target === 'discovery' && requestedClubTab) discoveryPlayer.openTab(requestedClubTab, player.id);
-      if (target === 'play' && pendingSlug) {
-        try {
-          const fresh = await api('coming-soon/' + encodeURIComponent(pendingSlug) + '?locale=' + siteContentLocale(), undefined, 'GET');
-          if (fresh.demoGame !== selectedGame.id) throw new Error('demoUnavailable');
-          selectDemo(fresh.demoGame, fresh);
-        } catch {
-          clearDemoSelection();
-          openPanel('account');
-          $('#panel').prepend(element('p', t('demoUnavailable')));
-          return;
-        }
-      }
-      clearPendingDemo();
-      afterSignIn = undefined;
-      requestedClubTab = undefined;
-      if (target === 'support') openSupportCenter(); else openPanel(target);
+      await finishPlayerSignIn(auth);
     }));
-    if (!brandedAuth) panel.append(action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
+    panel.append(action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
     if (!signup) {
       panel.append(action(t('passwordReset'), () => openPanel('passwordReset'), 'ghost'));
       panel.append(action(t('emailVerificationSend'), () => {
@@ -1169,7 +1175,6 @@ function renderDialog() {
         openPanel('emailVerification');
       }, 'ghost'));
     }
-    if (brandedAuth) decorateAuthPanel(panel, title, signup);
     return;
   }
   if (screen === 'emailVerification') {
@@ -1189,7 +1194,7 @@ function renderDialog() {
         if (result.verifyUrl) {
           const link = element('a', t('emailVerificationSubmit'));
           link.href = result.verifyUrl;
-          panel.append(link);
+          (panel.querySelector('.auth-recovery .auth-form-panel') || panel).append(link);
         }
       });
       if (pendingVerificationEmail) form.querySelector('input').value = pendingVerificationEmail;
@@ -1201,6 +1206,7 @@ function renderDialog() {
       }
     }
     panel.append(action(t('signin'), () => { history.replaceState(null, '', location.pathname); openPanel('signin'); }, 'ghost'));
+    if (brandedRecovery) playerLoginUi.recovery(panel);
     return;
   }
   if (screen === 'emailChange') {
@@ -1228,7 +1234,7 @@ function renderDialog() {
         if (response.changeUrl) {
           const link = element('a', t('emailChangeConfirm'));
           link.href = response.changeUrl;
-          panel.append(link);
+          (panel.querySelector('.auth-recovery .auth-form-panel') || panel).append(link);
         }
       }));
     }
@@ -1255,11 +1261,12 @@ function renderDialog() {
         if (result.resetUrl) {
           const link = element('a', t('passwordResetTitle'));
           link.href = result.resetUrl;
-          panel.append(link);
+          (panel.querySelector('.auth-recovery .auth-form-panel') || panel).append(link);
         }
       }));
     }
     panel.append(action(t('signin'), () => { history.replaceState(null, '', location.pathname); openPanel('signin'); }, 'ghost'));
+    if (brandedRecovery) playerLoginUi.recovery(panel);
     return;
   }
   if (screen === 'discovery') {
@@ -1505,12 +1512,20 @@ function renderDialog() {
   profileLanguageLabel.append(profileLanguageSelect);
   const profileForm = element('form');
   const profileSave = element('button', t('saveProfile'));
+  if(document.body.dataset.lobbyBrand==='habibi') {
+    if(player.username) profileForm.append(element('p',t('username')+' · '+player.username));
+    else {
+      const alias=field('username','text',t('usernameOptional'),'username'),input=alias.querySelector('input');
+      Object.assign(input,{required:false,minLength:3,maxLength:24,pattern:'[A-Za-z0-9][A-Za-z0-9_.\\\\-]{2,23}',spellcheck:false});
+      alias.append(element('small',t('usernameHelp')));profileForm.append(alias);
+    }
+  }
   profileForm.append(displayNameLabel, profileLanguageLabel, profileSave);
   profileForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     profileSave.disabled = true;
     try {
-      player = await api('account/profile', { displayName: displayNameInput.value, locale: profileLanguageSelect.value });
+      player = await api('account/profile', { displayName: displayNameInput.value, locale: profileLanguageSelect.value, ...(profileForm.elements.username?.value ? {username:profileForm.elements.username.value} : {}) });
       language = publicLanguage(player.preferredLocale);
       localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
@@ -1738,11 +1753,17 @@ function renderDialog() {
 }
 
 function openPanel(next) {
+  if (!['signup','signin'].includes(next) && ['signup','signin'].includes(screen)) playerLoginUi.reset();
   if (next!=='support') ++supportRequest;
   screen = next;
   dialogError = undefined;
   renderDialog();
   if (!$('#dialog').open) $('#dialog').showModal();
+  if ($('#dialog').classList.contains('habibi-auth')) {
+    $('#dialog').scrollTop=0;
+    $('#panel .auth-body').scrollTop=0;
+    $('#dialog-title').focus({preventScroll:true});
+  }
   if(next==='account'&&player){
     const owner=player.id,checkbox=$('#panel input[name="marketingEmail"]'),previous=checkbox?.checked;
     if(checkbox)void api('account/consents',undefined,'GET').then(current=>{
@@ -1759,7 +1780,7 @@ function openPanel(next) {
     breakTimer = setInterval(refreshOpenBreak, 15_000);
   }
 }
-$('#dialog').addEventListener('close', () => { ++supportRequest; clearInterval(breakTimer); ++breakRefresh; });
+$('#dialog').addEventListener('close', () => { playerLoginUi.reset(); ++supportRequest; clearInterval(breakTimer); ++breakRefresh; });
 window.addEventListener('focus', refreshOpenBreak);
 document.addEventListener('visibilitychange', refreshOpenBreak);
 
@@ -2152,7 +2173,7 @@ function render() {
   }
   providerCatalogUi.renderImport();
   if (languageChanged && adminWorkspace.isOpen('support-inbox')) supportQueue.render();
-  if ($('#dialog').open) renderDialog();
+  if ($('#dialog').open && (languageChanged || !$('#dialog').classList.contains('habibi-auth'))) renderDialog();
   updateSessionReminder();
   if (latestOverview) renderOperatorOverview(latestOverview);
   if(languageChanged&&adminWorkspace.isOpen('catalog-management'))providerCatalogUi.directory();
@@ -2219,6 +2240,7 @@ $('#open-discovery').addEventListener('click',()=>{
   if(!player)afterSignIn='discovery';
   openPanel(player?'discovery':'signin');
 });
+$('#hero-join')?.addEventListener('click',event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();clearDemoSelection();openPanel('signup');});
 $('#join-home').addEventListener('click', () => { clearDemoSelection(); openPanel('signup'); });
 for (const shortcut of document.querySelectorAll('[data-club]')) {
   shortcut.addEventListener('click', () => { lobbySections.closeMenu(); openClub(shortcut.dataset.club); });
@@ -3402,6 +3424,9 @@ if (!isAdminPage) {
   if (resetToken) openPanel('passwordReset');
   else if (verifyToken) openPanel('emailVerification');
   else if (emailChangeToken) openPanel('emailChange');
+  else if(document.body.dataset.lobbyBrand==='habibi' && ['signup','signin','return','cancelled','expired','unverified'].includes(catalogLocation.get('access'))) {
+    await resumePlayerEntry(catalogLocation.get('access'));
+  }
   else if(currentRoute==='/' && (new URLSearchParams(location.search).get('partner')==='1' || new URLSearchParams(location.search).get('inbox')==='1' || new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
     if(!player)afterSignIn='discovery';
     openPanel(player?'discovery':'signin');
