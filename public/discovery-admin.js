@@ -1,3 +1,4 @@
+import { membershipAdmin } from './club-admin.js';
 import { createContactList, campaignLabels, campaignLanguage, audiencePreview, campaignResults } from './contact-views.js';
 import { uiKit } from './discovery.js';
 const templates=['offer','Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09','Q10'];
@@ -21,6 +22,7 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
       const isProgram=kind==='programs';
       const items=result.items;
       if(isProgram && result.telegram) {
+        membershipAdmin(body,{api,t,ui});
         const config=result.telegram, card=el('details','','discovery-card'), form=el('form','','discovery-form');
         card.dataset.monthlyTelegram='';
         const state=config.ready?l('Active','Actif'):l('Setup required','À configurer');

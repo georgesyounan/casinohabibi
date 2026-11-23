@@ -365,6 +365,7 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
 
 // Public destinations share the catalogue, campaign, guide and account data already loaded for the lobby.
 export function createLobbySections({
+  bookApi,applyBookAccount,translate,
   french,
   appPath,
   catalogue,
@@ -398,7 +399,7 @@ export function createLobbySections({
   const href = (params = {}, hash = '') =>
     appPath('/?') + new URLSearchParams({ lang: l('en', 'fr'), ...params }) + hash;
   let period = 7;
-  const sports = createSportsCentre(panel, french, account);
+  const sports = createSportsCentre(panel, french, account, {api:bookApi,update:applyBookAccount,translate});
   const homeCampaign = createHomeCampaign(document.getElementById('default-lobby-hero'), french, appPath(''));
   function closeMenu() {
     lobby.removeAttribute('data-menu-open');
@@ -623,7 +624,17 @@ export function createLobbySections({
           )
         )
       );
-      shareLink(card, new URL(href(), location.origin).href, ui);
+      const invite=account()?.invitation;
+      if(invite){
+        card.querySelector('p')?.remove();
+        card.append(note(l('Earn 5 club points when your friend verifies their account and saves their first studio game.','Recevez 5 points du Club quand votre ami confirme son compte et enregistre son premier jeu du studio.')));
+        shareLink(card,new URL(appPath('/i/'+invite.code)+'?lang='+l('en','fr'),location.origin).href,ui);
+        card.append(note(invite.invited+' '+l('registered','inscrits')+' · '+invite.qualified+' '+l('qualified','qualifiés')));
+      }else{
+        shareLink(card,new URL(href(),location.origin).href,ui);
+        const sign=el('a',l('Sign in for your personal invite link','Se connecter pour obtenir son lien personnel'));
+        sign.href=href({view:'invite',access:'signin'});card.append(sign);
+      }
       panel.append(
         card,
         button(l('Partner portal', 'Portail partenaire'), () => club('partner'), true)

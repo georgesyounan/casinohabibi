@@ -290,7 +290,12 @@ body.player-home[data-lobby-brand="habibi"] .spotlight-nav .rotation-toggle { wi
 .club-heading { margin-bottom: 10px; }
 .club-heading h2 { margin: 0; font: 800 clamp(1.2rem,2vw,1.6rem)/1.1 Inter,sans-serif; letter-spacing: -.045em; color: #f4f9ff; }
 .club-heading a { color: #a5daff; text-decoration: none; font-size: .81rem; font-weight: 700; padding: 8px 0 8px 8px; }
-.club-tiles { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
+.club-period {display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.club-period button[aria-pressed="true"] {border-color:#9edfff;color:#b9e7ff}
+.club-member-line,.club-tourney {padding:12px 0}
+.club-member-line {display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.club-tourney h4 {margin:0}.club-tourney small,.club-member-line small {color:#b7cbe1}
+.club-tiles { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(135px,100%),1fr)); gap: 9px; }
 .club-tiles .club-tile { --ink: #9edfff; position: relative; isolation: isolate; overflow: hidden; min-height: 106px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 7px; padding: 13px 15px; border-radius: 13px; border: 1px solid #5388b4; text-decoration: none; color: white; background: #102541; }
 .club-tile::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(88deg,#0b1733 0%,#101a33ed 30%,#14244387 63%,#17335526), var(--tile-art) right center/cover; }
 .club-tile.club-daily { --ink: #a5ecff; --tile-art: url('club-gift.webp'); border-color: #50a8d8; }

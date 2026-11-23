@@ -25,6 +25,8 @@ import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createDiscoveryNavigation } from './lib/discovery-navigation.js';
 import { collectionKey } from './public/catalog.js';
 import { createSupportCases } from './lib/support-cases.js';
+import { createSportsBook } from './lib/sports-book.js';
+import { createMembership } from './lib/club-membership.js';
 import { createPlayerClub } from './lib/player-club.js';
 import { createLobbyEvents } from './lib/lobby-events.js';
 import { createGiftRewards, slotRoll } from './lib/gift-rewards.js';
@@ -305,6 +307,7 @@ const savedTitles = createSavedTitles(db, { fail, transaction,
   if (title) {
     rewards.observe(tenant,player,'save',titleId,'activity-'+activity,now,{collections:[title.collectionEn,title.collectionFr],collectionKey:collectionKey(title)});
     growth.save(tenant,player,titleId,activity,now);
+    membership.qualify(tenant,player,now);
   }
 } });
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
@@ -327,7 +330,7 @@ const publicationFollowup = createPublicationFollowup(db, { transaction, fail })
 const publicCatalogueFrom = 'FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1';
 const publicProviderCount = db.prepare('SELECT count(*) AS total ' + publicCatalogueFrom);
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath,
-  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => playerClub.home(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null), giftPreview: tenant => giftRewards.describe(tenant,null) });
+  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => clubModel(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null), giftPreview: tenant => giftRewards.describe(tenant,null) });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
@@ -339,7 +342,20 @@ const monthlyTelegram=transaction(()=>createMonthlyTelegram(db,{fail,transaction
   seal:(tenant,value)=>encryptProviderKey('monthly-telegram:'+tenant,value),
   unseal:(tenant,value)=>decryptStaffSecret(value,'monthly-telegram:'+tenant)}));
 const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,telegram:monthlyTelegram,fail}));
+const membership=transaction(()=>createMembership(db,{fail,accountBreaks}));
+const sportsBook=transaction(()=>createSportsBook(db,{fail,balance:(id,tenant)=>balance(id,tenant),dailyWagered,accountBreaks}));
+function clubModel(tenant,player,locale,days=1) {
+  return {...playerClub.home(tenant,player,locale,Date.now(),days),membership:{...membership.view(tenant,player),
+    telegram:player?monthlyTelegram.connection(tenant,player):null}};
+}
+function seedClubBrand(id) {
+  rewards.seedClub(id);
+  membership.seed(id);
+  membership.weekly(id);
+}
 function settleClubDraws() {
+  const due=db.prepare("SELECT DISTINCT tenant FROM club_tournaments WHERE state='open' AND ends<=?").all(Date.now());
+  for(const {tenant} of due)transaction(()=>{membership.closeDue(tenant);if(clubEnabled(tenant))membership.weekly(tenant);});
   if (lobbyEvents.hasDue()) transaction(() => lobbyEvents.settle());
 }
 settleClubDraws();
@@ -349,7 +365,7 @@ setInterval(() => {
 transaction(()=>{
   for(const {id} of db.prepare('SELECT id FROM tenants').all()) {
     rewards.seed(id);
-    if(clubEnabled(id)) rewards.seedClub(id);
+    if(clubEnabled(id)) seedClubBrand(id);
   }
 });
 const communications = createCommunications(db,{fail,transaction,accountBreaks,audit:staffAudit.record,mailEnabled,
@@ -517,6 +533,12 @@ function lobbyPresentation(tenantId) {
   if (tenantId === 'sandbox' && appBasePath === '/casinohabibi' && published.version === 1 &&
       published.config.brandName === defaultTenantConfig.brandName) {
     published.config.brandName = 'Casino Habibi';
+  }
+  if(published.config.brandName.trim().toLowerCase()==='casino habibi'){
+    const standard=defaultTenantConfig.faqItems[1];
+    published.config.faqItems=published.config.faqItems.map(item=>({...item,
+      ...(item.answerFr===standard.answerFr && {answerFr:'Le hall propose quatre jeux maison. Habibi Studio publie aussi des éditions jouables, dont Roulette Orbit, Blackjack Néon et Pulse 777. Les éditions disponibles figurent dans les nouveautés.'}),
+      ...(item.answerEn===standard.answerEn && {answerEn:'The lobby has four house games. Habibi Studio also publishes playable editions, including Orbit Roulette, Neon Blackjack and Pulse 777. See New Releases for current availability.'})}));
   }
   return published;
 }
@@ -764,6 +786,7 @@ function account(id, tenantId) {
     displayName: profile?.displayName || '',
     preferredLocale: profile?.preferredLocale || 'en-CA',
     balance: balance(id, tenantId),
+    ...(clubEnabled(tenantId) && {invitation:membership.invite(tenantId,id)}),
     history: historyRows,
     historyNextCursor: hasMoreHistory ? historyRows.at(-1).id : null,
     favorites,
@@ -788,6 +811,7 @@ function registerPlayer(req, tenant, email, details, {verified, passwordHash}) {
     .run(id,tenant,details.username,Date.now(),'player-18-demo-v1');
   db.prepare('INSERT INTO ledger(player,wager,amount,tenant_id) VALUES(?,0,10000,?)').run(id,tenant);
   growth.signup(tenant,id,referralCookie(req),details.referralCode);
+  if(clubEnabled(tenant))membership.attribute(tenant,id,req.headers.cookie?.match(/(?:^|;\s*)habibi_invite=([a-f0-9]{24})(?:;|$)/)?.[1]);
   return id;
 }
 
@@ -815,7 +839,7 @@ async function api(req, res, path, tenantId, requestId) {
   const cookie = req.headers.cookie?.match(/(?:^|; )northplay=([a-f0-9]{64})(?:;|$)/)?.[1];
   const activeSession = () => signedPlayer(req,tenantId);
   const player = activeSession();
-  if (player && req.method !== 'GET' && /^\/api\/(?:discovery\/|growth\/|community\/|account\/|me\/saved\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
+  if (player && req.method !== 'GET' && /^\/api\/(?:sports\/book$|discovery\/|growth\/|community\/|account\/|me\/saved\/|support(?:\/|$)|safety\/|play$)/.test(path)) {
     req.assertPlayerSession = () => { if (activeSession() !== player) fail(401, 'signin'); };
   }
   const staffCookie = req.headers.cookie?.match(/(?:^|; )northplay_staff=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -948,6 +972,14 @@ async function api(req, res, path, tenantId, requestId) {
       );
     }
     fail(404, 'opMissing');
+  }
+  if(path==='/api/admin/operator/sports'){
+    if(req.method==='GET'){staffContext(req,tenantId,['operator_admin']);return sportsBook.view(tenantId,null);}
+    if(req.method==='POST'){const input=await body(req);return auditedChange(['operator_admin'],input,staff=>{
+      const version=sportsBook.operate(tenantId,input);
+      staffAudit.record(tenantId,staff.id,'sports_'+input.action,'sports-'+(input.id||'limits'),requestId,{fields:[input.action]});
+      return {version};
+    });}
   }
   if (path.startsWith('/api/admin/operator/')) {
     const resource = path.slice('/api/admin/operator/'.length);
@@ -1176,10 +1208,58 @@ async function api(req, res, path, tenantId, requestId) {
       return {...result,board:lobbyEvents.board(tenantId,player)};
     });
   }
+  if(path==='/api/sports/book'){
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    if(req.method==='GET')return sportsBook.view(tenantId,player);
+    if(req.method==='POST'){
+      if(!player)fail(401,'signin');
+      const input=await body(req);
+      return transaction(()=>{
+        req.assertPlayerSession();
+        if(input.owner!==player)fail(409,'giftAccountChanged');
+        const now=Date.now();
+        if(input.action==='quote')return {quote:sportsBook.quote(tenantId,player,input,now)};
+        if(input.action==='accept')sportsBook.accept(tenantId,player,input,now);
+        else if(input.action==='cash')sportsBook.cash(tenantId,player,input,now);
+        else fail(400,'invalid');
+        return {book:sportsBook.view(tenantId,player),account:account(player,tenantId)};
+      });
+    }
+  }
+  if (path==='/api/discovery/membership' && req.method==='GET') {
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    return {...membership.view(tenantId,player),owner:player||null,telegram:player?monthlyTelegram.connection(tenantId,player):null};
+  }
+  if (route==='POST /api/discovery/membership') {
+    if(!player)fail(401,'signin');
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    const input=await body(req);
+    return transaction(()=>{
+      req.assertPlayerSession();if(input.owner!==player)fail(409,'giftAccountChanged');
+      const now=Date.now();
+      if(input.action==='purchase')membership.purchase(tenantId,player,input,now);
+      else if(input.action==='cancel')membership.cancel(tenantId,player,input.id||0,now);
+      else if(input.action==='enter')membership.enter(tenantId,player,input.id||0,now);
+      else if(input.action==='unlink')monthlyTelegram.unlink(tenantId,player);
+      else fail(400,'invalid');
+      return {...membership.view(tenantId,player,now),owner:player,telegram:monthlyTelegram.connection(tenantId,player)};
+    });
+  }
+  if(path==='/api/admin/discovery/membership'){
+    if(req.method==='GET'){staffContext(req,tenantId,['operator_admin']);return membership.adminView(tenantId);}
+    if(req.method==='POST'){
+      const input=await body(req);
+      return auditedChange(['operator_admin'],input,staff=>{
+        const id=membership.operate(tenantId,input.action,input);
+        const auditId=staffAudit.record(tenantId,staff.id,'club_'+input.action,'club-'+String(id),requestId,{fields:[input.action]});
+        return {id,auditId};
+      });
+    }
+  }
   if (route==='GET /api/discovery/club' || route==='GET /api/discovery/standings') {
     if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
     return transaction(()=>path.endsWith('/standings') ? playerClub.standings(tenantId,player) :
-      playerClub.home(tenantId,player,catalogueLocale),{readOnly:true});
+      clubModel(tenantId,player,catalogueLocale,Number(params.get('days')||1)),{readOnly:true});
   }
   if (route==='POST /api/discovery/daily') {
     if (!player) fail(401,'signin');
@@ -1188,7 +1268,7 @@ async function api(req, res, path, tenantId, requestId) {
     return transaction(()=>{
       req.assertPlayerSession();
       const result=playerClub.claim(tenantId,player,input.day,input.expectedAmount);
-      return {...result,account:account(player,tenantId),club:playerClub.home(tenantId,player,catalogueLocale)};
+      return {...result,account:account(player,tenantId),club:clubModel(tenantId,player,catalogueLocale,Number(params.get('days')||1))};
     });
   }
   if (route==='GET /api/discovery/inbox') {
@@ -1617,7 +1697,7 @@ async function api(req, res, path, tenantId, requestId) {
           const config = { ...defaultTenantConfig, brandName: name.trim() };
           db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, 1, ?, 'published', ?)").run(id, JSON.stringify(config), Date.now());
           rewards.seed(id);
-          if(clubEnabled(id)) rewards.seedClub(id);
+          if(clubEnabled(id)) seedClubBrand(id);
         db.prepare("INSERT INTO platform_events(tenant_id, action, target, created_at, correlation_id) VALUES (?, 'tenant_created', ?, ?, ?)").run(id, slug, Date.now(), requestId);
         });
       } catch (error) {
@@ -1719,7 +1799,7 @@ async function api(req, res, path, tenantId, requestId) {
         const config = { ...defaultBrandOptions, ...JSON.parse(draft.config) };
         db.prepare("UPDATE tenant_config_versions SET status = 'published' WHERE tenant_id = ? AND version = ?").run(tenantId, draft.version);
         db.prepare('UPDATE tenants SET name = ? WHERE id = ?').run(config.brandName, tenantId);
-        if(clubEnabled(tenantId)) rewards.seedClub(tenantId);
+        if(clubEnabled(tenantId)) seedClubBrand(tenantId);
         const auditId = staffAudit.record(tenantId, staff.id, 'tenant_config_published', String(draft.version), requestId, {
           recordId: tenantId, revision: draft.version, fields: changedFields(published.config, config), previousStatus: 'draft', status: 'published'
         });
@@ -1950,6 +2030,7 @@ async function api(req, res, path, tenantId, requestId) {
       const verification = db.prepare('SELECT player_id AS player FROM player_email_verifications WHERE token_hash = ? AND tenant_id = ? AND expires > ?').get(hash(token), tenantId, Date.now());
       if (!verification) fail(400, 'emailVerificationInvalid');
       db.prepare('UPDATE players SET email_verified = 1 WHERE id = ? AND tenant_id = ?').run(verification.player, tenantId);
+      membership.qualify(tenantId,verification.player);
       db.prepare('DELETE FROM player_email_verifications WHERE player_id = ? AND tenant_id = ?').run(verification.player, tenantId);
     });
     return { message: 'emailVerified' };
@@ -2458,10 +2539,13 @@ const assets = {
   '/sports-weekend.webp': ['sports-weekend.webp', 'image/webp'],
   '/player-signin.webp': ['player-signin.webp', 'image/webp'],
   '/sports-marina.webp': ['sports-marina.webp', 'image/webp'],
+  '/sport-tickets.js': ['sport-tickets.js', 'text/javascript'],
   '/sports-centre.js': ['sports-centre.js', 'text/javascript'],
   '/lobby-navigation.js': ['lobby-navigation.js', 'text/javascript'],
   '/operator-workflows.js':['operator-workflows.js','text/javascript'],
   '/provider-catalog.js':['provider-catalog.js','text/javascript'],
+  '/club-market.js':['club-market.js','text/javascript'],
+  '/club-admin.js':['club-admin.js','text/javascript'],
   '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/contact-views.js': ['contact-views.js','text/javascript'],
@@ -2517,6 +2601,13 @@ createServer(async (req, res) => {
       return res.end(JSON.stringify({ status: 'ready', requestId }));
     }
     tenantId = resolveTenant(req);
+    const inviteRoute=req.method==='GET' && path.match(/^\/i\/([a-f0-9]{24})$/);
+    if(inviteRoute && clubEnabled(tenantId)){
+      if(!membership.inviter(tenantId,inviteRoute[1]))fail(404,'discoveryMissing');
+      if(!signedPlayer(req,tenantId))res.setHeader('Set-Cookie',`habibi_invite=${inviteRoute[1]}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secureCookie}`);
+      const lang=requestUrl.searchParams.get('lang')==='fr'?'fr':'en';
+      res.writeHead(302,{Location:appBasePath+'/?lang='+lang+'&access=signup','Cache-Control':'private, no-store'});return res.end();
+    }
     const tagged=req.method==='GET' && path.match(/^\/(r|go)\/([a-z0-9][a-z0-9-]{1,47})(?:\/([a-z0-9][a-z0-9-]{0,47}))?$/);
     if(tagged && (tagged[1]==='r' || !tagged[3])){
       const requested=requestUrl.searchParams.get('lang');

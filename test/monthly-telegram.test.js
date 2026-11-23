@@ -148,3 +148,18 @@ test('operator setup verifies an eligible target, protects existing bots, and re
   await assert.rejects(setup(0),/telegramChanged/);
   await assert.rejects(setup(0,'b'),/telegramBotBusy/);
 });
+
+test('D25.1 a member can inspect and revoke Telegram, including an in-flight membership proof',async t=>{
+  const {telegram,setup,link,transaction,claim}=fixture(t);
+  await setup();
+  const {code}=link(1,131313);transaction(()=>telegram.confirm('a',1,code));
+  assert.equal(telegram.connection('a',1).linked,true);
+  const proof=await telegram.membership('a',1);
+  transaction(()=>telegram.unlink('a',1));
+  assert.equal(telegram.connection('a',1).linked,false);
+  assert.throws(()=>claim(1,proof),/telegramLinkRequired/);
+  await assert.rejects(telegram.membership('a',1),/telegramLinkRequired/);
+  const pending=link(1,141414);transaction(()=>telegram.unlink('a',1));
+  assert.notEqual(transaction(()=>telegram.confirm('a',1,pending.code)),null);
+  assert.equal(telegram.connection('a',1).linked,false);
+});
