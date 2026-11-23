@@ -1,4 +1,4 @@
-Admin interface assets
+Admin interface and sports navigation font assets
 
 Inter Variable, Latin subset, copyright 2016 The Inter Project Authors.
 Source: https://github.com/rsms/inter. License: SIL Open Font License 1.1.
