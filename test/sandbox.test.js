@@ -4305,6 +4305,8 @@ test('Welcome bonus pays after two eligible stakes, reversal removes progress, a
   await Promise.all([ops('bonus-spin-use',{ref:a.promotions.spin.ref}),ops('bonus-spin-use',{ref:a.promotions.spin.ref})]);
   assert.equal(db.prepare("SELECT count(*) n FROM ledger WHERE player=? AND request_id LIKE 'offer:spin:%'").get(owner).n,1);
   assert.equal(db.prepare("SELECT count(*) n FROM ledger WHERE player=? AND request_id LIKE 'offer:cashback:%'").get(owner).n,1);
+  const bad=db.prepare('SELECT id FROM ledger WHERE request_id=?').get('loss-fixture').id;for(let i=0;i<2;i++)await checked(s,'admin/discovery/membership',{action:'bonus-correct',entry:bad,reason:'Late correction to the claimed week'});
+  assert.equal((await view()).cashback.amount,0);assert.equal(db.prepare('SELECT amount FROM bonus_cashback_adjustments WHERE entry=?').get(bad).amount,-700);
 });
 
 test('CRM and Telegram delivery recheck consent, resume batches and retain event identity through retries and dead letters',async t=>{
@@ -4416,4 +4418,41 @@ test('Eligible shelf impressions produce five unique launches in one hundred vie
   await checked(s,'admin/discovery/membership',{action:'bonus-correct',entry:first,reason:'Round correction in test'});
   const corrected=(await report()).entries[0];assert.equal(corrected.receipts.filter(r=>r.corrected).length,1);assert.equal(corrected.ggr,corrected.receipts.filter(r=>!r.corrected).reduce((n,r)=>n+r.stake-r.wins,0));
   assert.equal((await checked(s,'admin/shelves/metrics?slot=no-sample')).conversion,null);
+});
+
+test('Player budgets gate deposits, house and sports stakes, dealer seats settle and Mexican demo vouchers reconcile once',async t=>{
+  const {base,database}=await startSandbox(t,{appBasePath:'/casinohabibi'}),site=base+'/casinohabibi',p=client(site),s=client(site),guest=client(site);
+  await checked(s,'admin/login',staffCredentials);const owner=await growthAccount(p,'budget-holder');const db=new DatabaseSync(database);t.after(()=>db.close());db.prepare('UPDATE players SET report_fixture=1 WHERE id=?').run(owner);
+  assert.equal((await checked(s,'admin/desk/routes')).items.length,2);
+  await checked(s,'admin/desk/cashier',{action:'local-rails',enabled:true});
+  for(const channel of ['spei','oxxo']){
+    assert.ok((await checked(s,'admin/desk/options?direction=deposit&market=south&asset=TST&minor=500')).eligible.includes(channel));
+    assert.ok(!(await checked(s,'admin/desk/options?direction=deposit&market=north&asset=TST&minor=500')).eligible.includes(channel));
+  }
+  const subject=(await checked(s,'admin/desk/review',{action:'create',market:'south',label:'Local payment fixtures',player:owner})).id;
+  const budget=(period,kind,amount,version)=>checked(p,'safety/budgets',{period,kind,amount,version});
+  await budget('month','deposit',1200,0);const claim=(route,key,amount=500)=>p('discovery/membership',{owner,action:'cashier-deposit',route,key,amount});
+  const id=randomUUID();const spei=await claim('spei',id);assert.equal(spei.status,200);await claim('spei',id);
+  const oxxo=await claim('oxxo',randomUUID());const receipts=oxxo.data.cashier.vouchers.items;assert.equal(receipts.length,2);assert.ok(receipts.every(r=>r.reference.startsWith('DEMO-')));
+  assert.equal((await claim('oxxo',randomUUID(),300)).data.error,'periodBudget');
+  for(const voucher of receipts){const i=await checked(s,'admin/desk/intent?id='+voucher.id);assert.equal(i.voucher.reference,voucher.reference);
+    const event={action:'event',id:i.id,eventId:'demo-rail-'+i.id,processorRef:i.processorRef,route:i.route,asset:'TST',minor:i.minor,outcome:'success'};
+    await checked(s,'admin/desk/cashier',event);await checked(s,'admin/desk/cashier',event);}
+  assert.equal((await checked(s,'admin/desk/cashier?id='+subject)).balance.available,1000);
+  const limits=await budget('month','deposit',2000,1);const row=limits.items.find(r=>r.kind==='deposit'&&r.period==='month');assert.equal(row.used,1000);assert.equal(row.amount,1200);assert.equal(row.pending,2000);assert.ok(row.effectiveAt>Date.now()+86000000);
+  await budget('week','stake',100,0);await budget('month','loss',0,0);
+  const table=(await checked(guest,'account/dealer-tables')).items[0];assert.equal(table.free,table.capacity);await checked(p,'account/dealer-tables',{action:'enter',table:table.id});
+  const seat=await checked(p,'account/dealer-tables',{action:'enter',table:table.id});assert.equal((await checked(guest,'account/dealer-tables')).items[0].free,table.capacity-1);
+  const wager={game:'roulette',choice:'red',wager:100,requestId:randomUUID(),dealerSeat:seat.id};assert.equal((await p('play',wager)).data.error,'periodBudget');
+  db.prepare("UPDATE playing_budgets SET amount=1000 WHERE tenant='sandbox' AND player=? AND period='month' AND kind='loss'").run(owner);
+  const play=await checked(p,'play',wager);assert.equal(JSON.parse(play.outcome).dealer,table.id);
+  assert.equal((await reproduce(await checked(p,'account/round-proof/'+play.history[0].id))).valid,true);
+  assert.equal((await p('play',{...wager,requestId:randomUUID()})).data.error,'periodBudget');
+  const book=await checked(p,'sports/book'),market=book.markets[0];
+  assert.equal((await p('sports/book',{owner,action:'accept',key:randomUUID(),stake:100,legs:[{id:market.id,pick:0,price:market.prices[0],version:market.version}]})).data.error,'periodBudget');
+  await checked(p,'account/dealer-tables',{action:'leave',seat:seat.id});assert.equal((await checked(guest,'account/dealer-tables')).items[0].free,table.capacity);
+  const video=await fetch(site+'/marina-replay.mp4');assert.equal(video.status,200);assert.match(video.headers.get('content-type'),/video\/mp4/);const length=(await video.arrayBuffer()).byteLength;assert.ok(length>10000);
+  const part=await fetch(site+'/marina-replay.mp4',{headers:{Range:'bytes=10-19'}});assert.equal(part.status,206);assert.equal((await part.arrayBuffer()).byteLength,10);
+  const end=await fetch(site+'/marina-replay.mp4',{method:'HEAD',headers:{Range:'bytes=-8'}});assert.equal(end.status,206);assert.equal(end.headers.get('content-length'),'8');
+  assert.equal((await fetch(site+'/marina-replay.mp4',{headers:{Range:'bytes='+length+'-'}})).status,416);
 });

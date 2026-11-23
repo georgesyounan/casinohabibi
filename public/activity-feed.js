@@ -1,7 +1,7 @@
 import { games } from './catalog.js';
 import { matches, frameOf, clockLabel, leagues } from './sports-data.js';
 
-export const activityInterval = 1200;
+export const activityInterval = 1000;
 const rowLimit = 10;
 const gamesById = new Map(games.map(game => [game.id, game]));
 const liveMatches = matches.filter(match => match.frames?.length);

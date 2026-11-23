@@ -167,11 +167,12 @@ export function createClubHome({root,api,base,french,account,accountPending=()=>
       const user=auth(), verb=control.dataset.memberAction;
       if(!user||busy||control.disabled)return;
       if(verb==='unlink'&&!window.confirm(msg('Unlink your Telegram account?','Dissocier votre compte Telegram ?')))return;
-      const operation=[user,verb,control.dataset.sku,control.dataset.id,control.dataset.price].join('/');
+      const amount=verb==='cashier-deposit'?Number(root.querySelector('[data-voucher-amount]')?.value):Number(control.dataset.amount)||undefined;
+      const operation=[user,verb,control.dataset.sku,control.dataset.id,control.dataset.price,control.dataset.ref,control.dataset.route,control.dataset.purpose,control.dataset.enabled,amount].join('/');
       if(memberRequest?.operation!==operation)memberRequest={operation,key:crypto.randomUUID()};
       busy=true;control.disabled=true;
       try{
-        const value=await api('discovery/membership',{action:verb,owner:user,key:memberRequest.key,purpose:control.dataset.purpose,enabled:control.dataset.enabled==='1',sku:control.dataset.sku,ref:control.dataset.ref,period:control.dataset.period,amount:Number(control.dataset.amount)||undefined,unit:verb==='prize-request'?'prize':undefined,price:Number(control.dataset.price)||undefined,id:Number(control.dataset.id)||undefined});
+        const value=await api('discovery/membership',{action:verb,owner:user,key:memberRequest.key,purpose:control.dataset.purpose,enabled:control.dataset.enabled==='1',sku:control.dataset.sku,ref:control.dataset.ref,period:control.dataset.period,amount,route:control.dataset.route,unit:verb==='prize-request'?'prize':undefined,price:Number(control.dataset.price)||undefined,id:Number(control.dataset.id)||undefined});
         if(user!==auth()||value.owner!==user)return;
         memberRequest=null;snapshot.membership=value;
         status=msg('Saved.','Enregistré.');signature='';paint();

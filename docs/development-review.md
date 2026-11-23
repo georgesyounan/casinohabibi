@@ -14,6 +14,32 @@ Mise à jour du 23 novembre 2026. Les 88 scénarios d’acceptation des 28 modul
 - Dans **Espace opérateur**, les **Clients d’intégration** présentent les abonnements et leur journal. Les **Sélections planifiées** donnent accès à la performance par place et par jeu. La **Caisse de test** et le **Réseau d’actifs fictifs** suivent les reçus et les exceptions. Dans la liste des partenaires, ouvrir **Relevés de commission**.
 - L’argent réel, les comptes OAuth de la marque, les droits de diffusion sportive, un fournisseur de tables de croupiers et le canal Telegram officiel demandent une configuration ou un contrat distinct. Les promotions de test utilisent un récepteur simulé. Les tests de la caisse Telegram vérifient la continuité du même paiement dans le bot, le compte joueur et le portail du personnel.
 
+## Les 21 fonctions du hall dans le rapport PR 46
+
+| Ligne du rapport | Parcours | Résultat vérifiable |
+|---|---|---|
+| 6 | Catalogue jouable | Quatre jeux maison et trois éditions Habibi Studio. La FAQ précise les deux groupes. |
+| 7 | Catégorie en direct | Le hall présente les tables fictives avec leur langue et leurs places. |
+| 8 | Tendances | Fenêtres de 24 heures et sept jours, places réservées par le personnel. |
+| 9 | Favoris, récents et nouveautés | Les favoris suivent le compte entre deux sessions. Les nouveautés et les recommandations respectent le marché et les droits du studio. |
+| 10 | Activité | Les trois onglets affichent l’heure locale à la seconde. Les exemples se renouvellent chaque seconde. Les gains enregistrés conservent leurs reçus. |
+| 11 | Offre de bienvenue | Échéance publique et stock de l’offre du Club. Offre de mise optionnelle à durée limitée. |
+| 12 | Quêtes | Les objectifs distincts enregistrent les actions du joueur. Un prix déjà acquis conserve son reçu. |
+| 13 | Boutique | Une réservation dépense 40 des 100 points. L’annulation rend un article et 40 points une fois. |
+| 14 | Course et tournoi | Conditions d’entrée, classement, départage, clôture et prix unique en points. |
+| 15 | Tirage | Billet quotidien, portefeuille promotionnel séparé et suivi d’une demande de prix fictif. |
+| 16 | Cadeaux | Sept cadeaux, remise sur perte nette et tour gratuit avec référence de studio simulé. |
+| 17 | Bonus mensuel Telegram | Association, contrôle d’adhésion et versement mensuel unique testés. Activation publique soumise au canal officiel. |
+| 18 | Invitation | Lien personnel et qualification unique après validation du courriel et premier titre de studio enregistré. |
+| 19 | Vérification du résultat | Le reçu des nouvelles manches maison permet de reproduire le tirage dans le navigateur. |
+| 20 | Tables de croupiers | Les tables locales sont jouables en simulation. Activer un studio de test ajoute sa table. La diffusion d’un croupier réel dépend d’un fournisseur. |
+| 21 | Caisse | Réservation, dépôt, retrait, anomalie, règlement et rapprochement opérés sur le registre TST. |
+| 22 | SPEI et OXXO | Les réglages de caisse activent les références de test pour un dossier du marché Sud. Expiration, confirmation et reçu sont liés au même dépôt TST. |
+| 23 | Budgets et rappels | Limites hebdomadaires et mensuelles de dépôt, mise et perte. Les baisses prennent effet immédiatement. Les hausses attendent 24 heures. Les avis obligatoires persistent à la reconnexion. |
+| 24 | Sports | Carnet fictif avec confirmation des nouvelles cotes, règlement et rachat partiel ou total. |
+| 25 | Retransmission | Le programme donne les horaires locaux et ouvre une reprise animée de Marina FC – Atlas 04. Un flux sportif réel demande les droits et une source vidéo. |
+| 26 | Connexion externe | Parcours Google et Discord testés avec des fournisseurs simulés. Une connexion réelle reste à valider avec les comptes OAuth de la marque. |
+
 ## Prise en main
 
 Dans **Administration → Espace opérateur**, ouvrir **Produits → Casino en direct**. Activer le produit, ouvrir **Atlas Studio** et activer son connecteur fictif. Une simulation de panne conserve son motif et sa version. Une fois la connexion disponible, lancer la démo et ouvrir sa chronologie. Cedar permet de vérifier le cas d’un fournisseur sans relecture.

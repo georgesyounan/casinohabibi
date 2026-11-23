@@ -88,6 +88,7 @@ export function sportsMarkup(fr, state = newBoard()) {
   return `<div class="sports-centre" data-sports-lang="${fr?'fr':'en'}">${sportsNavigation(state,fr)}
     ${popular ? carousel(state,fr)+scoreWire(state,fr)+featureRail(state,fr) : ''}
     <div class="sports-feedback" aria-live="polite">${state.message?escapeMessage(state.message):state.notice ? (fr ? 'Coupon démo mis à jour.' : 'Practice slip updated.') : ''}</div>
+    ${(popular||state.status==='live')?'<details class="sports-coverage"><summary>'+ (fr?'Programme vidéo':'Video schedule')+'</summary><p>Marina FC – Atlas 04 · '+(fr?'Coupe du littoral · Reprise simulée':'Coastal Cup · Simulated replay')+'</p><a class="button" href="./replays.html?lang='+(fr?'fr':'en')+'">'+(fr?'Voir les horaires et la reprise':'View schedule and replay')+'</a></details>':''}
     <div class="hub-sports"><div class="match-centre">${content}</div>${slipMarkup(state,fr)}</div></div>`;
 }
 

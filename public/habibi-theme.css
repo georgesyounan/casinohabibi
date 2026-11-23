@@ -678,3 +678,5 @@ body.player-home #lobby[data-club-promotions] .lobby-content > #habibi-promo-gal
 @media(max-width:620px) {
   .habibi-offer-grid { gap: 10px; }
 }
+
+.dealer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:.8rem}.dealer-grid article{margin:0}.dealer-grid button+button{margin-left:.35rem}.sports-coverage,.account-budget{margin:1rem 0;padding:.85rem 1rem;border:1px solid #405a78;border-radius:12px;background:#14243b;color:#f0f7ff}.sports-coverage summary,.account-budget summary{cursor:pointer;font-weight:650}

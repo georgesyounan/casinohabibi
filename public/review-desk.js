@@ -96,6 +96,7 @@ const words = {
   deposit: ['Deposit', 'Dépôt'],
   withdrawal: ['Withdrawal', 'Retrait'],
   cards: ['Visa / Mastercard (test)', 'Visa / Mastercard (test)'],
+  spei: ['SPEI reference (demo)','Référence SPEI (démo)'],oxxo:['OXXO voucher (demo)','Bon OXXO (démo)'],
   wallet: ['Digital wallet (test)', 'Portefeuille numérique (test)'],
   initiated: ['Initiated', 'Créé'],
   held: ['Funds reserved', 'Fonds réservés'],
@@ -847,7 +848,7 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
       history.append(el('p', date(e.at) + ' · ' + names(e.kind) + ' · ' + names(e.status)));
   }
   async function settings(v) {
-    const [{ items: policies }, { items: routes }] = await Promise.all([get('policies'), get('routes')]);
+    const [{ items: policies }, { items: routes,localRails }] = await Promise.all([get('policies'), get('routes')]);
     const flags = (parent, values, selected) =>
       values.map((k) => {
         const lbl = el('label'),
@@ -868,6 +869,8 @@ export function createReviewUi({ api, t, french, role, staffId, open }) {
         ),
       ),
     );
+    const railSwitch=el('button',localRails?l('Disable Mexican test payment methods','Désactiver les moyens de paiement mexicains de test'):l('Enable SPEI and OXXO in the demo','Activer SPEI et OXXO en démo'));
+    railSwitch.type='button';railSwitch.onclick=async()=>{railSwitch.disabled=true;try{await post('cashier',{action:'local-rails',enabled:!localRails});v.replaceChildren();await settings(v);}catch(err){v.append(el('p',t(err.message)));railSwitch.disabled=false;}};v.append(railSwitch);
     for (const p of policies) {
       const f = form(section(v, names(p.market) + ' · v' + p.version));
       const docs = flags(f, ['age', 'photo', 'address', 'face', 'liveness'], p.documents);
