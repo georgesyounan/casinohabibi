@@ -27,7 +27,9 @@ export function clubMarkup(data, french, base, selected='', board=null, status='
     league:l('View standings','Voir le classement')
   };
   const nav=sections.filter(key=>key!=='daily'||data.enabled||data.claimed||selected==='daily').map(key=>`<a class="club-tile club-${key}" id="club-link-${key}" data-club-card="${key}" aria-controls="club-panel" aria-expanded="${selected===key}" href="${esc(base)}/?lang=${locale}&amp;view=promotions&amp;club=${key}#player-club"><i class="ui-icon ico-${icons[key]}" aria-hidden="true"></i><span><strong>${labels[key]}</strong><small>${esc(caption[key])}</small></span><i class="ui-icon ico-next" aria-hidden="true"></i></a>`).join('');
-  const cta=(name,label,id)=>action(name,member?label:l('Sign in','Se connecter'),id,member && data.blocked);
+  const signInHref=esc(base)+'/?lang='+locale+'&amp;view=promotions&amp;club='+selected+'&amp;access=signin#player-club';
+  const cta=(name,label,id)=>member ? action(name,label,id,data.blocked) :
+    `<a class="club-signin" data-club-action="${name}"${id?` data-program="${Number(id)}"`:''} href="${signInHref}">${l('Sign in','Se connecter')}</a>`;
   const unblock = data.blocked ? `<p>${l('Your club activities are paused.','Les activités du club sont en pause sur votre compte.')}</p>` : '';
   let detail='';
   if(selected==='daily'){
@@ -76,9 +78,14 @@ export function clubMarkup(data, french, base, selected='', board=null, status='
   return `<div class="club-heading"><h2>Club Habibi</h2><a class="hub-link" href="${esc(base)}/?lang=${locale}&amp;view=invite">${l('Invite a friend','Inviter un ami')} <i class="ui-icon ico-next" aria-hidden="true"></i></a></div><nav class="club-tiles" aria-label="${l('Player club','Club des joueurs')}">${nav}</nav><div id="club-panel"${selected?` role="region" aria-labelledby="club-link-${selected}"`:' hidden'}>${detail}</div><p class="club-status" role="status">${esc(status)}</p><div class="club-trends"><h3>${trending?l('Trending · 24h','Tendances · 24 h'):l('Studio picks','Sélection du studio')}</h3>${trends}</div>`;
 }
 
-export function createClubHome({root,api,base,french,account,signIn,openClub,openGame,updateAccount,translate}) {
-  let snapshot=null,board=null,selection='',locationKey='',owner,version=0,reading=false,busy=false,status='',timer;
+export function createClubHome({root,api,base,french,account,accountPending=()=>false,signIn,openClub,openGame,updateAccount,translate}) {
+  const boot=document.getElementById('club-public-model');
+  let snapshot=boot ? JSON.parse(boot.textContent) : null;
+  const params=new URLSearchParams(location.search);
+  let board=null,selection=clubSection(params.get('view'),params.get('club')),locationKey='',owner=snapshot?0:undefined;
+  let version=0,reading=false,busy=false,status='',timer;
   let signature='',boardRequest=0,modelLocale,freshUntil=0;
+  if(snapshot)root.dataset.personal='false';
   const auth=()=>account()?.id||0;
   const msg=(en,fr)=>french()?fr:en;
   function paint() {
@@ -146,9 +153,13 @@ export function createClubHome({root,api,base,french,account,signIn,openClub,ope
       if(selection==='league')void readBoard();return;
     }
     if(!button || busy || button.disabled)return;
-    if(!snapshot){void sync(true);return;}
     const type=button.dataset.clubAction, id=Number(button.dataset.program), user=auth();
-    if(!user){signIn(selection);return;}
+    if(!user){
+      if((!snapshot||accountPending()) && button.matches('a'))return;
+      e.preventDefault();signIn(selection);return;
+    }
+    e.preventDefault();
+    if(!snapshot || owner!==user){void sync(true);return;}
     if(['continue','profile','allQuests','allRewards'].includes(type)){
       openClub(type==='profile'?'profile':type==='allRewards'?'rewards':'quests',id);return;
     }

@@ -1076,7 +1076,14 @@ async function refreshOpenBreak() {
 async function resumePlayerEntry(access) {
   const clean=new URL(location.href);
   clean.searchParams.delete('access');history.replaceState(history.state,'',clean);
-  if (['signup','signin'].includes(access)) openPanel(player?'account':access);
+  if (['signup','signin'].includes(access)) {
+    const tab=clean.searchParams.get('club');
+    if(clean.searchParams.get('view')==='promotions' && ['daily','quests','rewards','league'].includes(tab)){
+      if(player){clubHome.select(tab);return;}
+      clearDemoSelection();afterSignIn='clubHome';requestedClubTab=tab;
+    }
+    openPanel(player?'account':access);
+  }
   else {
     try {
       const saved=JSON.parse(sessionStorage.getItem('habibi-auth-destination') || '{}');
@@ -2040,7 +2047,7 @@ const comingSoonUi = createComingSoonUi({
 
 const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
 const clubHome = createClubHome({
-  root:$('#player-club'),api,base:appBasePath,french:()=>Boolean(language),account:()=>player,translate:t,openClub,openGame:startDemo,
+  root:$('#player-club'),api,base:appBasePath,french:()=>Boolean(language),account:()=>player,accountPending:()=>accountPending,translate:t,openClub,openGame:startDemo,
   signIn(section){clearDemoSelection();requestedClubTab=section;afterSignIn='clubHome';openPanel('signin');},
   updateAccount(fresh){player=fresh;updateAccount();}
 });

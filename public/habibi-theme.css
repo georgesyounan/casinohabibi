@@ -306,13 +306,13 @@ body.player-home[data-lobby-brand="habibi"] .spotlight-nav .rotation-toggle { wi
 #club-panel h3 { color: white; margin: 0 0 6px; font-size: 1.04rem; }
 #club-panel p,#club-panel small { color: #b7c9e2; margin: 3px 0; line-height: 1.45; }
 #club-panel small { font-size: .77rem; }
-#club-panel button { font-size: .8rem; min-height: 40px; background: #a6deff; color: #0a213b; padding: 8px 13px; border: 1px solid transparent; border-radius: 8px; font-weight: 750; }
+#club-panel :is(button,.club-signin) { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; font-size: .8rem; min-height: 40px; background: #a6deff; color: #0a213b; padding: 8px 13px; border: 1px solid transparent; border-radius: 8px; font-weight: 750; }
 #club-panel button:disabled { color: #b8c9d9; background: #2b405a; }
 #club-panel > button { background: transparent; color: #b8e4ff; border-color: #507394; }
 .club-rows,.club-ranks { list-style: none; margin: 8px 0; padding: 0; }
 .club-rows li,.club-ranks li { padding: 10px 0; border-top: 1px solid #314764; }
 .club-rows li > div { min-width: 0; overflow-wrap: anywhere; }
-.club-rows button,.club-daily-detail button { flex: 0 0 auto; }
+.club-rows :is(button,.club-signin),.club-daily-detail :is(button,.club-signin) { flex: 0 0 auto; }
 .club-progress,.club-level { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: #b4dcff; }
 #club-panel progress { accent-color: #84dbff; height: 8px; width: min(115px,100%); }
 .club-progress { margin-top: 5px; }
@@ -337,7 +337,7 @@ body.player-home[data-lobby-brand="habibi"] .spotlight-nav .rotation-toggle { wi
 @media (max-width: 500px) {
   #club-panel:not([hidden]) { padding: 12px; }
   .club-rows li { align-items: flex-start; }
-  .club-rows li button { max-width: 105px; }
+  .club-rows li :is(button,.club-signin) { max-width: 105px; }
   .club-daily-detail { flex-wrap: wrap; }
   .club-tile small { font-size: .72rem; }
 }
