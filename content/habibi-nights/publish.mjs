@@ -9,8 +9,8 @@ import { createWebsiteContent } from '../../lib/website-content.js';
 import { publishStudioBrand } from './brand.mjs';
 
 const [operation, database] = process.argv.slice(2);
-if (operation !== 'publish' || !database || !isAbsolute(database) || !existsSync(database)) {
-  throw new Error('Usage: node content/habibi-nights/publish.mjs publish /absolute/path/to/existing.sqlite');
+if (!['publish','publish-brand'].includes(operation) || !database || !isAbsolute(database) || !existsSync(database)) {
+  throw new Error('Usage: node content/habibi-nights/publish.mjs <publish|publish-brand> /absolute/path/to/existing.sqlite');
 }
 const host = 'georgesyounan.com';
 const appBasePath = '/casinohabibi';
@@ -75,6 +75,30 @@ function requirePreviousEdition(slug, stored, expected) {
   assert.equal(hash, previousEditions[slug], 'Existing editorial content differs: ' + slug);
 }
 
+function publicationActor() {
+  // Attribute this server-side publication independently from human staff. This identity has no membership or login credential.
+  const email = 'catalogue-demo@casinohabibi.invalid';
+  const marker = '!offline-editorial-import';
+  const account = db.prepare('SELECT id,password_hash FROM staff_accounts WHERE email=?').get(email);
+  const actor =
+    account?.id ??
+    Number(
+      db
+        .prepare('INSERT INTO staff_accounts(email,password_hash,created_at) VALUES(?,?,?)')
+        .run(email, marker, Date.now()).lastInsertRowid
+    );
+  assert.ok(!account || account.password_hash === marker, 'This audit identity is already in use.');
+  assert.ok(
+    !db.prepare('SELECT 1 FROM tenant_staff_memberships WHERE staff_id=?').get(actor),
+    'The editorial system identity must have no roles.'
+  );
+  const fail = (_status, message) => {
+    throw new Error(message);
+  };
+  const recordAudit = createStaffAudit(db, { fail, transaction }).record;
+  return { actor, fail, recordAudit };
+}
+
 function publish() {
   const brand = db
     .prepare(
@@ -88,6 +112,10 @@ function publish() {
       "SELECT version,config FROM tenant_config_versions WHERE tenant_id=? AND status='published' ORDER BY version DESC LIMIT 1"
     )
     .get(tenant);
+  const { actor, fail, recordAudit } = publicationActor();
+  if (operation === 'publish-brand') {
+    return { host, auditIds: publishStudioBrand(db, tenant, published, actor, recordAudit) };
+  }
   const config = JSON.parse(published.config);
   assert.ok(
     release.locales.every((locale) => config.enabledLocales.includes(locale)) &&
@@ -134,26 +162,6 @@ function publish() {
     auditIds
   };
 
-  // Attribute this server-side publication independently from human staff. This identity has no membership or login credential.
-  const email = 'catalogue-demo@casinohabibi.invalid';
-  const marker = '!offline-editorial-import';
-  const account = db.prepare('SELECT id,password_hash FROM staff_accounts WHERE email=?').get(email);
-  const actor =
-    account?.id ??
-    Number(
-      db
-        .prepare('INSERT INTO staff_accounts(email,password_hash,created_at) VALUES(?,?,?)')
-        .run(email, marker, Date.now()).lastInsertRowid
-    );
-  assert.ok(!account || account.password_hash === marker, 'This audit identity is already in use.');
-  assert.ok(
-    !db.prepare('SELECT 1 FROM tenant_staff_memberships WHERE staff_id=?').get(actor),
-    'The editorial system identity must have no roles.'
-  );
-  const fail = (_status, message) => {
-    throw new Error(message);
-  };
-  const recordAudit = createStaffAudit(db, { fail, transaction }).record;
   auditIds.push(...publishStudioBrand(db, tenant, published, actor, recordAudit));
   if (!changes.length && !guideChanged) return receipt;
   const common = { fail, transaction, recordAudit, validArtwork: (value) => covers.has(value), appBasePath };

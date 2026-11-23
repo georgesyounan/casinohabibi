@@ -638,7 +638,7 @@ function applyTenant(config) {
     const lightness = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
     document.body.style.setProperty('--button-ink', lightness > .179 ? '#080d10' : '#ffffff');
   }
-  document.querySelector('meta[name="theme-color"]').content = habibi && !isAdminPage ? '#101018' : config.accentColor;
+  document.querySelector('meta[name="theme-color"]').content = habibi ? '#0b162b' : config.accentColor;
   for (const brand of document.querySelectorAll('.brand')) {
     const mark = config.brandLogo ? element('img') : element('span', '✧');
     if (config.brandLogo) {
@@ -1058,10 +1058,56 @@ async function refreshOpenBreak() {
   }
 }
 
+function decorateAuthPanel(panel, title, signup) {
+  const fr = Boolean(language);
+  title.textContent = signup ? (fr ? 'Créer un compte' : 'Create an account') : (fr ? 'Se connecter à son compte' : 'Log in to your account');
+  const aside = element('aside', '', 'auth-portrait');
+  aside.setAttribute('aria-hidden','true');
+  const identity = element('div','','auth-wordmark');
+  const brand = document.querySelector('header .brand');
+  if (brand) for (const node of brand.childNodes) identity.append(node.cloneNode(true));
+  aside.append(identity);
+  const tabs = element('div','','auth-tabs');
+  tabs.setAttribute('role','tablist');
+  tabs.setAttribute('aria-label', fr ? 'Accès joueur' : 'Player access');
+  const formPanel = element('div','','auth-form-panel');
+  formPanel.id='auth-form-panel';
+  formPanel.setAttribute('role','tabpanel');
+  const switchTo = next => {
+    const email = panel.querySelector('input[name="email"]')?.value || '';
+    openPanel(next ? 'signup':'signin');
+    const input = panel.querySelector('input[name="email"]');
+    if (input) input.value=email;
+    panel.querySelector('[role="tab"][aria-selected="true"]')?.focus({preventScroll:true});
+  };
+  for (const join of [false,true]) {
+    const label = join ? (fr ? 'Inscription' : 'Register') : (fr ? 'Connexion' : 'Login');
+    const tab = action(label, () => { if (join!==signup) switchTo(join); },'auth-tab');
+    tab.id='auth-tab-'+(join?'signup':'signin');
+    tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(join===signup));
+    tab.setAttribute('aria-controls',formPanel.id);tab.tabIndex=join===signup?0:-1;
+    if (join===signup) formPanel.setAttribute('aria-labelledby',tab.id);
+    tab.addEventListener('keydown',event=>{
+      if (!['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) return;
+      event.preventDefault();
+      const target=event.key==='Home'?false:event.key==='End'?true:!join;
+      if (target!==join) switchTo(target);
+    });
+    tabs.append(tab);
+  }
+  formPanel.append(...Array.from(panel.childNodes));
+  const body=element('div','','auth-body');
+  body.append(tabs,formPanel);
+  panel.append(aside,body);
+}
+
 function renderDialog() {
   breakControls = undefined;
   const panel = $('#panel');
   panel.replaceChildren();
+  const brandedAuth = document.body.dataset.lobbyBrand === 'habibi' && ['signin','signup'].includes(screen);
+  $('#dialog').classList.toggle('habibi-auth', brandedAuth);
+  $('#dialog').dataset.screen = screen;
   $('#status').textContent = dialogError ? t(dialogError) : '';
   const title = element('h2', screen === 'play' ? (selectedPreview ? (language ? selectedPreview.titleFr : selectedPreview.titleEn) : gameName(selectedGame)) : screen === 'support' ? t('supportTitle') : screen === 'passwordReset' ? t('passwordResetTitle') : screen === 'emailVerification' ? t('emailVerification') : screen === 'emailChange' ? t('emailChangeTitle') : t(screen));
   title.id = 'dialog-title';
@@ -1114,7 +1160,8 @@ function renderDialog() {
       afterSignIn = undefined;
       requestedClubTab = undefined;
       if (target === 'support') openSupportCenter(); else openPanel(target);
-    }), action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
+    }));
+    if (!brandedAuth) panel.append(action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
     if (!signup) {
       panel.append(action(t('passwordReset'), () => openPanel('passwordReset'), 'ghost'));
       panel.append(action(t('emailVerificationSend'), () => {
@@ -1122,6 +1169,7 @@ function renderDialog() {
         openPanel('emailVerification');
       }, 'ghost'));
     }
+    if (brandedAuth) decorateAuthPanel(panel, title, signup);
     return;
   }
   if (screen === 'emailVerification') {

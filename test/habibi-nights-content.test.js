@@ -93,6 +93,7 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
   const first = JSON.parse(run());
   const brand = JSON.parse(liveConfig().config);
   assert.equal(brand.brandName, 'Casino Habibi');
+  assert.equal(brand.accentColor, '#91ccff');
   assert.equal(brand.heroTitleFr, 'Habibi Studio');
   assert.match(brand.brandLogo, /^data:image\/png;base64,/);
   assert.match(brand.heroIntroFr, /crédits fictifs/);
@@ -137,5 +138,22 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
   assert.throws(run, /Existing editorial content differs/);
   assert.deepEqual(ids(), originalIds);
   assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 10]);
+  // A brand-only release can run alongside independent catalogue and draft edits.
+  const publishBrand = () => JSON.parse(execFileSync(process.execPath,
+    ['content/habibi-nights/publish.mjs','publish-brand',dbPath], {encoding:'utf8'}));
+  const privateDraft = JSON.parse(draft.config);
+  privateDraft.accentColor = '#aa7799';
+  const publishedMint = {...brand, accentColor:'#83ffd4', heroIntroEn:'A customized studio headline.'};
+  for (const [record,value] of [[liveConfig(),publishedMint],[draft,privateDraft]]) {
+    db.prepare('UPDATE tenant_config_versions SET config=? WHERE tenant_id=? AND version=?')
+      .run(JSON.stringify(value),'sandbox',record.version);
+  }
+  const beforeBrand = counts();
+  assert.equal(publishBrand().auditIds.length,2);
+  assert.deepEqual(JSON.parse(liveConfig().config),{...publishedMint,accentColor:'#91ccff'});
+  const keptDraft = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id='sandbox' AND status='draft'").get();
+  assert.deepEqual(JSON.parse(keptDraft.config),privateDraft);
+  assert.deepEqual(publishBrand().auditIds,[]);
+  assert.deepEqual(Object.values(counts()),[beforeBrand.titles,beforeBrand.guides,beforeBrand.audits+2]);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });

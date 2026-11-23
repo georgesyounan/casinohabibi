@@ -397,7 +397,7 @@ export function createLobbySections({
   const href = (params = {}, hash = '') =>
     appPath('/?') + new URLSearchParams({ lang: l('en', 'fr'), ...params }) + hash;
   let period = 7;
-  const sports = createSportsCentre(panel, french);
+  const sports = createSportsCentre(panel, french, account);
   function closeMenu() {
     lobby.removeAttribute('data-menu-open');
     menu.setAttribute('aria-expanded', 'false');
