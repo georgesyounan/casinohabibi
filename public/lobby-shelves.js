@@ -1,5 +1,6 @@
 import { uiKit } from './discovery.js';
-import { lobbyView, viewTitle, matches, sportsMarkup } from './lobby-navigation.js';
+import { lobbyView, viewTitle } from './lobby-navigation.js';
+import { createSportsCentre } from './sports-centre.js';
 import { shareLink } from './referral-views.js';
 
 export const shelfCopy = {
@@ -395,11 +396,8 @@ export function createLobbySections({
     document.body.classList.contains('player-home') && document.body.dataset.lobbyBrand === 'habibi';
   const href = (params = {}, hash = '') =>
     appPath('/?') + new URLSearchParams({ lang: l('en', 'fr'), ...params }) + hash;
-  let sport = 'football',
-    period = 7,
-    ticketSaved = false;
-  let renderedSports = '';
-  const picks = new Map();
+  let period = 7;
+  const sports = createSportsCentre(panel, french);
   function closeMenu() {
     lobby.removeAttribute('data-menu-open');
     menu.setAttribute('aria-expanded', 'false');
@@ -445,30 +443,6 @@ export function createLobbySections({
     }
     return nav;
   }
-  panel.addEventListener('click', event => {
-    if (view !== 'sports') return;
-    const control = event.target.closest('button[data-hub-control]');
-    if (!control || !panel.contains(control)) return;
-    const id = control.dataset.hubControl;
-    if (id === 'football' || id === 'basketball') {
-      sport = id;
-    } else if (id === 'confirm') {
-      ticketSaved = picks.size > 0;
-    } else if (id.startsWith('remove-')) {
-      picks.delete(id.slice(7));
-      ticketSaved = false;
-    } else {
-      const [match, index] = id.split('-');
-      const fixture = matches.find(item => item.id === match);
-      const selection = Number(index);
-      if (!fixture || !Number.isInteger(selection) || fixture.odds[selection] === undefined) return;
-      if (picks.get(match) === selection) picks.delete(match);
-      else picks.set(match, selection);
-      ticketSaved = false;
-    }
-    render();
-    if (id === 'confirm') panel.querySelector('[role="status"]')?.focus({ preventScroll: true });
-  });
   function directory() {
     const counts = new Map();
     const add = (key, n = 1) => counts.set(key, (counts.get(key) || 0) + n);
@@ -575,6 +549,7 @@ export function createLobbySections({
     // These nodes carry live API updates and event handlers even while another section is open.
     if (view !== 'promotions' && panel.contains(offers)) offersHome.after(offers);
     if (view !== 'help' && panel.contains(help)) guideHome.after(help);
+    if (!active || view !== 'sports') sports.leave();
     if (!enabled()) return;
     for (const a of document.querySelectorAll('[data-home-view]')) {
       const key = a.dataset.homeView;
@@ -584,7 +559,6 @@ export function createLobbySections({
       else a.removeAttribute('aria-current');
     }
     document.querySelector('[data-house-games]').href = href({}, '#home-originals');
-    if (!active || view !== 'sports') renderedSports = '';
     if (!active) return;
     for (const filter of document.querySelectorAll('#filters [data-filter]')) filter.setAttribute('aria-pressed', 'false');
     const focused = panel.contains(document.activeElement)
@@ -599,12 +573,11 @@ export function createLobbySections({
     }
     title.textContent = viewTitle(view, french());
     if (view === 'sports') {
-      const signature = JSON.stringify([french(), sport, [...picks], ticketSaved]);
-      if (signature === renderedSports) return;
-      renderedSports = signature;
+      if (!panel.querySelector('.sports-centre')) while (title.nextSibling) title.nextSibling.remove();
+      sports.render();
+      return;
     }
     while (title.nextSibling) title.nextSibling.remove();
-    if (view === 'sports') panel.insertAdjacentHTML('beforeend', sportsMarkup(french(), sport, picks, ticketSaved));
     const waiting = (view === 'new' || view === 'studios' || view === 'activity') && !ready(view);
     if (waiting) {
       panel.setAttribute('aria-busy', 'true');

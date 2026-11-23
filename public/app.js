@@ -1840,14 +1840,16 @@ function renderCatalog() {
   const hasListings = demoGames.length + visibleGames.length + editorial.count > 0;
   const hasCatalogue = Boolean(games.length || providerGames.length || editorial.available);
   $('#catalog-controls').hidden = !hasCatalogue && !selectedCollection;
-  $('#provider-sort-control').hidden = !providerGames.length || Boolean(selectedCollection);
+  const summary = $('#catalog-summary');
+  const seedProviders = providersStatus === 'loading' && summary.dataset.locale === (language ? 'fr-CA' : 'en-CA') ? Number(summary.dataset.providers) : 0;
+  $('#provider-sort-control').hidden = !(providerGames.length || seedProviders) || Boolean(selectedCollection);
   const options = $('#home-options');
   options.hidden = $('#catalog-collection-control').hidden && $('#provider-sort-control').hidden;
   options.querySelector('summary').toggleAttribute('data-applied', Boolean(selectedCollection || (!$('#provider-sort-control').hidden && providerSort !== 'recent')));
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
   const playableCount = demoGames.length + editorial.playable;
-  const previewCount = visibleGames.length + editorial.count - editorial.playable;
+  const previewCount = visibleGames.length + (!filtering ? seedProviders : 0) + editorial.count - editorial.playable;
   const counts = [];
   if (playableCount) counts.push(t(playableCount === 1 ? 'demoCountOne' : 'demoCountMany').replace('{n}', countFormat.format(playableCount)));
   if (previewCount) counts.push(t(previewCount === 1 ? 'previewCountOne' : 'previewCountMany').replace('{n}', countFormat.format(previewCount)));
@@ -3290,7 +3292,6 @@ $('#mfa-disable').addEventListener('click', async () => {
 async function refreshEdition() {
   const request = ++editionRequest;
   editionStatus = 'loading';
-  if (initialBrand && publicComingSoon) document.body.setAttribute('data-edition-pending', '');
   try {
     await comingSoonUi.loadLobby();
     if (request === editionRequest) editionStatus = 'ready';
@@ -3298,7 +3299,6 @@ async function refreshEdition() {
     if (request === editionRequest) editionStatus = 'error';
   } finally {
     if (request === editionRequest) {
-      document.body.removeAttribute('data-edition-pending');
       renderCatalog();
     }
   }
