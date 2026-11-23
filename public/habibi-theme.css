@@ -642,14 +642,22 @@ body.player-home[data-lobby-brand="habibi"] #default-lobby-hero :is(.hero-browse
   order: 1; white-space: normal; margin: 0; color: var(--muted);
   font-size: .7rem; line-height: 1.25; letter-spacing: .01em; text-transform: none;
 }
-#default-lobby-hero .hero-content .hero-mode::before { display: none; }
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content .hero-mode::before { display: none; }
 #default-lobby-hero .campaign-controls { grid-area: controls; position: static; gap: 5px; margin: 0; padding: 0; }
 #default-lobby-hero .campaign-all { display: inline-flex; align-items: center; min-height: 36px; margin-left: 9px; color: #ecf0ff; font-size: .82rem; font-weight: 700; text-underline-offset: 3px; }
-@container lobby-lead (max-width: 540px) {
+@container lobby-lead (max-width: 650px) {
   body.player-home[data-lobby-brand="habibi"] #default-lobby-hero {
-    grid-template-columns: minmax(0, 1fr); grid-template-areas: "art" "actions" "controls"; row-gap: 3px;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "art art art art" "actions actions actions actions" "pause dots mode promos";
+    gap: 3px 4px;
   }
-  #default-lobby-hero .campaign-all { margin-left: auto; }
+  body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content:not([hidden]),
+  #default-lobby-hero .campaign-controls { display: contents; }
+  #default-lobby-hero :is(.hero-entry-actions, .hero-content > .hero-browse) { grid-area: actions; justify-self: start; }
+  #default-lobby-hero .hero-mode { grid-area: mode; text-align: center; }
+  #default-lobby-hero .rotation-toggle { grid-area: pause; }
+  #default-lobby-hero .campaign-dots { grid-area: dots; }
+  #default-lobby-hero .campaign-all { grid-area: promos; justify-self: end; margin-left: 0; }
 }
 #default-lobby-hero .campaign-dot[aria-current="true"]::before { background: var(--habibi-link); }
 body.player-home #lobby[data-club-promotions] .lobby-content > #habibi-promo-gallery:not([hidden]) { display: block; margin: 0 0 26px; }
