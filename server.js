@@ -37,8 +37,14 @@ import { createMembership } from './lib/club-membership.js';
 import { createPlayerClub } from './lib/player-club.js';
 import { createLobbyEvents } from './lib/lobby-events.js';
 import { createGiftRewards } from './lib/gift-rewards.js';
+import {createBonusOffers} from './lib/bonus-offers.js';
 import { createMonthlyTelegram } from './lib/monthly-telegram.js';
 import { createRewards } from './lib/rewards.js';
+import {createDemoNetwork} from './lib/demo-network.js';
+import {createPlayerCashier} from './lib/player-cashier.js';
+import {createAffiliateStatements} from './lib/affiliate-statements.js';
+import {createPlacementMetrics} from './lib/placement-metrics.js';
+import {createSubscriptions} from './lib/subscriptions.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
 import { createCommunity } from './lib/community.js';
@@ -329,6 +335,8 @@ const financePilot = transaction(() => createFinancePilot(db, { fail, audit: sta
 const financeOperations=transaction(()=>createFinanceOperations(db,{fail,audit:staffAudit.record,cashier:financePilot.cashier}));
 const reviewDesk=transaction(()=>createReviewDesk(db,{fail,audit:staffAudit.record,createWallet:financePilot.cashier.open}));
 const cashierDesk=transaction(()=>createCashierDesk(db,{fail,audit:staffAudit.record,review:reviewDesk,ledger:financePilot.cashier}));
+const playerCashier=transaction(()=>createPlayerCashier(db,{fail,review:reviewDesk,cashier:cashierDesk}));
+const demoNetwork=transaction(()=>createDemoNetwork(db,{fail,cashier:cashierDesk,playerCashier}));
 const operatorProducts = transaction(() => createOperatorProducts(db, { fail, audit: staffAudit.record, eligible:(tenant,id,market,channel)=>distribution.eligible(tenant,{market:market??publishedTenantConfig(tenant).config.displayMarket,channel:channel||'desktop'}).some(game=>game.id===id) }));
 const operatorServices = transaction(() => createOperatorServices(db, { fail, audit: staffAudit.record }));
 const providerCatalog=transaction(()=>createProviderCatalog(db,{fail,audit:staffAudit.record,encryptKey:encryptProviderKey,distribution}));
@@ -355,12 +363,13 @@ const monthlyTelegram=transaction(()=>createMonthlyTelegram(db,{fail,transaction
   unseal:(tenant,value)=>decryptStaffSecret(value,'monthly-telegram:'+tenant)}));
 const playerNotices=transaction(()=>createPlayerNotices(db,{fail}));
 const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,telegram:monthlyTelegram,playerNotices,fail}));
+const bonusOffers=transaction(()=>createBonusOffers(db,{fail,notices:playerNotices}));
 const membership=transaction(()=>createMembership(db,{fail,accountBreaks}));
 const partnerSites=transaction(()=>createPartnerSites(db,{fail}));
 const roundProof=transaction(()=>createRoundProof(db,{fail}));
 const sportsBook=transaction(()=>createSportsBook(db,{fail,balance:(id,tenant)=>balance(id,tenant),dailyWagered,accountBreaks,playerNotices}));
 function clubModel(tenant,player,locale,days=1) {
-  return {...playerClub.home(tenant,player,locale,Date.now(),days),membership:{...membership.view(tenant,player),
+  return {...playerClub.home(tenant,player,locale,Date.now(),days),membership:{...membership.view(tenant,player),networkEnabled:Boolean(demoNetwork.rules(tenant).enabled),cashier:player?playerCashier.describe(tenant,player):null,sharing:player?subscriptions.choices(tenant,player):null,promotions:bonusOffers.view(tenant,player),
     telegram:player?monthlyTelegram.connection(tenant,player):null}};
 }
 function seedClubBrand(id) {
@@ -425,8 +434,16 @@ function signedPlayer(req,tenantId){
     WHERE s.token=? AND s.tenant_id=? AND s.expires>?`).get(hash(cookie),tenantId,Date.now())?.player;
 }
 let lastCampaignWake=0;
+const affiliateStatements=createAffiliateStatements(db,{fail,notices:playerNotices});
+const placementMetrics=createPlacementMetrics(db,{fail});
+const subscriptions=createSubscriptions(db,{fail,communications,key:encryptionKey});
 const dispatchCampaigns=()=>communications.dispatch().catch(()=>console.warn(JSON.stringify({event:'campaign_dispatch_failed'})));
-if(process.env.DISABLE_CAMPAIGN_WORKER!=='1') setInterval(dispatchCampaigns,30_000).unref();
+if(process.env.DISABLE_CAMPAIGN_WORKER!=='1') setInterval(()=>{
+  void dispatchCampaigns();
+  for(const sub of db.prepare('SELECT tenant,id FROM outbound_subscribers').all()){
+    try{transaction(()=>subscriptions.run(sub.tenant,sub.id));}catch{console.warn(JSON.stringify({event:'subscription_dispatch_failed'}));}
+  }
+},30_000).unref();
 const adminEnabled = Boolean(encryptionKey);
 const bootstrapEmail = bootstrapEmailValue;
 const bootstrapPassword = bootstrapPasswordValue;
@@ -904,6 +921,19 @@ async function api(req, res, path, tenantId, requestId) {
   if (req.method !== 'GET' && !savedResource && mediaType !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   const params = new URL(req.url,'http://localhost').searchParams;
+  const shelfVisit=req.headers.cookie?.match(/(?:^|;\s*)habibi_shelf=([a-f0-9]{32})(?:;|$)/)?.[1];
+  if(path==='/api/v1/lobby'&&req.method==='GET'&&!shelfVisit)res.appendHeader('Set-Cookie','habibi_shelf='+randomBytes(16).toString('hex')+'; Path='+cookiePath+'; HttpOnly; SameSite=Lax; Max-Age=3600'+secureCookie);
+  if(path==='/api/shelf-events'&&req.method==='POST'){
+    const i=await body(req);if(!shelfVisit)fail(409,'opStale');
+    const config=publishedTenantConfig(tenantId).config;
+    const context={market:config.displayMarket,channel:i.channel||'desktop',lang:i.lang||'en',vip:Boolean(player&&clubEnabled(tenantId)&&membership.balance(tenantId,player).vip)};
+    return transaction(()=>{
+      const {categories}=lobbyShelves.publicView(tenantId,context);
+      if(i.action==='impression')return placementMetrics.expose(tenantId,i,shelfVisit,categories);
+      if(i.action==='launch'){if(!player||signedPlayer(req,tenantId)!==player)fail(401,'signin');playerNotices.block(tenantId,player,Date.now());return placementMetrics.launch(tenantId,i,shelfVisit,player,categories);}
+      fail(400,'invalid');
+    });
+  }
   if (route === 'GET /api/v1/lobby' || route === 'GET /api/admin/shelves/at' || route === 'GET /api/partner/v1/lobby') {
     if (path === '/api/partner/v1/lobby') partnerLobby.authorize(tenantId,req.headers.authorization,params.get('environment'));
     const protectedView = path.startsWith('/api/admin/');
@@ -919,6 +949,7 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (path === '/api/admin/shelves' || path.startsWith('/api/admin/shelves/')) {
     staffContext(req,tenantId,catalogueRoles);
+    if(path==='/api/admin/shelves/metrics'&&req.method==='GET')return placementMetrics.report(tenantId,params.get('slot')||null,params.has('game')?Number(params.get('game')):null);
     if(path==='/api/admin/shelves/distribution' && req.method==='GET')return distribution.admin(tenantId);
     if(path==='/api/admin/shelves/distribution' && req.method==='POST'){
       const input=await body(req);return auditedChange(catalogueRoles,input,staff=>distribution.change(tenantId,staff,requestId,input),'publishCatalogue');
@@ -1025,6 +1056,46 @@ async function api(req, res, path, tenantId, requestId) {
       staffAudit.record(tenantId,staff.id,'sports_'+input.action,'sports-'+(input.id||'limits'),requestId,{fields:[input.action]});
       return {version};
     });}
+  }
+  if(path==='/api/account/demo-network'){
+    if(!player)fail(401,'signin');
+    if(req.method==='GET')return {...demoNetwork.view(tenantId,player),tenant:tenantId,owner:player};
+    if(req.method==='POST'){const i=await body(req);return transaction(()=>{req.assertPlayerSession();
+      if(i.owner!==player)fail(409,'giftAccountChanged');
+      if(i.action==='challenge')return demoNetwork.challenge(tenantId,player,i);
+      if(i.action==='link')return demoNetwork.link(tenantId,player,i);
+      if(i.action==='instruction')return demoNetwork.instruction(tenantId,player,i);
+      if(i.action==='payout')return demoNetwork.startPayout(tenantId,player,i);
+      fail(400,'invalid');
+    });}
+  }
+  if(path==='/api/admin/operator/demo-network'){
+    staffContext(req,tenantId,['operator_admin']);if(req.method==='GET')return demoNetwork.admin(tenantId);
+    if(req.method==='POST'){const i=await body(req);return auditedChange(['operator_admin'],i,actor=>{
+      const result=demoNetwork.operate(tenantId,actor,requestId,i);return {...result,auditId:staffAudit.record(tenantId,actor.id,'demo_network_'+i.action,i.tx||i.id||'network',requestId)};});}
+  }
+  if(path==='/api/growth/statements'){
+    if(!player)fail(401,'signin');const p=growth.owner(tenantId,player);if(!p)fail(403,'staffForbidden');
+    if(req.method==='GET')return affiliateStatements.playerState(tenantId,p.id);
+    if(req.method==='POST'){const i=await body(req);return transaction(()=>{req.assertPlayerSession();return affiliateStatements.issueByRef(tenantId,player,i.entry);});}
+  }
+  if(path==='/api/admin/growth/statements'){
+    staffContext(req,tenantId,['operator_admin']);
+    if(req.method==='GET')return affiliateStatements.state(tenantId,Number(params.get('partner')));
+    if(req.method==='POST'){const i=await body(req);return auditedChange(['operator_admin'],i,actor=>{
+      const result=affiliateStatements.staff(tenantId,i);return {result,auditId:staffAudit.record(tenantId,actor.id,'affiliate_'+i.action,'partner-'+i.partner,requestId)};});}
+  }
+  if(path==='/api/admin/operator/subscriptions'){
+    staffContext(req,tenantId,['operator_admin']);
+    if(req.method==='GET')return {items:subscriptions.list(tenantId)};
+    if(req.method==='POST'){const i=await body(req);return auditedChange(['operator_admin'],i,staff=>{
+      let id=i.id;
+      if(i.action==='configure')id=subscriptions.subscribe(tenantId,i);
+      else if(i.action==='snapshot')subscriptions.snapshot(tenantId,id,i.campaign);
+      else if(i.action==='deliver')subscriptions.run(tenantId,id,i.limit||25);
+      else if(i.action==='replay')subscriptions.replay(tenantId,id,i.event);
+      else fail(400,'invalid');
+      return {id,auditId:staffAudit.record(tenantId,staff.id,'subscription_'+i.action,id,requestId)};});}
   }
   if (path.startsWith('/api/admin/operator/')) {
     const resource = path.slice('/api/admin/operator/'.length);
@@ -1202,7 +1273,7 @@ async function api(req, res, path, tenantId, requestId) {
   if (route==='POST /api/discovery/telegram/webhook') {
     const version=monthlyTelegram.authenticateHook(tenantId,req.headers['x-telegram-bot-api-secret-token']);
     const update=await body(req,64*1024);
-    return transaction(()=>monthlyTelegram.handleMessage(tenantId,version,update));
+    return transaction(()=>monthlyTelegram.handleMessage(tenantId,version,update,Date.now(),{base:playerLinkBase(req,tenantId),cashier:playerCashier,subscriptions}));
   }
   if (route==='POST /api/discovery/telegram/start' || route==='POST /api/discovery/telegram/confirm') {
     if(!player)fail(401,'signin');
@@ -1273,7 +1344,7 @@ async function api(req, res, path, tenantId, requestId) {
   }
   if (path==='/api/discovery/membership' && req.method==='GET') {
     if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
-    return {...membership.view(tenantId,player),owner:player||null,telegram:player?monthlyTelegram.connection(tenantId,player):null};
+    return {...membership.view(tenantId,player),networkEnabled:Boolean(demoNetwork.rules(tenantId).enabled),cashier:player?playerCashier.describe(tenantId,player):null,sharing:player?subscriptions.choices(tenantId,player):null,promotions:bonusOffers.view(tenantId,player),owner:player||null,telegram:player?monthlyTelegram.connection(tenantId,player):null};
   }
   if (route==='POST /api/discovery/membership') {
     if(!player)fail(401,'signin');
@@ -1283,12 +1354,15 @@ async function api(req, res, path, tenantId, requestId) {
       req.assertPlayerSession();if(input.owner!==player)fail(409,'giftAccountChanged');
       const now=Date.now();
       if(typeof input.action==='string'&&input.action.startsWith('prize-'))membership.prizes.player(tenantId,player,input,now);
+      else if(typeof input.action==='string'&&input.action.startsWith('bonus-'))bonusOffers.player(tenantId,player,input,now);
+      else if(input.action==='cashier-confirm')playerCashier.confirm(tenantId,player,input.ref,now);
+      else if(input.action==='sharing')subscriptions.consent(tenantId,player,input.purpose,input.enabled,now);
       else if(input.action==='purchase')membership.purchase(tenantId,player,input,now);
       else if(input.action==='cancel')membership.cancel(tenantId,player,input.id||0,now);
       else if(input.action==='enter')membership.enter(tenantId,player,input.id||0,now);
       else if(input.action==='unlink')monthlyTelegram.unlink(tenantId,player);
       else fail(400,'invalid');
-      return {...membership.view(tenantId,player,now),owner:player,telegram:monthlyTelegram.connection(tenantId,player)};
+      return {...membership.view(tenantId,player,now),networkEnabled:Boolean(demoNetwork.rules(tenantId).enabled),cashier:playerCashier.describe(tenantId,player),sharing:subscriptions.choices(tenantId,player),promotions:bonusOffers.view(tenantId,player,now),owner:player,telegram:monthlyTelegram.connection(tenantId,player)};
     });
   }
   if(path==='/api/admin/discovery/membership'){
@@ -1296,7 +1370,7 @@ async function api(req, res, path, tenantId, requestId) {
     if(req.method==='POST'){
       const input=await body(req);
       return auditedChange(['operator_admin'],input,staff=>{
-        const id=membership.operate(tenantId,input.action,input);
+        const id=input.action==='bonus-correct'?bonusOffers.correct(tenantId,input.entry,input.reason):membership.operate(tenantId,input.action,input);
         const auditId=staffAudit.record(tenantId,staff.id,'club_'+input.action,'club-'+String(id),requestId,{fields:[input.action]});
         return {id,auditId};
       });
@@ -2443,7 +2517,7 @@ async function api(req, res, path, tenantId, requestId) {
   if(verifiedRound && req.method==='GET'){if(!player)fail(401,'signin');return roundProof.get(tenantId,player,Number(verifiedRound[1]));}
   if (route === 'POST /api/play') {
     if (!player) fail(401, 'signin');
-    const { game, wager, requestId, choice, previewSlug, locale, drawProof } = await body(req);
+    const { game, wager, requestId, choice, previewSlug, locale, drawProof, placement } = await body(req);
     if (previewSlug !== undefined && (typeof previewSlug !== 'string' || previewSlug.length>64 ||
         !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(previewSlug) || !['fr-CA','en-CA'].includes(locale))) fail(400,'invalid');
     if (!games.some(({ id }) => id === game) || ![100, 500, 1000].includes(wager) ||
@@ -2477,6 +2551,8 @@ async function api(req, res, path, tenantId, requestId) {
       const receipt = outcome ? JSON.stringify(preview ? { ...outcome, preview } : outcome) : null;
       const posting=db.prepare('INSERT INTO ledger(player, game, wager, amount, request_id, created_at, outcome, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(player, game, wager, amount, requestId, Date.now(), receipt, tenantId);
       roundProof.save(Number(posting.lastInsertRowid),proof);
+      placementMetrics.attribute(tenantId,player,Number(posting.lastInsertRowid),placement,game);
+      if(clubEnabled(tenantId))bonusOffers.settle(tenantId,player,Date.now());
       return { ...account(player, tenantId), amount, outcome: receipt };
     });
   }
@@ -2554,6 +2630,9 @@ const assets = {
   '/admin-workspace.js': ['admin-workspace.js', 'text/javascript'],
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
+  '/demo-wallet.html':['demo-wallet.html','text/html'],
+  '/demo-wallet.js':['demo-wallet.js','text/javascript'],
+  '/network-editor.js':['network-editor.js','text/javascript'],
   '/page-blocks.js':['page-blocks.js','text/javascript'],
   '/page-layout.css':['page-layout.css','text/css'],
   '/layout-editor.js':['layout-editor.js','text/javascript'],
@@ -2565,6 +2644,7 @@ const assets = {
   '/growth-player.js':['growth-player.js','text/javascript'],
   '/finance-pilot.js':['finance-pilot.js','text/javascript'],
   '/review-desk.js':['review-desk.js','text/javascript'],
+  '/subscription-editor.js':['subscription-editor.js','text/javascript'],
   '/partner-lobby.js':['partner-lobby.js','text/javascript'],
   '/lobby-shelves.js':['lobby-shelves.js','text/javascript'],
   '/banner-motion.js': ['banner-motion.js', 'text/javascript'],

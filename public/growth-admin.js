@@ -612,7 +612,20 @@ export function createGrowthAdmin({ api, t, french, role, publish, appPath, open
       );
     }
     if(key==='partners'){
-      partnerDirectory(body,{ui,t,get,edit:partnerEditor,manage:p=>managePartnerLinks(body,p,{ui,t,get,post,back:reload,urlFor})});
+      function statements(partner){
+        const b=el('div');body.replaceChildren(btn(l('Back to partners','Retour aux partenaires'),reload),el('h4',partner.name),b);
+        async function read(){const v=await get('/statements?partner='+partner.id);b.replaceChildren();
+          const rate=numeric(b,'rate',l('Qualification reward (TST cents)','Commission par qualification (cents TST)'),v.terms.rate,0,100000);
+          const allow=field(b,'allow',l('Partner may grant 10 demo units','Le partenaire peut accorder 10 unités fictives'),{items:[['0',l('No','Non')],['1',l('Yes','Oui')]],value:String(v.terms.permission)});
+          b.append(btn(l('Save terms','Enregistrer les conditions'),async()=>{await post('statements',{action:'terms',partner:partner.id,version:v.terms.version,rate:Number(rate.value),grant:allow.value==='1'});await read();}),
+            btn(l('Close current statement','Clôturer le relevé'),async()=>{await post('statements',{action:'close',partner:partner.id});await read();}));
+          for(const s of v.statements)b.append(el('p','#'+s.id+' · '+(s.amount/100).toFixed(2)+' TST'));
+          for(const entry of v.entries){const line=el('p','#'+entry.id+' · '+entry.kind+' · '+(entry.amount/100).toFixed(2)+' TST · v'+entry.rule+(entry.originalStatement?' · '+entry.originalStatement:''));b.append(line);
+            if(entry.kind==='qualification'&&!v.entries.some(x=>x.original===entry.id)){const why=field(line,'reason',l('Correction reason','Motif de correction'),{maxLength:200});line.append(btn(l('Reverse','Annuler'),async()=>{await post('statements',{action:'reverse',entry:entry.id,partner:partner.id,reason:why.value});await read();}));}}
+        }
+        void run(read);
+      }
+      partnerDirectory(body,{ui,t,get,statements,edit:partnerEditor,manage:p=>managePartnerLinks(body,p,{ui,t,get,post,back:reload,urlFor})});
       return;
     }
     if(key==='review'){

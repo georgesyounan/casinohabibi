@@ -7,6 +7,7 @@ export const pilotCopy = {
   pilot_wager_checked: ['Test wager checked', 'Mise de test vérifiée'],
 };
 
+import {networkEditor} from './network-editor.js';
 import {financeOperationsUi} from './finance-operations.js';
 
 export function createPilotUi({ api, t, french, staffId }) {
@@ -109,6 +110,7 @@ export function createPilotUi({ api, t, french, staffId }) {
     try {
       if (!selected) {
         financeOperationsUi(view,{api,t,ui:uiKit(french)});
+        networkEditor(view,{api,t,ui:uiKit(french)});
         view.append(
           el(
             'p',

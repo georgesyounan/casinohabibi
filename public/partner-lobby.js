@@ -1,3 +1,4 @@
+import {subscriptionEditor} from './subscription-editor.js';
 import { uiKit } from './discovery.js';
 
 export const partnerLobbyCopy = {
@@ -152,7 +153,7 @@ export function createPartnerUi({ api, t, french, appPath, staffId }) {
         },
         l('No clients registered.', 'Aucun client enregistré.'),
       );
-      if (current()) dest.replaceChildren(view);
+      if (current()){subscriptionEditor(view,{api,t,ui:uiKit(french)});dest.replaceChildren(view);}
     } catch (e) {
       if (current()) status.textContent = t(e.message);
     }

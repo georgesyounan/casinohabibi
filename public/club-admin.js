@@ -20,6 +20,10 @@ export function membershipAdmin(body,{api,t,ui}){
       }
       const nfield=(node,name,label,initial,min=1)=>field(node,name,label,{type:'number',min,step:1,value:initial,required:true});
       const select=(node,label,pairs,chosen)=>{const wrap=el('label',label),s=el('select');for(const [v,txt] of pairs){const o=el('option',txt);o.value=v;s.append(o);}s.value=chosen;wrap.append(s);node.append(wrap);return s;};
+      form(l('Correct a bonus contribution','Corriger une contribution au bonus'),l('Record correction','Enregistrer la correction'),node=>{
+        const entry=nfield(node,'entry',l('Settled round receipt','Reçu de la manche réglée'),1);
+        const reason=field(node,'reason',l('Reason','Motif'),{required:true,maxLength:200});return ()=>({action:'bonus-correct',entry:Number(entry.value),reason:reason.value});
+      });
       form(l('Reserved trending slots','Places réservées dans les tendances'),l('Save slot','Enregistrer la place'),node=>{
         const slot=select(node,l('Position','Position'),[1,2,3,4].map(i=>[String(i),'#'+i]),'1');
         const game=select(node,l('Game','Jeu'),[['',l('Rank by activity','Classer selon l’activité')],['gold','Gold Rush'],['roulette','Roulette'],['blackjack','Blackjack'],['aurora','Aurora']],data.pins.find(p=>p.slot===1)?.game||'');

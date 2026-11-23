@@ -6,6 +6,21 @@ export function marketPanel(data,fr,tab,base) {
   const act=(key,label,attrs='',disabled=false)=>data.wallet?
     `<button type="button" class="ghost" data-member-action="${key}" ${attrs} ${disabled?'disabled':''}>${safe(label)}</button>`:
     `<a class="club-signin" data-club-action="login" href="${safe(base)}/?lang=${fr?'fr':'en'}&amp;view=promotions&amp;club=${tab}&amp;access=signin#player-club">${l('Sign in','Se connecter')}</a>`;
+  if(tab==='rewards' && data.promotions){
+    const d=data.promotions,o=d.offer,m=x=>new Intl.NumberFormat(fr?'fr-CA':'en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}).format(x/100);
+    const attrs='data-period="'+d.period+'"';
+    const row=(name,info,action)=>'<li><div><strong>'+name+'</strong><small>'+info+'</small></div>'+action+'</li>';
+    let list=row(l('Play-through bonus','Bonus de mise'),o?m(Math.min(o.progress,d.rules.target))+' / '+m(d.rules.target)+' · '+(o.unlocked?l('Credited','Crédité'):o.expired?l('Expired','Expiré'):safe(when(o.expires))):l('10 demo units unlock after 20 in settled Gold or Aurora stakes within 7 days.','10 unités fictives sont créditées après 20 unités misées et réglées sur Gold ou Aurora en 7 jours.'),o?'':act('bonus-start',l('Activate','Activer'),attrs));
+    list+=row(l('Weekly net-loss cashback','Remise sur la perte nette'),l('Previous week · 10%, up to 25 demo units','Semaine précédente · 10 %, jusqu’à 25 unités fictives')+' · '+m(d.cashback.amount),act('bonus-cashback',d.cashback.claimed?l('Claimed','Réclamé'):l('Claim','Réclamer'),attrs,!d.cashback.amount||d.cashback.claimed));
+    list+=row(l('Studio demo spin','Tour du studio fictif'),l('Gold · one free spin per week','Gold · un tour gratuit par semaine'),d.spin?act('bonus-spin-use',d.spin.used?l('Played','Joué'):l('Play spin','Jouer le tour'),attrs+' data-ref="'+safe(d.spin.ref)+'"',d.spin.used):act('bonus-spin-grant',l('Get spin','Obtenir le tour'),attrs));
+    const link=data.telegram?.linked?'<p>Telegram · '+l('Linked','Associé')+' '+act('unlink',l('Unlink','Dissocier'))+'</p>':'';
+    const labels={crm:l('Promotional CRM email','Courriels promotionnels CRM'),telegram:l('Telegram promotions','Promotions Telegram'),affiliate:l('Referral activity','Activité de parrainage'),account:l('Account events','Événements du compte'),wallet:l('Wallet receipt references','Références des reçus du portefeuille')};
+    const sharing=data.sharing?'<details><summary>'+l('Sharing preferences','Préférences de partage')+'</summary><ul class="club-rows">'+Object.entries(data.sharing).map(([k,on])=>row(labels[k],on?l('Allowed','Autorisé'):l('Off','Désactivé'),act('sharing',on?l('Turn off','Désactiver'):l('Allow','Autoriser'),'data-purpose="'+k+'" data-enabled="'+(on?0:1)+'"'))).join('')+'</ul></details>':'';
+    const desk=data.cashier;const drafts=desk?.drafts?.map(d=>row('#'+safe(d.id),m(d.amount)+' TST · '+safe(d.state),d.state==='draft'?act('cashier-confirm',l('Confirm demo withdrawal','Confirmer le retrait fictif'),'data-ref="'+safe(d.id)+'"',!desk.allowed):'')).join('');
+    const cashier=drafts?'<section><h3>'+l('My demo cashier','Ma caisse fictive')+'</h3>'+(desk.reason==='payout_hold'?'<p>'+l('A payout hold applies.','Un blocage des retraits est actif.')+'</p>':'')+'<ul class="club-rows">'+drafts+'</ul></section>':'';
+    const wallet=data.networkEnabled?'<p><a class="club-signin" href="'+safe(base)+'/demo-wallet.html?lang='+(fr?'fr':'en')+'">'+l('Test network wallet','Portefeuille du réseau de test')+'</a></p>':'';
+    return wallet+cashier+sharing+'<h3>'+l('Demo offers','Offres fictives')+'</h3><ul class="club-rows">'+list+'</ul>'+link;
+  }
   if(tab==='rewards' && data.telegram?.linked)return `<div class="club-member-line"><span>Telegram · ${l('Linked','Associé')} ${safe(when(data.telegram.since))}</span>${act('unlink',l('Unlink Telegram','Dissocier Telegram'))}</div>`;
   if(tab==='shop'){
     const wallet=data.wallet;

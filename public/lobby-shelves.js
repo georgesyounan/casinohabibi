@@ -16,7 +16,7 @@ export const shelfCopy = {
   shelf_withdrawn: ['Lobby shelf withdrawn', 'Sélection du hall retirée'],
 };
 
-export function createPublicShelf({ api, french, appPath }) {
+export function createPublicShelf({ api, french, appPath,openDemo,signIn }) {
   const media = matchMedia('(max-width: 700px)'),
     section = document.getElementById('scheduled-shelf');
   let last = '',
@@ -50,6 +50,17 @@ export function createPublicShelf({ api, french, appPath }) {
             '/?' + new URLSearchParams({ q: game.externalId, lang }) + '#provider-game-' + game.id,
           );
           li.append(a);
+          if(globalThis.IntersectionObserver && crypto.randomUUID){
+            const ref=crypto.randomUUID(),payload={ref,slot:category.key,revision:category.revision,position:category.items.indexOf(game)+1,game:game.id,lang,channel};
+            let impression;
+            const record=()=>impression||(impression=api('shelf-events',{...payload,action:'impression'}).catch(e=>{impression=null;throw e;}));
+            const observer=new IntersectionObserver(entries=>{if(entries.some(v=>v.isIntersecting)){observer.disconnect();void record().catch(()=>{});}});
+            observer.observe(li);
+            const demo=document.createElement('button');demo.type='button';demo.className='ghost';demo.textContent=lang==='fr'?'Simulateur maison':'House simulator';
+            demo.onclick=async()=>{demo.disabled=true;try{await record();const session=await api('shelf-events',{...payload,action:'launch'});openDemo(session.demo,undefined,session.ref);}
+              catch(err){if(err.message==='signin')signIn();else {const error=document.createElement('small');error.setAttribute('role','status');error.textContent=lang==='fr'?'Sélection expirée.':'Selection expired.';li.append(error);}}finally{demo.disabled=false;}};
+            li.append(demo);
+          }
           ul.append(li);
         }
         section.append(h, ul);
@@ -122,6 +133,7 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
       }
       const row = items.find((r) => r.name === selected);
       if (selected === null) {
+        placementReport(view,{api,ui:uiKit(french)});
         distributionEditor(view,{ui:uiKit(french),api,t,canPublish});
         if (canPublish()) view.append(button(l('Create shelf', 'Créer une sélection'), () => edit('')));
         const list = el('div', '', 'contact-list');
@@ -682,4 +694,20 @@ export function createLobbySections({
         ?.focus({ preventScroll: true });
   }
   return { render, navigate, closeMenu, active: () => enabled() && Boolean(view), homeUrl: href };
+}
+
+function placementReport(view,{api,ui}){
+  const {el,l,field}=ui,box=el('details','','admin-disclosure'),panel=el('div');
+  box.append(el('summary',l('Placement performance','Performance des placements')),panel);view.append(box);
+  async function show(slot='',game=''){
+    try{const p=new URLSearchParams();if(slot)p.set('slot',slot);if(game)p.set('game',game);
+      const data=await api('admin/shelves/metrics?'+p,undefined,'GET');panel.replaceChildren();
+      const f=el('form','','op-form'),a=field(f,'slot',l('Shelf','Sélection'),{value:slot}),g=field(f,'game',l('Game ID','Numéro de jeu'),{type:'number',min:1,value:game});
+      f.append(el('button',l('Filter','Filtrer')));panel.append(f);f.onsubmit=e=>{e.preventDefault();void show(a.value,g.value);};
+      if(!data.entries.length)panel.append(el('p',l('Conversion unavailable · zero impressions','Conversion indisponible · zéro impression')));
+      for(const x of data.entries){const d=el('details');d.append(el('summary',x.slot+' #'+x.position+' · '+x.title+' · '+x.conversion.toFixed(1)+' %'),el('p',x.launches+' / '+x.impressions+' · GGR '+(x.ggr/100).toFixed(2)+' '+x.currency));for(const r of x.receipts)d.append(el('small','#'+r.receipt+' · '+r.stake+' / '+r.wins+(r.corrected?' · '+l('corrected','corrigé'):'')));panel.append(d);}
+      for(const pay of data.payments)panel.append(el('p',l('Deposits / withdrawals','Dépôts / retraits')+' · '+(pay.deposits/100).toFixed(2)+' / '+(pay.withdrawals/100).toFixed(2)+' '+pay.currency));
+    }catch{panel.textContent=l('Unable to load report.','Chargement du rapport impossible.');}
+  }
+  box.ontoggle=()=>{if(box.open)void show();};
 }
