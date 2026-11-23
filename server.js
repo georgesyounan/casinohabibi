@@ -27,6 +27,7 @@ import { collectionKey } from './public/catalog.js';
 import { createSupportCases } from './lib/support-cases.js';
 import { createPlayerClub } from './lib/player-club.js';
 import { createLobbyEvents } from './lib/lobby-events.js';
+import { createGiftRewards, slotRoll } from './lib/gift-rewards.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
@@ -324,7 +325,7 @@ const publicationFollowup = createPublicationFollowup(db, { transaction, fail })
 const publicCatalogueFrom = 'FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1';
 const publicProviderCount = db.prepare('SELECT count(*) AS total ' + publicCatalogueFrom);
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath,
-  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => playerClub.home(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null) });
+  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => playerClub.home(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null), giftPreview: tenant => giftRewards.describe(tenant,null) });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
@@ -332,6 +333,7 @@ const clubEnabled = tenant => lobbyPresentation(tenant).config.brandName.trim().
 const playerClub=transaction(()=>createPlayerClub(db,{rewards,accountBreaks,fail,audit:staffAudit.record,
   previewCount:(tenant,locale)=>comingSoonEnabled(tenant)?comingSoon.keys(tenant,catalogueAudience(tenant,locale)).length:0}));
 const lobbyEvents = transaction(() => createLobbyEvents(db,{fail,accountBreaks,standings:playerClub.standings}));
+const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,fail}));
 function settleClubDraws() {
   if (lobbyEvents.hasDue()) transaction(() => lobbyEvents.settle());
 }
@@ -1093,6 +1095,27 @@ async function api(req, res, path, tenantId, requestId) {
   if (route==='GET /api/admin/discovery/report') {
     staffContext(req,tenantId,supportRoles);
     return transaction(()=>engagementReport(db,dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,Date.now()),params,fail),{readOnly:true});
+  }
+  if (route==='GET /api/discovery/wins') {
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    const cursor=params.get('after');
+    if(cursor!==null && !/^\d{1,16}$/.test(cursor))fail(400,'invalid');
+    return transaction(()=>lobbyEvents.winFeed(tenantId,cursor===null?null:Number(cursor)),{readOnly:true});
+  }
+  if (route==='GET /api/discovery/gifts') {
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    return transaction(()=>giftRewards.describe(tenantId,player),{readOnly:true});
+  }
+  if (route==='POST /api/discovery/gift') {
+    if(!player)fail(401,'signin');
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    const input=await body(req);
+    return transaction(()=>{
+      req.assertPlayerSession();
+      if(input.owner!==player)fail(409,'giftAccountChanged');
+      const now=Date.now(),result=giftRewards.redeem(tenantId,player,input,now);
+      return {...result,gifts:giftRewards.describe(tenantId,player,now),account:account(player,tenantId)};
+    });
   }
   if (route==='GET /api/discovery/events') {
     if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
@@ -2253,13 +2276,8 @@ async function api(req, res, path, tenantId, requestId) {
         amount = color === choice ? wager : -wager;
         outcome = { number, color, choice };
       } else if (game === 'gold' || game === 'aurora') {
-        const symbols = ['🍒', '🍋', '🍇', '🔔', '⭐', '💎'];
-        const reels = Array.from({ length: 3 }, () => symbols[randomInt(symbols.length)]);
-        const counts = new Map(reels.map((symbol) => [symbol, reels.filter((item) => item === symbol).length]));
-        const match = Math.max(...counts.values());
-        const multiplier = match === 3 ? 5 : match === 2 ? 2 : 0;
-        amount = multiplier ? wager * (multiplier - 1) : -wager;
-        outcome = { reels, multiplier };
+        outcome = slotRoll();
+        amount = wager * (outcome.multiplier - 1);
       } else if (game === 'blackjack') {
         const suits = ['♠', '♥', '♦', '♣'];
         const ranks = Array.from({ length: 13 }, (_, index) => index + 2);
@@ -2397,6 +2415,7 @@ const assets = {
   '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/contact-views.js': ['contact-views.js','text/javascript'],
+  '/gift-menu.js': ['gift-menu.js', 'text/javascript'],
   '/lobby-events.js': ['lobby-events.js', 'text/javascript'],
   '/player-club.js': ['player-club.js', 'text/javascript'],
   '/discovery.js': ['discovery.js', 'text/javascript'],

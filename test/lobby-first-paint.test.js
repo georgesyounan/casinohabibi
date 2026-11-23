@@ -65,7 +65,9 @@ test('the public header renders searchable, localized player shortcuts before sc
   const template = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const config = {brandName:'Casino Habibi', enabledLocales:['fr-CA','en-CA'], primaryLocale:'fr-CA'};
   const appBasePath = '/casinohabibi';
-  const describe = createPublicPages({appBasePath});
+  const gifts={now:0,nextDay:86400000,member:false,raffle:{prize:2500,tickets:0},
+    rows:['spins','reload','rakeback','daily','weekly','premonth','monthly'].map(key=>({key,state:'guest',amount:500,remaining:0}))};
+  const describe = createPublicPages({appBasePath,giftPreview:()=>gifts});
   function render(path, query, brand = config) {
     const {meta} = describe('tenant', brand, {path, params:new URLSearchParams(query)});
     return pageHead(template, meta, 'https://example.test');
@@ -74,7 +76,10 @@ test('the public header renders searchable, localized player shortcuts before sc
     const html = render('/', {lang:tag, q:'a"<b'});
     assert.match(html, /<summary class="player-tool"/);
     assert.ok(html.includes('aria-label="' + label + '"'));
-    assert.ok(html.includes('href="/casinohabibi/?lang=' + tag + '&amp;view=promotions&amp;club=daily#player-club"'));
+    assert.ok(html.includes('<summary id="header-gifts" class="player-tool"'));
+    assert.ok(html.includes('href="/casinohabibi/?lang=' + tag + '&amp;view=promotions&amp;club=daily#gift-catalogue"'));
+    assert.ok(html.includes('href="/casinohabibi/?lang=' + tag + '&amp;gift=spins&amp;access=signin"'));
+    assert.equal((html.match(/class="gift-row"/g)||[]).length,7);
     assert.ok(html.includes('href="/casinohabibi/?lang=' + tag + '&amp;support=1"'));
     assert.match(html, /method="get" action="\/casinohabibi\/#games"/);
     assert.match(html, /id="game-search" name="q"[^>]*value="a&quot;&lt;b"/);

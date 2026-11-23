@@ -37,5 +37,14 @@ test('weekly free tickets, private counts and one demo payout survive retries an
   bet.run('a',1,200,now);bet.run('a',1,-100,now+1);bet.run('a',4,900,now);bet.run('b',3,1500,now);
   const board=events.board('a',null,now+4);
   assert.equal(board.rounds.length,2);assert.equal(board.wins.length,1);
-  assert.deepEqual({...board.wins[0]},{game:'gold',wager:100,amount:200,at:now});
+  const {cursor,...win}=board.wins[0];assert.ok(cursor>0);
+  assert.deepEqual(win,{game:'gold',wager:100,amount:200,at:now});
+  for(let i=0;i<103;i++)bet.run('a',1,100,now+3);
+  const first=events.winFeed('a',cursor,now+4),second=events.winFeed('a',first.cursor,now+4),third=events.winFeed('a',second.cursor,now+4);
+  assert.deepEqual([first,second,third].map(x=>[x.wins.length,x.more]),[[48,true],[48,true],[7,false]]);
+  assert.equal(new Set([...first.wins,...second.wins,...third.wins].map(x=>x.cursor)).size,103);
+  assert.equal(events.winFeed('a',third.cursor,now+5).wins.length,0);
+  assert.equal(events.winFeed('b',null,now+5).wins[0].amount,1500);
+  assert.equal(events.winFeed('a',null,now+day+10).wins.length,0);
+  assert.throws(()=>events.winFeed('a',-1,now),/invalid/);
 });

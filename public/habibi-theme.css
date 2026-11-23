@@ -506,3 +506,67 @@ body[data-lobby-brand="habibi"]:not(.player-home) > header .bar:has(.player-tool
   .feed-content table[data-feed="sports"] :is(th,td):nth-child(2) { display: none; }
   .feed-content table[data-feed="sports"] th[scope="row"] { white-space: normal; }
 }
+
+/* Reward drawer under the gift trigger. Its body scrolls independently on short screens. */
+.gift-popup {
+  position: absolute; z-index: 19; top: calc(100% + 9px); right: 0;
+  display: flex; flex-direction: column; width: min(355px,calc(100vw - 26px));
+  max-height: min(590px,calc(100dvh - 108px)); overflow: hidden; overscroll-behavior: contain;
+  border: 1px solid #49607f; border-radius: 13px; background: #1a2b46;
+  color: #f0f4ff; box-shadow: 0 16px 40px #040c20a8;
+}
+.gift-banner {
+  display: flex; flex: none; align-items: center; gap: 11px; min-height: 66px; padding: 9px 13px;
+  background: linear-gradient(106deg,#594527,#39384a 84%); color: #ffe7a3; border-bottom: 1px solid #896d3f;
+}
+.gold-pass { position: relative; width: 35px; height: 46px; display: grid; place-items: center; flex: none;
+  background: linear-gradient(140deg,#ffe49a,#d89834); border: 2px solid #e9b95f; border-radius: 5px; transform: rotate(-8deg);
+  color: #815617; box-shadow: inset 0 0 0 2px #f4cd77; }
+.gold-pass::before,.gold-pass::after { content: ''; position: absolute; width: 7px; height: 8px; border-radius: 50%; background: #57462d; top: 45%; }
+.gold-pass::before { left: -5px; }.gold-pass::after { right: -5px; }
+.gold-pass b { font: italic 800 23px/1 Georgia,serif; }
+.gift-prize { display: grid; gap: 2px; }
+.gift-prize strong { font: 800 italic 1.27rem/1.15 Inter,sans-serif; color: #fff4d9; }
+.gift-prize strong small { font: 600 .67rem/1 Inter,sans-serif; color: #ebd9af; }
+.gift-prize > b { color: #ffda75; text-transform: uppercase; letter-spacing: .045em; font: italic 750 .74rem/1.2 Inter,sans-serif; }
+.gift-tickets { margin-inline-start: auto; display: flex; align-items: center; gap: 3px; font-size: 1rem; }
+.gift-tickets svg { width: 21px; height: 21px; transform: rotate(-35deg); }
+.gift-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
+.gift-row { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 9px; min-height: 52px; padding: 6px 12px; border-bottom: 1px solid #344963; }
+.gift-row > div { min-width: 0; display: grid; gap: 2px; }
+.gift-icon { width: 32px; height: 32px; color: #65eca5; }
+.gift-icon svg { display: block; width: 100%; height: 100%; }
+.gift-row strong { font: 680 .86rem/1.22 Inter,sans-serif; color: #f0f4ff; }
+.gift-row small { color: #b5cae2; font: 500 .69rem/1.25 Inter,sans-serif; }
+.gift-content .gift-cta,.gift-content .gift-all { display: inline-flex; align-items: center; justify-content: center; text-align: center; border-radius: 7px; text-decoration: none; }
+.gift-content .gift-cta { min-height: 37px; min-width: 74px; max-width: 98px; padding: 5px 9px; border: 1px solid #48a6f1; background: #0966ad; color: white; font: 700 .77rem/1.2 Inter,sans-serif; }
+.gift-content .gift-cta:disabled { background: #23344e; border-color: #3b506b; color: #c1d2e8; opacity: 1; cursor: default; }
+.gift-content .gift-cta:not(:disabled):hover,.gift-content .gift-cta:focus-visible { background: #1378c5; }
+.gift-all { flex: none; min-height: 39px; gap: 8px; margin: 8px; padding: 6px 9px; background: #2d4568; border: 1px solid #486182; color: #e6f1ff; font: 700 .82rem/1.25 Inter,sans-serif; }
+.gift-all:hover { background: #385775; }.gift-all span { color: #97d6ff; }
+.gift-status { flex: none; margin: 6px 12px; color: #abecd0; font: 600 .77rem/1.4 Inter,sans-serif; }
+.gift-status:empty { display: none; }
+.gift-status button { padding: 0 3px; background: transparent; border: 0; text-decoration: underline; color: #a9dfff; cursor: pointer; }
+#gift-catalogue { display: none; }
+body.player-home #lobby[data-club-promotions] .lobby-content > #gift-catalogue { display: block; margin: 12px 0 20px; scroll-margin-top: 80px; }
+#gift-catalogue h2 { margin: 0 0 10px; color: #e9f4ff; font: 750 clamp(1.12rem,2vw,1.48rem)/1.25 Inter,sans-serif; }
+#gift-catalogue .gift-content { overflow: hidden; border: 1px solid #3b526e; border-radius: 12px; background: #172a43; }
+#gift-catalogue .gift-prize { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+#gift-catalogue .gift-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+#gift-catalogue .gift-row:nth-child(odd) { border-inline-end: 1px solid #344963; }
+.win-tile time { margin: 0 6px; color: #a5bcd6; font: 520 .64rem/1.2 Inter,sans-serif; font-variant-numeric: tabular-nums; }
+.wins-track { overflow-anchor: none; scroll-snap-type: none; }
+@media(max-width:700px) {
+  .gift-popup { max-height: calc(100dvh - 133px); }
+  #gift-catalogue .gift-list { grid-template-columns: 1fr; }
+  #gift-catalogue .gift-row:nth-child(odd) { border-inline-end: 0; }
+  body.player-home #lobby[data-club-promotions] .lobby-content > #gift-catalogue { scroll-margin-top: 12px; }
+  .gift-content .gift-cta { min-height: 42px; }
+}
+@media(max-width:360px) {
+  .gift-row { gap: 6px; padding-inline: 8px; grid-template-columns: 29px minmax(0,1fr) auto; }
+  .gift-icon { width: 28px; height: 28px; }
+}
+.gift-content .gift-cta[data-submitting] { cursor: progress; background: #304d65; }
+
+.wire-source-switch { padding: 3px 7px; min-height: 30px; color: #c7e7ff; background: #1d344f; border: 1px solid #3d5877; border-radius: 7px; font-size: .72rem; }
