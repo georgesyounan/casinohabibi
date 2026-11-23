@@ -121,7 +121,7 @@
 <main id="admin" class="shell admin" tabindex="-1" hidden>
   <section id="staff-login"><div class="login-identity"><span class="admin-emblem" aria-hidden="true">✦</span><strong>Casino Habibi</strong></div><h1 data-copy="staffLogin"></h1><p data-copy="staffLoginHelp"></p>
   <form id="staff-login-form"><label><span data-copy="staffLoginIdentifier"></span><input name="identifier" type="text" required maxlength="254" autocapitalize="none" spellcheck="false" autocomplete="username"></label>
-  <div class="password-field"><label for="staff-login-password" data-copy="staffPassword"></label><div class="password-control"><input id="staff-login-password" name="password" type="password" minlength="12" required autocomplete="current-password"><button type="button" class="ghost password-toggle" data-staff-password-toggle aria-label="Show password" aria-pressed="false" data-copy="showPassword"></button></div></div>
+  <div class="password-field"><label for="staff-login-password" data-copy="staffPassword"></label><div class="password-control"><input id="staff-login-password" name="password" type="password" maxlength="128" required autocomplete="current-password"><button type="button" class="ghost password-toggle" data-staff-password-toggle aria-label="Show password" aria-pressed="false" data-copy="showPassword"></button></div></div>
   <label><span data-copy="mfaCode"></span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"><small data-copy="mfaLoginHint"></small></label>
   <button type="submit" data-copy="staffSignIn"></button></form><p role="status" id="staff-login-status"></p></section>
   <div id="admin-tools" hidden>
