@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createComingSoon } from '../../lib/coming-soon.js';
 import { createStaffAudit } from '../../lib/staff-audit.js';
 import { createWebsiteContent } from '../../lib/website-content.js';
+import { publishStudioBrand } from './brand.mjs';
 
 const [operation, database] = process.argv.slice(2);
 if (operation !== 'publish' || !database || !isAbsolute(database) || !existsSync(database)) {
@@ -58,12 +59,20 @@ function transaction(work) {
   }
 }
 
-function assertMatches(slug, stored, expected) {
-  if (
-    !Object.entries(expected).every(([key, value]) => JSON.stringify(stored[key]) === JSON.stringify(value))
-  ) {
-    throw new Error('Existing editorial content differs: ' + slug);
-  }
+// Fingerprints of the previous shipped edition, including localized copy and cover bytes.
+const previousEditions = {
+  'lanterns-of-the-souk-demo': '1ebe2db9c8abc868c6665b218ff7e98e9ef891b1cd6c6595ddffd3789822c4e9',
+  'midnight-in-beirut-demo': '9258be58af49798285fe78923cccf90d7d173949ff457728817268e2b0dc9ce5',
+  'dune-roulette-demo': '68821c3f39d410887aace1ff295c6c8a137e82cb3e7ebd0955fb5d70381abc3e',
+  'habibi-nights-first-quest': '25e4a6f25ee856ee74dff001847ace38add80c380f154e35e02f83f5a8965abd'
+};
+function matches(stored, expected) {
+  return Object.entries(expected).every(([key, value]) => JSON.stringify(stored[key]) === JSON.stringify(value));
+}
+function requirePreviousEdition(slug, stored, expected) {
+  const entries = Object.keys(expected).sort().map(key => [key, stored[key]]);
+  const hash = createHash('sha256').update(JSON.stringify(entries)).digest('hex');
+  assert.equal(hash, previousEditions[slug], 'Existing editorial content differs: ' + slug);
 }
 
 function publish() {
@@ -76,7 +85,7 @@ function publish() {
   const tenant = brand.id;
   const published = db
     .prepare(
-      "SELECT config FROM tenant_config_versions WHERE tenant_id=? AND status='published' ORDER BY version DESC LIMIT 1"
+      "SELECT version,config FROM tenant_config_versions WHERE tenant_id=? AND status='published' ORDER BY version DESC LIMIT 1"
     )
     .get(tenant);
   const config = JSON.parse(published.config);
@@ -90,7 +99,7 @@ function publish() {
     'SELECT state,version,published_version,published FROM coming_soon_titles WHERE tenant_id=? AND slug=?'
   );
   const existingGuide = db.prepare(
-    "SELECT r.live_rev,r.draft_rev,r.archived,v.data FROM website_content_records r LEFT JOIN website_content_revisions v ON v.tenant_id=r.tenant_id AND v.kind=r.kind AND v.slug=r.slug AND v.revision=r.live_rev WHERE r.tenant_id=? AND r.kind='help' AND r.slug=?"
+    "SELECT r.version,r.live_rev,r.draft_rev,r.archived,v.data FROM website_content_records r LEFT JOIN website_content_revisions v ON v.tenant_id=r.tenant_id AND v.kind=r.kind AND v.slug=r.slug AND v.revision=r.live_rev WHERE r.tenant_id=? AND r.kind='help' AND r.slug=?"
   );
   const changes = cards.flatMap(({ slug, content }) => {
     const row = existingCard.get(tenant, slug);
@@ -100,11 +109,10 @@ function publish() {
       'Editorial changes at ' + slug
     );
     const prior = JSON.parse(row.published);
-    const { demoGame, ...original } = content;
-    assertMatches(slug, prior, original);
-    if (prior.demoGame === demoGame) return [];
-    // Only the original published edition can receive an automatic upgrade.
-    assert.ok(row.version === 2 && !Object.hasOwn(prior, 'demoGame'), 'Editorial changes at ' + slug);
+    if (matches(prior, content)) return [];
+    const { demoGame, ...editorialFields } = content;
+    requirePreviousEdition(slug, prior, editorialFields);
+    assert.ok(prior.demoGame === demoGame || (!Object.hasOwn(prior, 'demoGame') && row.version === 2), 'Editorial changes at ' + slug);
     return [{ slug, content, version: row.version }];
   });
   const currentGuide = existingGuide.get(tenant, guideSlug);
@@ -113,17 +121,18 @@ function publish() {
       !currentGuide.archived && currentGuide.live_rev && currentGuide.live_rev === currentGuide.draft_rev,
       'Editorial changes at ' + guideSlug
     );
-    assertMatches(guideSlug, JSON.parse(currentGuide.data), guide);
   }
+  const guideChanged = !currentGuide || !matches(JSON.parse(currentGuide.data), guide);
+  if (currentGuide && guideChanged) requirePreviousEdition(guideSlug, JSON.parse(currentGuide.data), guide);
   const auditIds = [];
   const receipt = {
     host,
     insertedPreviews: changes.filter(({ version }) => version === 0).length,
     updatedPreviews: changes.filter(({ version }) => version > 0).length,
     insertedGuides: Number(!currentGuide),
+    updatedGuides: Number(Boolean(currentGuide) && guideChanged),
     auditIds
   };
-  if (!changes.length && currentGuide) return receipt;
 
   // Attribute this server-side publication independently from human staff. This identity has no membership or login credential.
   const email = 'catalogue-demo@casinohabibi.invalid';
@@ -145,6 +154,8 @@ function publish() {
     throw new Error(message);
   };
   const recordAudit = createStaffAudit(db, { fail, transaction }).record;
+  auditIds.push(...publishStudioBrand(db, tenant, published, actor, recordAudit));
+  if (!changes.length && !guideChanged) return receipt;
   const common = { fail, transaction, recordAudit, validArtwork: (value) => covers.has(value), appBasePath };
   const catalogue = createComingSoon(db, common);
   const website = createWebsiteContent(db, {
@@ -171,12 +182,12 @@ function publish() {
     });
     auditIds.push(draft.auditId, live.auditId);
   }
-  if (!currentGuide) {
+  if (guideChanged) {
     const record = { slug: guideSlug, kind: 'help' };
     const draft = website.mutate(tenant, config, { id: actor }, randomUUID(), {
       ...record,
       action: 'save',
-      version: 0,
+      version: currentGuide?.version ?? 0,
       content: guide
     });
     const live = website.mutate(tenant, config, { id: actor }, randomUUID(), {

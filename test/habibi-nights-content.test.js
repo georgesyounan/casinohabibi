@@ -86,9 +86,22 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
   );
   db.prepare("DELETE FROM website_guide_addresses WHERE record_slug='editor-guide'").run();
   db.prepare("DELETE FROM website_content_records WHERE slug='editor-guide'").run();
+  const liveConfig = () => db.prepare("SELECT version,config FROM tenant_config_versions WHERE tenant_id='sandbox' AND status='published' ORDER BY version DESC LIMIT 1").get();
+  assert.equal(liveConfig().version, 1, 'The failed catalogue publication also rolled back the new brand.');
+  const draftConfig = { ...JSON.parse(liveConfig().config), heroIntroFr: 'Brouillon privé du personnel' };
+  db.prepare("INSERT INTO tenant_config_versions(tenant_id,version,config,status,created_at) VALUES('sandbox',2,?,'draft',?)").run(JSON.stringify(draftConfig), Date.now());
   const first = JSON.parse(run());
-  assert.deepEqual([first.insertedPreviews, first.insertedGuides, new Set(first.auditIds).size], [3, 1, 8]);
-  assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 8]);
+  const brand = JSON.parse(liveConfig().config);
+  assert.equal(brand.brandName, 'Casino Habibi');
+  assert.equal(brand.heroTitleFr, 'Habibi Studio');
+  assert.match(brand.brandLogo, /^data:image\/png;base64,/);
+  assert.match(brand.heroIntroFr, /crédits fictifs/);
+  const draft = db.prepare("SELECT version,config FROM tenant_config_versions WHERE tenant_id='sandbox' AND status='draft'").get();
+  assert.ok(draft.version > liveConfig().version);
+  assert.equal(JSON.parse(draft.config).heroIntroFr, draftConfig.heroIntroFr);
+  assert.equal(JSON.parse(draft.config).brandLogo, brand.brandLogo);
+  assert.deepEqual([first.insertedPreviews, first.insertedGuides, new Set(first.auditIds).size], [3, 1, 10]);
+  assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 10]);
   assert.equal(
     db
       .prepare(
@@ -111,25 +124,18 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
       art,
       await readFile(new URL('../content/habibi-nights/' + entry.image, import.meta.url))
     );
-    assert.ok(value.titleFr.includes('Démo') && value.titleEn.includes('Demo'));
+    assert.equal(value.titleFr, entry.titleFr);
+    assert.equal(value.titleEn, entry.titleEn);
+    assert.equal(value.demoGame, entry.demoGame);
   }
   const second = JSON.parse(run());
   assert.deepEqual([second.insertedPreviews, second.insertedGuides, second.auditIds.length], [0, 0, 0]);
   const ids = () => db.prepare('SELECT id,slug FROM coming_soon_titles ORDER BY id').all();
   const originalIds = ids();
-  // The previous edition had the same illustrations and saves but no playable game.
-  db.prepare("UPDATE coming_soon_titles SET draft=json_remove(draft,'$.demoGame'),published=json_remove(published,'$.demoGame')").run();
-  const upgraded = JSON.parse(run());
-  assert.deepEqual([upgraded.insertedPreviews, upgraded.updatedPreviews, upgraded.insertedGuides, new Set(upgraded.auditIds).size], [0, 3, 0, 6]);
-  assert.deepEqual(ids(), originalIds);
-  for (const card of input.previews) {
-    const row = db.prepare("SELECT version,published_version,json_extract(published,'$.demoGame') AS game FROM coming_soon_titles WHERE slug=?").get(card.slug);
-    assert.deepEqual(Object.values(row), [4, 4, card.demoGame]);
-  }
-  assert.deepEqual(JSON.parse(run()).auditIds, []);
-  // A later editor deliberately removing a game must retain that choice.
+  // A released title stays linked to its saves; changing the game or published copy is an editorial decision.
   db.prepare("UPDATE coming_soon_titles SET draft=json_remove(draft,'$.demoGame'),published=json_remove(published,'$.demoGame') WHERE slug=?").run(input.previews[0].slug);
-  assert.throws(run, /Editorial changes/);
-  assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 14]);
+  assert.throws(run, /Existing editorial content differs/);
+  assert.deepEqual(ids(), originalIds);
+  assert.deepEqual(Object.values(counts()), [before.titles + 3, before.guides + 1, before.audits + 10]);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });

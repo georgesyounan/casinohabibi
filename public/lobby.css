@@ -48,8 +48,9 @@
 .player-home #default-lobby-hero, .player-home #site-public-banner .site-content-card {
   display: flex; align-items: center; position: relative; height: 100%; min-height: clamp(245px, 20vw, 320px); isolation: isolate; overflow: hidden;
   margin: 0; padding: 0; border-radius: 15px; border: 1px solid #465251;
-  background: linear-gradient(90deg, #0a171de8 0%, #0b171dc4 34%, #0c192160 62%, transparent 82%), url('lobby-coast.webp') 67% 52% / cover #162e34;
+  background: linear-gradient(90deg, #0a171de8 0%, #0b171dc4 34%, #0c192160 62%, transparent 82%), var(--lobby-hero-art, none) 67% 52% / cover #162e34;
 }
+.player-home[data-lobby-brand="default"] { --lobby-hero-art: url('lobby-coast.webp'); }
 .player-home .hero-content, .player-home #site-public-banner .site-content-card > div { z-index: 1; padding: clamp(22px, 2.8vw, 44px); max-width: min(76%, 580px); min-width: 0; }
 .player-home .hero-mode, .spotlight-caption > p { margin: 0 0 9px; color: #f4d091; font-size: .68rem; font-weight: 740; letter-spacing: .105em; text-transform: uppercase; }
 .player-home .hero h1, .player-home #site-public-banner h1 { font: 550 clamp(2.1rem,3.85vw,4.1rem)/1.02 Georgia, 'Times New Roman', serif; letter-spacing: -.045em; color: #fffaf0; margin: 0; max-width: 15ch; text-wrap: balance; overflow-wrap: anywhere; }
@@ -198,4 +199,114 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .player-home *, .player-home *::before, .player-home *::after { scroll-behavior: auto; transition-duration: 0s; }
+}
+
+/* Casino Habibi's player identity. The accent and logo come from the published brand settings. */
+[data-lobby-brand="habibi"] .habibi-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: #f8f8fc;
+  font: italic 850 1.62rem/.83 Inter, system-ui, sans-serif;
+  letter-spacing: -.075em;
+}
+.habibi-wordmark small {
+  padding-left: 2px;
+  font: normal 700 .52rem/1 Inter, system-ui, sans-serif;
+  letter-spacing: .19em;
+  text-transform: uppercase;
+}
+[data-lobby-brand="habibi"] .brand-logo { width: 37px; height: 37px; flex: none; border-radius: 0; }
+[data-lobby-brand="habibi"] .admin-emblem:has(img) { border: 0; background: transparent; overflow: hidden; }
+[data-lobby-brand="habibi"] .admin-emblem img { width: 100%; height: 100%; object-fit: contain; }
+body[data-lobby-brand="habibi"]:not(:has(#admin:not([hidden]))) {
+  --bg: #101018;
+  --panel: #1c1d29;
+  --line: #343547;
+  --text: #f5f4fb;
+  --muted: #b9b7c9;
+}
+.player-home[data-lobby-brand="habibi"] { --lobby-hero-art: url('hero.webp?v=studio'); }
+[data-lobby-brand="habibi"] > header, [data-lobby-brand="habibi"] > footer {
+  background: #13131e; border-color: #2a2938;
+}
+[data-lobby-brand="habibi"] .home-search { background: #0e0e17; border-color: #363646; }
+[data-lobby-brand="habibi"] .lobby-rail { color: #bbb8ce; }
+[data-lobby-brand="habibi"] .rail-heading { color: #adaabd; }
+[data-lobby-brand="habibi"] .lobby-rail [aria-pressed="true"] {
+  background: #202b2b; color: #f3fffa; box-shadow: inset 3px 0 var(--home-accent);
+}
+[data-lobby-brand="habibi"] .lobby-rail :is(button, a):not([aria-pressed="true"]):hover { background: #252534; }
+.player-home[data-lobby-brand="habibi"] :is(#language, .home-discovery, .home-options summary) {
+  color: #e7e7f2; background: #222331; border-color: #393a4c;
+}
+.player-home[data-lobby-brand="habibi"] :is(#account, .hero-browse) { border-color: transparent; font-weight: 760; }
+.player-home[data-lobby-brand="habibi"] #default-lobby-hero,
+.player-home[data-lobby-brand="habibi"] #site-public-banner .site-content-card {
+  min-height: clamp(255px, 20vw, 314px);
+  border-color: #393044;
+  background: linear-gradient(90deg, #0f051982, transparent 63%), var(--lobby-hero-art) center right / cover #160a29;
+}
+.player-home[data-lobby-brand="habibi"] .hero-content,
+.player-home[data-lobby-brand="habibi"] #site-public-banner .site-content-card > div {
+  width: 60%; max-width: 570px; padding: clamp(20px,2.6vw,42px);
+}
+.player-home[data-lobby-brand="habibi"] .hero h1,
+.player-home[data-lobby-brand="habibi"] #site-public-banner h1 {
+  color: #faf8ff;
+  font: 850 clamp(2.75rem,4.65vw,5.4rem)/.96 Inter, system-ui, sans-serif;
+  letter-spacing: -.072em; text-wrap: balance;
+}
+.player-home[data-lobby-brand="habibi"] .hero-mode,
+.player-home[data-lobby-brand="habibi"] .spotlight-caption > p {
+  color: var(--home-accent); font-size: .65rem; font-weight: 730; letter-spacing: .14em;
+}
+.player-home[data-lobby-brand="habibi"] .hero-description {
+  color: #dcd9e9; margin-block: 12px 18px; max-width: 34ch;
+}
+[data-lobby-brand="habibi"] .spotlight { background: #241a35; border-color: #46394e; }
+[data-lobby-brand="habibi"] .spotlight img { object-position: center 45%; }
+[data-lobby-brand="habibi"] .spotlight-shade {
+  background: linear-gradient(0deg, #100b19f5, #100b1985 30%, transparent 66%);
+}
+[data-lobby-brand="habibi"] .spotlight-caption strong {
+  font-weight: 790; font-size: clamp(1.35rem,2vw,2rem); letter-spacing: -.045em;
+}
+[data-lobby-brand="habibi"] .spotlight-nav { gap: 5px; }
+[data-lobby-brand="habibi"] .spotlight-nav button { background: #14121ce8; border-color: #ffffff5c; }
+.player-home[data-lobby-brand="habibi"] .card { background: #1c1c29; border-color: #333343; }
+.player-home[data-lobby-brand="habibi"] .card:hover { border-color: #73718c; }
+[data-lobby-brand="habibi"] .card-info :is(.catalog-label, .home-play-label, a.button) { color: #b6f6dc; }
+[data-lobby-brand="habibi"] .demo-cover .featured-label { color: #ecfff7; border-color: #a6dec359; background: #0f1c1ced; }
+[data-lobby-brand="habibi"] .favorite-toggle[aria-pressed="true"] { background: var(--green); color: var(--button-ink); }
+[data-lobby-brand="habibi"] .home-safety { background: #1b2027; border-color: #364045; }
+[data-lobby-brand="habibi"] :is(dialog, .coming-soon-detail-card, .site-public-article) { background-color: #1b1b28; }
+[data-lobby-brand="habibi"] .coming-soon-detail-card h1 { font: 820 clamp(2rem,4.5vw,3.6rem)/1.03 Inter, sans-serif; letter-spacing: -.055em; }
+@media (max-width: 850px) {
+  [data-lobby-brand="habibi"] .lobby-rail [aria-pressed="true"] { box-shadow: inset 0 -2px var(--home-accent); }
+}
+@media (max-width: 620px) {
+  .player-home[data-lobby-brand="habibi"] .brand-logo { width: 32px; height: 32px; }
+  .player-home[data-lobby-brand="habibi"] .habibi-wordmark { font-size: 1.4rem; }
+  .player-home[data-lobby-brand="habibi"] #default-lobby-hero,
+  .player-home[data-lobby-brand="habibi"] #site-public-banner .site-content-card {
+    min-height: 189px;
+    background-image: linear-gradient(90deg, #10051bec 0%, #10051bc7 40%, #10051b85 57%, transparent 77%), var(--lobby-hero-art);
+    background-position: 62% center;
+  }
+  .player-home[data-lobby-brand="habibi"] .hero-content,
+  .player-home[data-lobby-brand="habibi"] #site-public-banner .site-content-card > div {
+    width: 69%; padding: 17px;
+  }
+  .player-home[data-lobby-brand="habibi"] .hero h1,
+  .player-home[data-lobby-brand="habibi"] #site-public-banner h1 { font-size: clamp(2.05rem,8.5vw,2.85rem); }
+  .player-home[data-lobby-brand="habibi"] .hero-description { font-size: .76rem; margin: 8px 0 11px; }
+  .player-home[data-lobby-brand="habibi"] .hero-mode { font-size: .55rem; letter-spacing: .1em; }
+  [data-lobby-brand="habibi"] .spotlight-shade { background: linear-gradient(90deg,transparent 13%,#231b2f 35%); }
+  [data-lobby-brand="habibi"] .spotlight-caption { padding-right: 79px; }
+  [data-lobby-brand="habibi"] .spotlight-caption strong { font-size: 1.02rem; }
+  .player-home[data-lobby-brand="habibi"] .spotlight-caption > p { font-size: .54rem; }
+  [data-lobby-brand="habibi"] .spotlight-nav { right: 7px; gap: 3px; }
+  [data-lobby-brand="habibi"] .spotlight-nav button { width: 32px; height: 36px; }
 }

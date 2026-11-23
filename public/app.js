@@ -94,7 +94,8 @@ const copy = {
   browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
   clearGameSearch: ['Clear search', 'Effacer la recherche'],
   providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
-  catalogResultSummary: ['Playable demo games: {games} · Previews: {previews}', 'Jeux fictifs jouables : {games} · Aperçus : {previews}'],
+  demoCountOne: ['{n} playable demo', '{n} démo jouable'], demoCountMany: ['{n} playable demos', '{n} démos jouables'],
+  previewCountOne: ['{n} preview', '{n} aperçu'], previewCountMany: ['{n} previews', '{n} aperçus'],
   addFavorite: ['Add {game} to favorites', 'Ajouter {game} aux favoris'], removeFavorite: ['Remove {game} from favorites', 'Retirer {game} des favoris'], noFavoriteGames: ['You have not saved any games yet.', 'Vous n’avez pas encore enregistré de jeux.'],
   favoritesLocal: ['Favorites saved in this browser.', 'Favoris enregistrés dans ce navigateur.'], favoritesSynced: ['Favorites saved to your account.', 'Favoris enregistrés dans votre compte.'], favoriteSaveFailed: ['Could not sync favorites to your account. The change was reverted.', 'Impossible de synchroniser les favoris avec votre compte. Le changement a été annulé.'],
   disclaimer: ['Simulated funds only. No cash value.', 'Fonds fictifs uniquement. Aucune valeur monétaire.'],
@@ -585,6 +586,8 @@ function publicLanguage(locale) {
 function applyTenant(config) {
   const previousLanguage = language;
   tenantBrandName = config.brandName;
+  const habibi = config.brandName.trim().toLowerCase() === 'casino habibi';
+  document.body.dataset.lobbyBrand = habibi ? 'habibi' : 'default';
   $('#staff-brand').textContent = config.brandName;
   publicLocales = config.enabledLocales;
   primaryPublicLocale = config.primaryLocale;
@@ -633,7 +636,7 @@ function applyTenant(config) {
     const lightness = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
     document.body.style.setProperty('--button-ink', lightness > .179 ? '#080d10' : '#ffffff');
   }
-  document.querySelector('meta[name="theme-color"]').content = config.accentColor;
+  document.querySelector('meta[name="theme-color"]').content = habibi && !isAdminPage ? '#101018' : config.accentColor;
   for (const brand of document.querySelectorAll('.brand')) {
     const mark = config.brandLogo ? element('img') : element('span', '✧');
     if (config.brandLogo) {
@@ -642,7 +645,25 @@ function applyTenant(config) {
       mark.className = 'brand-logo';
     }
     mark.setAttribute('aria-hidden', 'true');
-    brand.replaceChildren(mark, document.createTextNode(` ${config.brandName.toUpperCase()}`));
+    if (habibi) {
+      const name = element('strong', '', 'habibi-wordmark');
+      name.append(element('small', 'Casino'), document.createTextNode(' Habibi'));
+      brand.replaceChildren(mark, name);
+      if (brand.tagName === 'A') brand.setAttribute('aria-label', config.brandName);
+    } else {
+      brand.removeAttribute('aria-label');
+      brand.replaceChildren(mark, document.createTextNode(` ${config.brandName.toUpperCase()}`));
+    }
+  }
+  for (const emblem of document.querySelectorAll('.admin-emblem')) {
+    if (habibi && config.brandLogo) {
+      const image = element('img');
+      image.src = config.brandLogo;
+      image.alt = '';
+      emblem.replaceChildren(image);
+    } else {
+      emblem.textContent = '✦';
+    }
   }
   const supportLink = $('#support-link');
   if (typeof config.supportEmail === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(config.supportEmail)) {
@@ -1806,10 +1827,13 @@ function renderCatalog() {
   options.querySelector('summary').toggleAttribute('data-applied', Boolean(selectedCollection || (!$('#provider-sort-control').hidden && providerSort !== 'recent')));
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
-  $('#catalog-summary').textContent = t('catalogResultSummary')
-    .replace('{games}', countFormat.format(demoGames.length + editorial.playable))
-    .replace('{previews}', countFormat.format(visibleGames.length + editorial.count - editorial.playable));
-  $('#catalog-summary').hidden = !hasCatalogue && !selectedCollection;
+  const playableCount = demoGames.length + editorial.playable;
+  const previewCount = visibleGames.length + editorial.count - editorial.playable;
+  const counts = [];
+  if (playableCount) counts.push(t(playableCount === 1 ? 'demoCountOne' : 'demoCountMany').replace('{n}', countFormat.format(playableCount)));
+  if (previewCount) counts.push(t(previewCount === 1 ? 'previewCountOne' : 'previewCountMany').replace('{n}', countFormat.format(previewCount)));
+  $('#catalog-summary').textContent = counts.join(' · ');
+  $('#catalog-summary').hidden = !counts.length;
   $('#catalog-empty').hidden = hasListings;
   const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
