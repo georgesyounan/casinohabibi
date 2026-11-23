@@ -31,17 +31,106 @@ export function timeLeft(end,now,fr) {
   return minutes+' min';
 }
 
-function sourceRows(data,wins,step=0) {
-  const actual=wins?data.wins:data.rounds;
-  const rows=actual.length?actual:sample(data.now,step).filter(r=>!wins||r.amount>0);
-  return {rows,illustrative:!actual.length};
+const incomingEvery=1500, visibleWins=48;
+const winTime=new Intl.DateTimeFormat('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',timeZone:'UTC'});
+const winMoney=[false,true].map(fr=>new Intl.NumberFormat(fr?'fr-CA':'en-CA',{style:'currency',currency:'CAD'}));
+function demoWin(sequence) {
+  let bits=Math.imul(sequence^(sequence>>>16),0x45d9f3b);
+  bits=Math.imul(bits^(bits>>>16),0x45d9f3b)>>>0;
+  const game=games[bits%games.length],stake=[100,500,1000][(bits>>>5)%3];
+  const amount=stake*(game.type==='slots' && ((bits>>>9)%3===0)?4:1);
+  return {cursor:'demo-'+sequence,game:game.id,amount,at:sequence*incomingEvery};
+}
+function previewWins(now) {
+  const tick=Math.floor(now/incomingEvery);
+  return Array.from({length:32},(_,index)=>demoWin(tick-index));
+}
+function winTile(row,fr,base) {
+  const game=covers.get(row.game),title=game.name[Number(fr)],at=new Date(row.at);
+  return `<a class="win-tile hub-link" data-win-key="${row.cursor}" href="${href(base,fr,{q:title},'#games')}"><img src="${escape(base)}/game-${game.id}.webp" width="116" height="76" alt="" loading="lazy"><span>${escape(title)}</span><strong>+${winMoney[Number(fr)].format(row.amount/100)}</strong><time datetime="${at.toISOString()}" title="UTC">${winTime.format(at)}</time></a>`;
 }
 function winCards(data,fr,base) {
-  const {rows}=sourceRows(data,true);
-  return rows.map(r=>{
-    const game=covers.get(r.game),title=game.name[Number(fr)];
-    return `<a class="win-tile hub-link" href="${href(base,fr,{q:title},'#games')}"><img src="${escape(base)}/game-${game.id}.webp" width="116" height="76" alt="" loading="lazy"><span>${escape(title)}</span><strong>+${money(r.amount,fr)}</strong></a>`;
-  }).join('');
+  return (data.wins.length?data.wins:previewWins(data.now)).map(row=>winTile(row,fr,base)).join('');
+}
+
+// Keep arriving results independent of the slower club standings refresh.
+function createWinStream(rail,api,french,base) {
+  let recorded=[],cursor=null,stamp='',source='',offset=0,reading=false,again=false,nextRead=0;
+  let displayLanguage, lastTrack, continuousDemo=false;
+  function seed(board) {
+    offset=board.now-Date.now();
+    if(cursor===null){
+      recorded=board.wins.filter(row=>Number.isSafeInteger(row.cursor));
+      cursor=recorded[0]?.cursor||0;
+    }
+  }
+  function merge(rows) {
+    const seen=new Map(recorded.map(row=>[row.cursor,row]));
+    for(const row of rows)if(covers.has(row.game))seen.set(row.cursor,row);
+    recorded=[...seen.values()].sort((a,b)=>b.cursor-a.cursor).slice(0,visibleWins);
+  }
+  async function poll() {
+    if(cursor===null||reading||Date.now()<nextRead)return;
+    reading=true;nextRead=Date.now()+3000;
+    try{
+      const batch=await api('discovery/wins?after='+cursor,undefined,'GET');
+      merge(batch.wins);cursor=batch.cursor;again=batch.more;
+    }catch{nextRead=Date.now()+8000;}
+    finally{reading=false;if(again){again=false;nextRead=0;}}
+  }
+  function render(paused,force=false) {
+    const track=rail.querySelector('.wins-track');
+    if(!track||cursor===null)return;
+    const now=Date.now()+offset,fr=Boolean(french()),same=track===lastTrack&&displayLanguage===fr;
+    if(same&&!force&&(paused||track.matches(':hover,:focus-within')||track.scrollLeft>3))return;
+    recorded=recorded.filter(row=>row.at>=now-day);
+    const live=recorded.length>0 && !continuousDemo,mode=live?'played':'preview',rows=live?recorded:previewWins(now);
+    const switcher=rail.querySelector('[data-wire="source"]');
+    switcher.hidden=!recorded.length;
+    switcher.textContent=continuousDemo?pick(fr,'Played wins','Gains des joueurs'):pick(fr,'Continuous demo','Démo en continu');
+    switcher.setAttribute('aria-pressed',String(continuousDemo));
+    const signature=mode+'-'+rows[0].cursor+'-'+rows.length;
+    if(same&&stamp===signature)return;
+    const key=row=>String(row.cursor);
+    const following=track.scrollLeft<=3;
+    const before=[...track.children],old=new Map(before.map(el=>[el.dataset.winKey,el]));
+    const positions=new Map(before.map(el=>[el,el.offsetLeft]));
+    if(!same)old.clear();
+    const desired=new Set(rows.map(key));
+    for(const el of before)if(!same||!desired.has(el.dataset.winKey))el.remove();
+    const added=[];
+    rows.forEach((row,i)=>{
+      let el=old.get(key(row));
+      if(!el){
+        const template=document.createElement('template');template.innerHTML=winTile(row,fr,base);
+        el=template.content.firstElementChild;added.push(el);
+      }
+      if(track.children[i]!==el)track.insertBefore(el,track.children[i]||null);
+    });
+    if(following)track.scrollLeft=0;
+    const allowMotion=same && !paused && source===mode && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(allowMotion && added.length && typeof track.animate==='function'){
+      for(const el of track.children){
+        if(el.offsetLeft>track.clientWidth+track.offsetLeft+el.offsetWidth)break;
+        const from=positions.get(el);
+        if(from!==undefined && from!==el.offsetLeft){
+          const delta=Math.max(-el.offsetWidth*2,from-el.offsetLeft);
+          el.animate([{transform:'translateX('+delta+'px)'},{transform:'translateX(0)'}],{duration:320,easing:'ease-out'});
+        }
+      }
+      for(const el of added.slice(0,3))el.animate([{opacity:.2,transform:'translateX(-18px) scale(.96)'},{opacity:1,transform:'none'}],{duration:340,easing:'ease-out'});
+    }
+    rail.dataset.winSource=mode;
+    rail.querySelector('.wire-source').textContent=live?pick(fr,'Played rounds · Play money','Parties jouées · Argent fictif'):marker('casino',fr);
+    stamp=signature;source=mode;lastTrack=track;displayLanguage=fr;
+  }
+  function switchSource(paused) {
+    continuousDemo=!continuousDemo;
+    const track=rail.querySelector('.wins-track');
+    if(track)track.scrollLeft=0;
+    render(paused,true);
+  }
+  return {seed,poll,render,switchSource};
 }
 const feedTitle=(fr,tab)=>({casino:'Casino',sports:'Sports',race:pick(fr,'Race standings','Classement')})[tab];
 function feedTable(data,fr,tab,base,step=0) {
@@ -59,11 +148,12 @@ function feedTable(data,fr,tab,base,step=0) {
       return [`<a class="hub-link" href="${href(base,fr,{view:'sports'})}">${escape(m.teams.join(' · '))}</a>`,escape(leagues[m.league][Number(fr)]),escape(clockLabel(m,frame,fr)),frame[1]+' – '+frame[2]];
     });
   } else {
-    const feed=sourceRows(data,false,step);
-    source=feed.illustrative?marker('casino',fr):l('Last 24 hours · Play money','Dernières 24 h · Argent fictif');
+    const illustrative=!data.rounds.length;
+    const feed=illustrative?sample(data.now,step):data.rounds;
+    source=illustrative?marker('casino',fr):l('Last 24 hours · Play money','Dernières 24 h · Argent fictif');
     headers=[l('Game','Jeu'),l('Time','Heure')+' (UTC)',l('Stake','Mise'),l('Multiplier','Multiplicateur'),l('Payout','Versement')];
     const time = new Intl.DateTimeFormat(fr?'fr-CA':'en-GB',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
-    rows=feed.rows.slice(0,8).map(r=>{
+    rows=feed.slice(0,8).map(r=>{
       const game=covers.get(r.game),name=game.name[Number(fr)],payout=r.wager+r.amount;
       return [`<a class="hub-link feed-game" href="${href(base,fr,{q:name},'#games')}"><img loading="lazy" alt="" width="29" height="29" src="${escape(base)}/game-${game.id}.webp"><span>${escape(name)}<small class="feed-narrow">${escape(time.format(r.at))} UTC</small></span></a>`,
         escape(time.format(r.at)),money(r.wager,fr),(payout/r.wager).toLocaleString(fr?'fr-CA':'en-CA',{maximumFractionDigits:2})+'×',
@@ -100,19 +190,21 @@ export function eventMarkup(data,fr,base,tab='casino') {
   const fallback=!data.wins.length;
   const pause=l('Pause animations','Mettre les animations en pause');
   const arrow=(action,txt,symbol)=>`<button type="button" class="wire-control" data-wire="${action}" title="${txt}" aria-label="${txt}"><span aria-hidden="true">${symbol}</span></button>`;
-  const rail=`<div class="wire-head"><h2><span class="wire-dot" aria-hidden="true"></span>${l('Latest wins','Derniers gains')}</h2><span class="wire-source">${fallback?marker('casino',fr):l('Play money','Argent fictif')}</span><div class="wire-controls">${arrow('prev',l('Previous wins','Gains précédents'),'‹')}${arrow('pause',pause,'Ⅱ')}${arrow('next',l('Next wins','Gains suivants'),'›')}</div></div><div class="wins-track">${winCards(data,fr,base)}</div>`;
+  const rail=`<div class="wire-head"><h2><span class="wire-dot" aria-hidden="true"></span>${l('Latest wins','Derniers gains')}</h2><span class="wire-source">${fallback?marker('casino',fr):l('Played rounds · Play money','Parties jouées · Argent fictif')}</span><button type="button" data-wire="source" class="wire-source-switch" aria-pressed="false"${fallback?' hidden':''}>${l('Continuous demo','Démo en continu')}</button><div class="wire-controls">${arrow('prev',l('Previous wins','Gains précédents'),'‹')}${arrow('pause',pause,'Ⅱ')}${arrow('next',l('Next wins','Gains suivants'),'›')}</div></div><div class="wins-track">${winCards(data,fr,base)}</div>`;
   const lower=`<h2 id="events-title">${l('Races & raffles','Courses et tirages')}</h2><div class="event-cards">${cards(data,fr,base)}</div><p class="event-status" role="status"></p>
     <section id="activity-board" tabindex="-1" aria-labelledby="activity-title"><div class="activity-heading"><h2 id="activity-title">${l('Recent activity','Activité récente')}</h2><button type="button" class="wire-control" data-feed-motion title="${pause}" aria-label="${pause}"><span aria-hidden="true">Ⅱ</span></button><div class="feed-tabs">${tabs.map(k=>`<a data-event-tab="${k}" href="${href(base,fr,{feed:k},'#activity-board')}"${tab===k?' aria-current="true"':''}>${feedTitle(fr,k)}</a>`).join('')}</div></div><div class="feed-content">${feedTable(data,fr,tab,base)}</div></section>`;
   return {rail,lower};
 }
 
-export function createEventBoard({api,base,french,account,pending,signin,translate}) {
+export function createEventBoard({api,base,french,account,pending,signin,translate,ticketsChanged=()=>{}}) {
   const rail=document.getElementById('wins-wire'),lower=document.getElementById('lobby-events');
   if (!rail || !lower) return {sync(){},resume(){}};
   const seed=document.getElementById('lobby-event-model');
   let data=seed?JSON.parse(seed.textContent):null, owner=0, request=0, reading=false, joining=false, freshUntil=0;
   let tab=new URLSearchParams(location.search).get('feed')||'casino', renderedLocale=seed?document.documentElement.lang.slice(0,2):'',signature='',lastTab='',step=0;
   let paused=false, preference;
+  const stream=createWinStream(rail,api,french,base);
+  if(data)stream.seed(data);
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
   try {preference=sessionStorage.getItem('habibi-activity-motion');} catch {}
   paused=preference===null || preference===undefined ? reduced.matches : preference==='off';
@@ -141,15 +233,11 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
   function paint() {
     if (!data || !active()) return;
     const fr=french(),lang=fr?'fr':'en';
-    const next=JSON.stringify([lang,data.start,data.wins,data.rounds,data.race,data.raffle]);
+    const next=JSON.stringify([lang,data.start,data.rounds,data.race,data.raffle]);
     if (signature===next && lastTab===tab) return;
-    if (!rail.children.length || !lower.children.length || renderedLocale!==lang) {
+    if (!rail.querySelector('[data-wire="source"]') || !lower.children.length || renderedLocale!==lang) {
       const html=eventMarkup(data,fr,base,tab);rail.innerHTML=html.rail;lower.innerHTML=html.lower;
     } else if (signature!==next) {
-      const track=rail.querySelector('.wins-track'),horizontal=track.scrollLeft;
-      const wins=winCards(data,fr,base);
-      if (track.innerHTML!==wins && !track.contains(document.activeElement)) {track.innerHTML=wins;track.scrollLeft=horizontal;}
-      rail.querySelector('.wire-source').textContent=data.wins.length?pick(fr,'Play money','Argent fictif'):marker('casino',fr);
       const grid=lower.querySelector('.event-cards');
       const open=[...grid.querySelectorAll('details')].map(d=>d.open);
       const controls=[...grid.querySelectorAll('a,button,summary')],focused=controls.indexOf(document.activeElement);
@@ -157,7 +245,7 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
       grid.querySelectorAll('details').forEach((el,i)=>{el.open=Boolean(open[i]);});
       if(focused>=0)grid.querySelectorAll('a,button,summary')[focused]?.focus({preventScroll:true});
     }
-    signature=next;renderedLocale=lang;lastTab=tab;table();motion();
+    signature=next;renderedLocale=lang;lastTab=tab;table();motion();stream.render(paused);
   }
   function refreshTime() {
     if (!data) return;
@@ -166,7 +254,7 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
     if (now>=Math.min(data.end,data.today+day)) freshUntil=0;
   }
   let received=Date.now();
-  function accept(board) {data=board;received=Date.now();freshUntil=received+15_000;paint();refreshTime();}
+  function accept(board) {stream.seed(board);data=board;received=Date.now();freshUntil=received+15_000;paint();refreshTime();}
   async function sync(force=false) {
     const id=identity();
     if (id!==owner) {owner=id;request++;reading=false;joining=false;freshUntil=0;data=null;signature='';lower.replaceChildren();rail.replaceChildren();}
@@ -185,7 +273,7 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
     try {
       const result=await api('discovery/raffle',{day:data.today});
       if(version!==request || id!==identity())return;
-      accept(result.board);status.textContent=pick(french(),'Your free ticket is in the draw.','Votre billet gratuit est inscrit au tirage.');
+      accept(result.board);void ticketsChanged();status.textContent=pick(french(),'Your free ticket is in the draw.','Votre billet gratuit est inscrit au tirage.');
     } catch(e) {
       if(version!==request || id!==identity())return;
       status.textContent=translate(e.message);button.disabled=false;freshUntil=0;
@@ -206,6 +294,7 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
   rail.addEventListener('click',e=>{
     const button=e.target.closest('[data-wire]');if(!button)return;
     if(button.dataset.wire==='pause') toggleMotion();
+    else if(button.dataset.wire==='source')stream.switchSource(paused);
     else move(button.dataset.wire==='prev'?-1:1);
   });
   lower.addEventListener('click',e=>{
@@ -222,12 +311,15 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
   function resume(){void sync(true);const focus=lower.querySelector('[data-raffle-enter]')||lower;focus.focus({preventScroll:true});lower.scrollIntoView({block:'start'});}
   reduced.addEventListener('change', e=>{if(e.matches){paused=true;motion();}});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)void sync();});
+  const onscreen=el=>{const r=el.getBoundingClientRect();return r.height>0 && r.bottom>0 && r.top<innerHeight;};
+  window.setInterval(()=>{
+    if(document.hidden||!active()||!onscreen(rail))return;
+    void stream.poll();stream.render(paused);
+  },750);
   window.setInterval(()=>{
     if(document.hidden||!active())return;
     refreshTime();void sync();
     if(paused)return;
-    const onscreen=el=>{const r=el.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight;};
-    if(onscreen(rail)&&!rail.matches(':hover,:focus-within'))move(1,true);
     if((tab==='sports'||(tab==='casino'&&data&&!data.rounds.length))&&onscreen(lower)&&!lower.matches(':hover,:focus-within')){step++;table();}
   },3000);
   return {sync,resume};

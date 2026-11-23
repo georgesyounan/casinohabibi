@@ -13,6 +13,7 @@ import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
+import {createGiftMenu, giftLabel} from './gift-menu.js';
 import { createEventBoard } from './lobby-events.js';
 import { createClubHome } from './player-club.js';
 import { discoveryCopy, createDiscoveryPlayer } from './discovery.js';
@@ -37,6 +38,8 @@ const copy = {
   club_daily_settings:['Daily demo bonus updated','Bonus quotidien démo modifié'],
   dailyDemoBonus:['Daily demo bonus','Bonus quotidien démo'],
   weeklyDrawPrize:['Weekly raffle prize','Prix du tirage hebdomadaire'],
+  giftAccountChanged:['The active account has changed.','Le compte actif a changé.'],
+  giftUnavailable:['This reward is currently unavailable.','Cette récompense est indisponible pour le moment.'],
   clubDayChanged:['A new daily bonus is available. Refresh and claim it.','Un nouveau bonus quotidien est disponible. Actualisez pour le réclamer.'],
   supportLinkedRef: ['Related reference (optional)', 'Référence liée (facultative)'],
   ...dashboardCopy,
@@ -496,7 +499,9 @@ function element(tag, value, className) {
 
 function clubCreditLabel(raw) {
   try {
-    const type=JSON.parse(raw)?.type;
+    const details=JSON.parse(raw),type=details?.type;
+    if(type==='club_gift')return giftLabel(details.key,Boolean(language));
+    if(type==='club_free_spin')return language?'Tour gratuit · Ruée vers l’or':'Free spin · Gold Rush';
     if(type==='club_daily') return t('dailyDemoBonus');
     if(type==='club_raffle') return t('weeklyDrawPrize');
   } catch {}
@@ -904,7 +909,7 @@ function historyEntryElement(entry, showSupport = true) {
   const outcome = summary ? ` · ${t('roundResult')}: ${summary}` : '';
   const row = element('li');
   const ref = 'round-' + entry.id;
-  row.append(element('strong', roundTitle(entry)), element('span', date + ' · ' + t('wager') + ' ' + money(entry.wager) +
+  row.append(element('strong', clubCreditLabel(entry.outcome) || roundTitle(entry)), element('span', date + ' · ' + t('wager') + ' ' + money(entry.wager) +
     ' · ' + t('balanceChange') + ' ' + change + outcome), element('small', ref, 'round-reference'));
   if (showSupport) {
     const help = action(t('roundSupport'), () => openSupportCenter(ref), 'round-support-link');
@@ -995,6 +1000,7 @@ let supportTicket;
 let supportRequest=0;
 let afterSignIn;
 let requestedClubTab;
+let requestedGift;
 function openClub(tab,questId) {
   clearDemoSelection();
   if (player) {
@@ -1099,7 +1105,11 @@ async function resumePlayerEntry(access) {
   const clean=new URL(location.href);
   clean.searchParams.delete('access');history.replaceState(history.state,'',clean);
   if (['signup','signin'].includes(access)) {
-    if(clean.searchParams.get('event')==='raffle'){
+    const gift=clean.searchParams.get('gift');
+    if(giftLabel(gift,false)){
+      if(player){giftMenu.open(gift);return;}
+      clearDemoSelection();afterSignIn='gifts';requestedGift=gift;
+    } else if(clean.searchParams.get('event')==='raffle'){
       if(player){eventBoard.resume();return;}
       clearDemoSelection();afterSignIn='raffle';
     }
@@ -1123,7 +1133,8 @@ async function resumePlayerEntry(access) {
           return;
         }
       }
-      if (['discovery','support','clubHome','raffle'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
+      if (['discovery','support','clubHome','raffle','gifts'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
+      if(giftLabel(saved.requestedGift,false))requestedGift=saved.requestedGift;
       if (typeof saved.requestedClubTab==='string') requestedClubTab=saved.requestedClubTab;
     } catch {}
     sessionStorage.removeItem('habibi-auth-destination');
@@ -1158,11 +1169,13 @@ async function finishPlayerSignIn(auth, openDestination=true) {
       return;
     }
   }
-  const pendingClubSection=requestedClubTab;
+  const pendingClubSection=requestedClubTab, pendingGift=requestedGift;
+  requestedGift=undefined;
   clearPendingDemo();
   afterSignIn = undefined;
   requestedClubTab = undefined;
   if (target === 'clubHome') { $('#dialog').close(); clubHome.select(pendingClubSection); }
+  else if (target === 'gifts') { $('#dialog').close();requestAnimationFrame(()=>giftMenu.open(pendingGift)); }
   else if (target === 'raffle') { $('#dialog').close();eventBoard.resume(); }
   else if (target === 'support') openSupportCenter(); else openPanel(target);
 }
@@ -1172,7 +1185,7 @@ const playerLoginUi=createPlayerSignInUi({
   policy:()=>tenantPolicyLinks[language?'termsUrlFr':'termsUrlEn'] || tenantPolicyLinks.termsUrlEn || tenantPolicyLinks.termsUrlFr,
   saveIntent(){
     const view=new URL(location.href);view.searchParams.delete('access');
-    sessionStorage.setItem('habibi-auth-destination',JSON.stringify({afterSignIn,requestedClubTab,page:view.pathname+view.search+view.hash}));
+    sessionStorage.setItem('habibi-auth-destination',JSON.stringify({afterSignIn,requestedClubTab,requestedGift,page:view.pathname+view.search+view.hash}));
   }
 });
 function renderDialog() {
@@ -2044,6 +2057,7 @@ function renderCatalog() {
   renderFinderMatches();
   if (!accountPending) void clubHome.sync();
   void eventBoard.sync();
+  void giftMenu.sync();
 }
 
 let providerStatus;
@@ -2078,9 +2092,19 @@ const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
 const clubHome = createClubHome({
   root:$('#player-club'),api,base:appBasePath,french:()=>Boolean(language),account:()=>player,accountPending:()=>accountPending,translate:t,openClub,openGame:startDemo,
   signIn(section){clearDemoSelection();requestedClubTab=section;afterSignIn='clubHome';openPanel('signin');},
-  updateAccount(fresh){player=fresh;updateAccount();}
+  updateAccount(fresh){player=fresh;updateAccount();void giftMenu.sync(true);}
 });
-const eventBoard=createEventBoard({api,base:appBasePath,french:()=>Boolean(language),account:()=>player,pending:()=>accountPending,translate:t,
+const giftMenu=createGiftMenu({api,base:appBasePath,french:()=>Boolean(language),account:()=>player,pending:()=>accountPending,translate:t,
+  signin(key){clearDemoSelection();afterSignIn='gifts';requestedGift=key;openPanel('signin');},
+  async refreshIdentity(expected){
+    const fresh=await api('account',undefined,'GET');
+    if((player?.id||0)!==expected)return;
+    if(fresh){await finishPlayerSignIn(fresh,false);return;}
+    player=null;playerSessionStartedAt=undefined;restoreGuestFavorites();render();
+  },
+  update(fresh){player=fresh;updateAccount();void clubHome.sync(true);}
+});
+const eventBoard=createEventBoard({api,base:appBasePath,ticketsChanged:()=>giftMenu.sync(true),french:()=>Boolean(language),account:()=>player,pending:()=>accountPending,translate:t,
   signin(){clearDemoSelection();afterSignIn='raffle';openPanel('signin');}});
 const lobbySections = createLobbySections({
   french: () => Boolean(language), appPath, catalogue: comingSoonUi, providers: () => providerGames,
@@ -2093,6 +2117,7 @@ const lobbySections = createLobbySections({
   retryEdition: () => void refreshEdition(),
   onNavigate(url) {
     if (headerFinder) headerFinder.open = false;
+    giftMenu.close();
     const params = url.searchParams;
     const category = params.get('category');
     filter = ['slots', 'table', 'live', 'favorites', 'recent'].includes(category) ? category : 'all';
@@ -2217,7 +2242,6 @@ function render() {
       control.title = t(key);
       control.setAttribute('aria-label', t(key));
     }
-    gifts.href = lobbySections.homeUrl({view:'promotions', club:'daily'}, '#player-club');
     $('#header-support').href = lobbySections.homeUrl({support:'1'});
   }
   $('#home-search').dataset.compact = t('searchCompact');
