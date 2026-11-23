@@ -12,7 +12,7 @@ export function rotationButton(fr) {
   return `<button type="button" class="rotation-toggle" data-banner-toggle aria-label="${label}" title="${label}" aria-pressed="false"><span aria-hidden="true"></span></button>`;
 }
 
-export function createRotation(advance, french, dwell = 6500) {
+export function createRotation(advance, french, dwell = 3800) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let banner, timer, inView = false, hovered = false, touching = false;
   const observer = new IntersectionObserver(entries => {
@@ -87,7 +87,10 @@ const themes = [
     action:['Explore slots','Voir les machines'], query:'&amp;category=slots#games'},
   {id:'match', names:['Match night','Soir de match'], tag:['Sports demo','Sports en démo'],
     detail:['Follow the simulated scores and build your practice slip.','Suis les scores simulés et compose ton coupon démo.'],
-    action:['Open sports','Ouvrir les sports'], query:'&amp;view=sports'}
+    action:['Open sports','Ouvrir les sports'], query:'&amp;view=sports'},
+  {id:'club', names:['Club Habibi','Club Habibi'], tag:['Player rewards','Récompenses des joueurs'],
+    detail:['Explore this week’s league and collect rewards by completing quests.','Découvrez la ligue de la semaine et gagnez des récompenses en terminant vos quêtes.'],
+    action:['Explore the club','Explorer le club'], query:'&amp;view=promotions&amp;club=quests#player-club'}
 ];
 export function homeCampaignExtras(fr, base) {
   const lang = Number(fr);
@@ -119,7 +122,7 @@ export function createHomeCampaign(root, french, base) {
     if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
     if (!event.target.closest('.campaign-controls')) return;
     event.preventDefault();
-    select(event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowLeft' ? 2 : 1)) % 3);
+    select(event.key === 'Home' ? 0 : event.key === 'End' ? themes.length-1 : (index + (event.key === 'ArrowLeft' ? themes.length-1 : 1)) % themes.length);
     root.querySelector('[data-campaign-select="'+index+'"]').focus({preventScroll:true});
   });
   let touch;
@@ -127,7 +130,7 @@ export function createHomeCampaign(root, french, base) {
   root.addEventListener('touchend',e => {
     if (touch && e.changedTouches.length) {
       const dx=e.changedTouches[0].clientX-touch[0],dy=e.changedTouches[0].clientY-touch[1];
-      if (Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.6) select((index+(dx<0?1:2))%3);
+      if (Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.6) select((index+(dx<0?1:themes.length-1))%themes.length);
     }
     touch=null;
   },{passive:true});

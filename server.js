@@ -25,6 +25,7 @@ import { changedFields, createStaffAudit } from './lib/staff-audit.js';
 import { createDiscoveryNavigation } from './lib/discovery-navigation.js';
 import { collectionKey } from './public/catalog.js';
 import { createSupportCases } from './lib/support-cases.js';
+import { createPlayerClub } from './lib/player-club.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
@@ -292,7 +293,9 @@ if (!db.prepare('PRAGMA table_info(ledger)').all().some(({ name }) => name === '
 db.exec('CREATE INDEX IF NOT EXISTS ledger_tenant_activity ON ledger(tenant_id, created_at, player)');
 installComingSoon(db);
 const accountBreaks = createAccountBreaks(db, { fail, transaction });
-const savedTitles = createSavedTitles(db, { fail, transaction, onSave(tenant,player,titleId,activity,now) {
+const savedTitles = createSavedTitles(db, { fail, transaction,
+  onHouseSave(tenant,player,key,now) { rewards.observe(tenant,player,'houseSave',key,key,now); },
+  onSave(tenant,player,titleId,activity,now) {
   const slug = db.prepare('SELECT slug FROM coming_soon_titles WHERE tenant_id=? AND id=?').get(tenant,titleId)?.slug;
   const title = slug && comingSoon.published(tenant,slug,catalogueAudience(tenant));
   if (title) {
@@ -320,11 +323,19 @@ const publicationFollowup = createPublicationFollowup(db, { transaction, fail })
 const publicCatalogueFrom = 'FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1';
 const publicProviderCount = db.prepare('SELECT count(*) AS total ' + publicCatalogueFrom);
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath,
-  providerCount: tenant => publicProviderCount.get(tenant).total });
+  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => playerClub.home(tenant,null,locale) });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
-transaction(()=>{for(const {id} of db.prepare('SELECT id FROM tenants').all()) rewards.seed(id);});
+const clubEnabled = tenant => lobbyPresentation(tenant).config.brandName.trim().toLowerCase()==='casino habibi';
+const playerClub=transaction(()=>createPlayerClub(db,{rewards,accountBreaks,fail,audit:staffAudit.record,
+  previewCount:(tenant,locale)=>comingSoonEnabled(tenant)?comingSoon.keys(tenant,catalogueAudience(tenant,locale)).length:0}));
+transaction(()=>{
+  for(const {id} of db.prepare('SELECT id FROM tenants').all()) {
+    rewards.seed(id);
+    if(clubEnabled(id)) rewards.seedClub(id);
+  }
+});
 const communications = createCommunications(db,{fail,transaction,accountBreaks,audit:staffAudit.record,mailEnabled,
   zoneFor: tenant=>publishedTenantConfig(tenant).config.reportingTimeZone || 'UTC', validDestination:campaignPath,
   send: async d=>{
@@ -1031,7 +1042,13 @@ async function api(req, res, path, tenantId, requestId) {
     const config=publishedTenantConfig(tenantId).config;
     const editorial=websiteContent.adminList(tenantId,config);
     const previews=enabled?comingSoon.previewOptions(tenantId,catalogueAudience(tenantId)):[];
-    return {items,enabled,threeSaveQuest,previewCount:previews.length,previews,collections:editorial.collections,guides:editorial.targets.filter(x=>x.key.startsWith('help/'))};
+    return {items,enabled,threeSaveQuest,daily:clubEnabled(tenantId)?playerClub.settings(tenantId):null,previewCount:previews.length,previews,collections:editorial.collections,guides:editorial.targets.filter(x=>x.key.startsWith('help/'))};
+  }
+  if (route==='POST /api/admin/discovery/daily') {
+    staffContext(req,tenantId,websiteRoles);
+    if(!clubEnabled(tenantId)) fail(404,'discoveryMissing');
+    const input=await body(req);
+    return auditedChange(websiteRoles,input,actor=>playerClub.configure(tenantId,actor.id,requestId,input),'publishWebsite');
   }
   if (route==='GET /api/admin/discovery/campaigns') {
     staffContext(req,tenantId,websiteRoles);
@@ -1067,6 +1084,21 @@ async function api(req, res, path, tenantId, requestId) {
   if (route==='GET /api/admin/discovery/report') {
     staffContext(req,tenantId,supportRoles);
     return transaction(()=>engagementReport(db,dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,Date.now()),params,fail),{readOnly:true});
+  }
+  if (route==='GET /api/discovery/club' || route==='GET /api/discovery/standings') {
+    if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
+    return transaction(()=>path.endsWith('/standings') ? playerClub.standings(tenantId,player) :
+      playerClub.home(tenantId,player,catalogueLocale),{readOnly:true});
+  }
+  if (route==='POST /api/discovery/daily') {
+    if (!player) fail(401,'signin');
+    if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
+    const input=await body(req);
+    return transaction(()=>{
+      req.assertPlayerSession();
+      const result=playerClub.claim(tenantId,player,input.day,input.expectedAmount);
+      return {...result,account:account(player,tenantId),club:playerClub.home(tenantId,player,catalogueLocale)};
+    });
   }
   if (route==='GET /api/discovery/inbox') {
     if (!player) fail(401,'signin');
@@ -1489,6 +1521,7 @@ async function api(req, res, path, tenantId, requestId) {
           const config = { ...defaultTenantConfig, brandName: name.trim() };
           db.prepare("INSERT INTO tenant_config_versions(tenant_id, version, config, status, created_at) VALUES (?, 1, ?, 'published', ?)").run(id, JSON.stringify(config), Date.now());
           rewards.seed(id);
+          if(clubEnabled(id)) rewards.seedClub(id);
         db.prepare("INSERT INTO platform_events(tenant_id, action, target, created_at, correlation_id) VALUES (?, 'tenant_created', ?, ?, ?)").run(id, slug, Date.now(), requestId);
         });
       } catch (error) {
@@ -1590,6 +1623,7 @@ async function api(req, res, path, tenantId, requestId) {
         const config = { ...defaultBrandOptions, ...JSON.parse(draft.config) };
         db.prepare("UPDATE tenant_config_versions SET status = 'published' WHERE tenant_id = ? AND version = ?").run(tenantId, draft.version);
         db.prepare('UPDATE tenants SET name = ? WHERE id = ?').run(config.brandName, tenantId);
+        if(clubEnabled(tenantId)) rewards.seedClub(tenantId);
         const auditId = staffAudit.record(tenantId, staff.id, 'tenant_config_published', String(draft.version), requestId, {
           recordId: tenantId, revision: draft.version, fields: changedFields(published.config, config), previousStatus: 'draft', status: 'published'
         });
@@ -2321,6 +2355,7 @@ const assets = {
   '/sports-nav.png': ['sports-nav.png', 'image/png'],
   '/campaign-casino.webp': ['campaign-casino.webp', 'image/webp'],
   '/campaign-match.webp': ['campaign-match.webp', 'image/webp'],
+  '/club-gift.webp': ['club-gift.webp','image/webp'],
   '/campaign-reels.webp': ['campaign-reels.webp', 'image/webp'],
   '/sports-data.js': ['sports-data.js', 'text/javascript'],
   '/sports-discovery.js': ['sports-discovery.js', 'text/javascript'],
@@ -2338,6 +2373,7 @@ const assets = {
   '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/contact-views.js': ['contact-views.js','text/javascript'],
+  '/player-club.js': ['player-club.js', 'text/javascript'],
   '/discovery.js': ['discovery.js', 'text/javascript'],
   '/discovery-admin.js': ['discovery-admin.js', 'text/javascript'],
   '/account-break.js': ['account-break.js', 'text/javascript'],

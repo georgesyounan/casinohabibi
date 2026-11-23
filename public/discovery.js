@@ -1,3 +1,14 @@
+export const questTasks=l=>({Q01:l('Save three different catalogue previews to your favorites.','Ajoutez trois fiches de la section « Aperçus et démos » à vos favoris.'),
+    Q02:l('Read the guide, then save a preview from its collection.','Lisez le guide, puis ajoutez une fiche de sa collection aux favoris.'),
+    Q03:l('Acknowledge the guide and open your saved shelf.','Confirmez la lecture du guide et ouvrez vos favoris.'),
+    Q04:l('Open three different catalogue previews.','Ouvrez trois fiches différentes dans « Aperçus et démos ».'),
+    Q05:l('Vote on an editorial theme, then view its result.','Votez sur un thème éditorial et consultez le résultat.'),
+    Q06:l('Visit both seasonal collections and read their recap.','Visitez les deux collections saisonnières et consultez le bilan.'),
+    Q07:l('Join a shared list and contribute a preview.','Rejoignez une liste partagée et ajoutez une fiche.'),
+    Q08:l('Open one of your saved activities and acknowledge its reference.','Ouvrez une activité de vos favoris et confirmez sa référence.'),
+    Q10:l('Save two different house games to your favorites.','Ajoutez deux jeux maison différents à vos favoris.'),
+    Q09:l('Open both previews in the featured pair.','Ouvrez les deux fiches du duo sélectionné.')});
+
 import { createContactList } from './contact-views.js';
 export const discoveryCopy={
   discovery:['Discovery & rewards','Découverte et récompenses'],discoveryAdmin:['Quests & rewards','Quêtes et récompenses'],
@@ -59,15 +70,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
     soldOut:l('All items claimed','Stock épuisé'),paused:l('Account break','Compte en pause')});
   const names=()=>({collections:l('Collections','Collections'),rewards:l('Rewards','Récompenses'),announcements:l('Site news','Nouvelles du site')});
   const slots=()=>({badge:l('Badge','Badge'),theme:l('Theme','Thème'),frame:l('Frame','Cadre')});
-  const tasks=()=>({Q01:l('Save three different Coming Soon previews.','Ajoutez trois fiches « À venir » différentes à vos favoris.'),
-    Q02:l('Read the guide, then save a preview from its collection.','Lisez le guide, puis ajoutez une fiche de sa collection aux favoris.'),
-    Q03:l('Acknowledge the guide and open your saved shelf.','Confirmez la lecture du guide et ouvrez vos favoris.'),
-    Q04:l('Open three different Coming Soon previews.','Ouvrez trois fiches « À venir » différentes.'),
-    Q05:l('Vote on an editorial theme, then view its result.','Votez sur un thème éditorial et consultez le résultat.'),
-    Q06:l('Visit both seasonal collections and read their recap.','Visitez les deux collections saisonnières et consultez le bilan.'),
-    Q07:l('Join a shared list and contribute a preview.','Rejoignez une liste partagée et ajoutez une fiche.'),
-    Q08:l('Open one of your saved activities and acknowledge its reference.','Ouvrez une activité de vos favoris et confirmez sa référence.'),
-    Q09:l('Open both previews in the featured pair.','Ouvrez les deux fiches du duo sélectionné.')});
+  const tasks=()=>questTasks(l);
   function cosmetic(s){const n=el('span',local(s,'item'),'cosmetic cosmetic-'+s.color+' cosmetic-'+s.slot);n.title=slots()[s.slot];return n;}
   function switchPlayer(playerId) {
     if(playerId!==activePlayer){
@@ -150,7 +153,7 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
             if(item.previews.length<2)card.append(el('p',l('The full pair is currently unavailable in this language.','Le duo complet est actuellement indisponible dans cette langue.')));
           }
           else if(item.catalogue){
-            if(item.catalogue.remaining)card.append(link(l('See Coming Soon previews','Voir les fiches à venir'),'/?lang='+(french()?'fr':'en')+'#coming-soon'));
+            if(item.catalogue.remaining)card.append(link(l('Browse previews','Voir les aperçus'),'/?lang='+(french()?'fr':'en')+'#coming-soon'));
           }else card.append(link(l('Browse catalogue','Voir le catalogue'),'/'+'#games'));
         }
         if(award)card.append(el('small',l('Completion','Quête terminée')+' · grant-'+award.grantId+' · '+date(award.grantedAt)));
@@ -261,5 +264,5 @@ export function createDiscoveryPlayer({api,t,french,appPath,openSupport,extensio
       body.append(section);
     }
   }
-  return {render,openTab(k,playerId){if(playerId!==undefined)switchPlayer(playerId);selected=k;}};
+  return {render,openTab(k,playerId,questId){if(playerId!==undefined)switchPlayer(playerId);selected=k;if(questId)focusQuest=questId;}};
 }
