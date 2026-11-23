@@ -21,7 +21,7 @@
   <a data-home-view="sports" href="/?view=sports"><i class="ui-icon ico-active" aria-hidden="true"></i>Sports</a>
   <button id="home-menu" type="button" aria-controls="home-navigation" aria-expanded="false"><i class="ui-icon ico-listing" aria-hidden="true"></i>Menu</button>
 </nav>
-<form class="home-search" id="home-search" role="search"><label class="home-sr" for="game-search" data-copy="searchGames"></label><i class="ui-icon ico-search" aria-hidden="true"></i><input id="game-search" type="search" maxlength="120" autocomplete="off"><kbd aria-hidden="true">/</kbd></form></div>
+<!-- player-tools:start --><form class="home-search" id="home-search" role="search"><label class="home-sr" for="game-search" data-copy="searchGames"></label><i class="ui-icon ico-search" aria-hidden="true"></i><input id="game-search" type="search" maxlength="120" autocomplete="off"><kbd aria-hidden="true">/</kbd></form><!-- player-tools:end --></div>
 <nav aria-label="Navigation"><a href="/#games" data-copy="lobby"></a><a href="/#play-safely" data-copy="playSafely"></a><a href="/admin" data-copy="admin"></a></nav>
 <div class="actions"><a id="admin-view-lobby" href="/" data-copy="adminViewLobby" hidden></a><button id="language" class="ghost" type="button"></button><button id="account" type="button" data-copy="signin"></button><button id="join-home" type="button" data-copy="joinHome" hidden></button></div>
 </div></header>
@@ -71,6 +71,7 @@
     <div class="spotlight-nav" hidden><button type="button" id="spotlight-prev" data-copy="homePrev" class="spotlight-prev" aria-label="Previous featured game"></button><button type="button" id="spotlight-next" data-copy="homeNext" aria-label="Next featured game"></button></div>
   </section>
 </div>
+<!-- wins-wire -->
 <nav class="home-shortcuts" aria-label="Casino">
   <a data-home-view="new" href="/?view=new"><i class="ui-icon ico-active" aria-hidden="true"></i><span data-copy="newHome"></span></a>
   <a data-home-view="promotions" href="/?view=promotions"><i class="ui-icon ico-engagement" aria-hidden="true"></i><span data-copy="promoHome"></span></a>
@@ -104,6 +105,7 @@
   <section class="catalog-group" id="home-providers" aria-labelledby="home-providers-title" hidden><h3 id="home-providers-title" data-copy="homeProviders"></h3><div class="cards"></div></section>
 </div><nav id="provider-pages" class="case-pager" hidden><button type="button" id="provider-prev" class="ghost" data-copy="playerPrevious"></button><span id="provider-page-label" role="status"></span><button type="button" id="provider-next" class="ghost" data-copy="playerNext"></button></nav>
 </section>
+<!-- lobby-events -->
 <div class="lobby-help">
   <section id="play-safely" class="home-safety"><i class="ui-icon ico-security" aria-hidden="true"></i><div><h2 data-copy="homeSafer"></h2><p data-copy="homeSafetyIntro"></p><button id="safety-controls" type="button" data-copy="safetyCta"></button></div></section>
   <section id="faq" class="faq-section"><h2 data-copy="faqTitle"></h2><div id="faq-list" class="faq-list"></div><ul id="site-help-links" class="site-help-links" hidden></ul></section>
