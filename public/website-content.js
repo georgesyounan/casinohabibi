@@ -1,6 +1,7 @@
 import { guideAddress, guidePath, searchSnippet, guideSuffix as suffix, guideField, spanishGuide } from './guide-metadata.js';
 
 export const websiteContentCopy = {
+  pageLayout: ['Page layout and themes','Mise en page et thèmes'],
   siteContentTab: ['Banner and guides', 'Bannière et guides'],
   siteBanner: ['Lobby banner', 'Bannière du hall'],
   siteHelpPage: ['Guide or help page', 'Guide ou page d’aide'],

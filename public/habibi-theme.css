@@ -592,3 +592,14 @@ body.player-home #lobby[data-club-promotions] .lobby-content > #gift-catalogue {
 .wire-source-switch { padding: 3px 7px; min-height: 30px; color: #c7e7ff; background: #1d344f; border: 1px solid #3d5877; border-radius: 7px; font-size: .72rem; }
 
 #scheduled-shelf .shelf-art{width:100%;max-height:180px;object-fit:cover;border-radius:.8rem}#scheduled-shelf>button{margin:.3rem 0 1rem}
+
+.round-proof{width:100%;font-size:.88rem}.round-proof summary{cursor:pointer;color:#99d8ff}.round-proof code{display:block;overflow-wrap:anywhere;margin:.2rem 0 .6rem}
+
+.published-blocks{--block-bg:#142641;--block-fg:#f5f9ff;box-sizing:border-box;display:grid;gap:1rem;min-width:0;margin:1rem 0;padding:clamp(1rem,3vw,2.5rem);border-radius:18px;background:var(--block-bg);color:var(--block-fg);overflow-wrap:anywhere}
+.published-blocks.theme-midnight{--block-bg:#12182f;--block-fg:#e4eaff}.published-blocks.theme-ice{--block-bg:#e7f4ff;--block-fg:#142b41}
+.published-blocks.font-editorial{font-family:Georgia,serif}.published-blocks.font-compact{font-family:'Arial Narrow',Arial,sans-serif}
+.published-blocks :is(h2,h3,p,figure){margin:0;color:inherit}.published-blocks p{white-space:pre-line}.published-blocks .button{justify-self:start}
+.published-blocks figure img,.published-blocks video{display:block;width:100%;max-height:26rem;object-fit:cover;border-radius:12px}
+.block-slides{display:flex;overflow:auto;gap:.8rem;scroll-snap-type:x mandatory}.block-slides img{width:min(85%,34rem);flex:none;aspect-ratio:2/1;object-fit:cover;scroll-snap-align:start;border-radius:10px}.block-space-s{height:.5rem}.block-space-m{height:1.5rem}.block-space-l{height:3rem}
+.layout-options{display:flex;gap:.65rem;flex-wrap:wrap;align-items:end;margin:.8rem 0}.layout-options label{flex:1 1 11rem;min-width:0}.layout-options select,.layout-options textarea{width:100%}
+#page-layout-editor{min-width:0}.layout-preview-scroll{overflow:auto;width:100%;max-width:100%;border:1px solid #6086ab}.layout-preview-scroll [data-preview-width="390"]{width:390px}.layout-preview-scroll [data-preview-width="768"]{width:768px}.layout-preview-scroll [data-preview-width="1024"]{width:1024px}.layout-preview-scroll [data-preview-width="1440"]{width:1440px}.layout-preview-scroll .published-blocks{margin:0}
