@@ -104,6 +104,33 @@ async function register(request) {
   assert.equal((await request('login', playerCredentials)).data.balance, 10000);
 }
 
+test('the mounted lobby renders its brand and artwork and respects a newly published identity', async (t) => {
+  const mount = '/casinohabibi';
+  const { base } = await startSandbox(t, { appBasePath: mount });
+  const url = base + mount;
+  const request = client(url);
+  const first = await (await fetch(url + '/?lang=fr')).text();
+  assert.match(first, /<title>Casino Habibi<\/title>/);
+  assert.match(first, /<h1 data-copy="headline">Votre place à la table\.<\/h1>/);
+  for (const file of ['lobby.css', 'lobby-coast.webp', 'game-gold.webp', 'game-roulette.webp', 'game-blackjack.webp', 'game-aurora.webp']) {
+    const asset = await fetch(url + '/' + file);
+    assert.equal(asset.status, 200, file);
+    assert.match(asset.headers.get('content-type'), file.endsWith('.webp') ? /image\/webp/ : /text\/css/);
+    assert.ok((await asset.arrayBuffer()).byteLength > 1000, file);
+  }
+  assert.equal((await request('admin/login', staffCredentials)).status, 200);
+  const initial = (await request('admin/config')).data;
+  assert.equal(initial.config.brandName, 'Casino Habibi');
+  const config = { ...initial.config, brandName: 'Table & Coast', heroTitleFr: 'Une table <ouverte>' };
+  const draft = await request('admin/config', { version: initial.version, config });
+  assert.equal(draft.status, 200);
+  assert.equal((await request('admin/config/publish', { version: draft.data.version })).status, 200);
+  assert.equal((await request('tenant')).data.config.brandName, 'Table & Coast');
+  const updated = await (await fetch(url + '/?lang=fr')).text();
+  assert.match(updated, /<title>Casino Table &amp; Coast<\/title>/);
+  assert.match(updated, /<h1 data-copy="headline">Une table &lt;ouverte&gt;<\/h1>/);
+});
+
 test('player and provider sandbox flows', async (t) => {
   const { base, database } = await startSandbox(t);
   const request = client(base);
