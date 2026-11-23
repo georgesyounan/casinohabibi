@@ -1,4 +1,5 @@
 import { uiKit } from './discovery.js';
+import { shareLink } from './referral-views.js';
 
 export const shelfCopy = {
   opShelves: ['Scheduled shelves', 'Sélections planifiées'],
@@ -357,4 +358,336 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
     }
   }
   return { load, clear };
+}
+
+// Public destinations share the catalogue, campaign, guide and account data already loaded for the lobby.
+export function createLobbySections({
+  french,
+  appPath,
+  catalogue,
+  providers,
+  house,
+  account,
+  club,
+  support,
+  roundTitle,
+  money
+}) {
+  const ui = uiKit(french);
+  const { el, l, button } = ui;
+  const lobby = document.getElementById('lobby');
+  const panel = document.getElementById('hub-content');
+  const menu = document.getElementById('home-menu');
+  const offers = document.getElementById('campaign-placement');
+  const help = document.querySelector('.faq-section');
+  const views = {
+    sports: ['Sports demo', 'Sports en démo'],
+    new: ['New releases', 'Nouveautés'],
+    studios: ['Studios & providers', 'Studios et fournisseurs'],
+    promotions: ['Promotions', 'Promotions'],
+    invite: ['Invite a friend', 'Inviter un ami'],
+    activity: ['Game activity', 'Activité des jeux'],
+    help: ['Guides & support', 'Guides et assistance']
+  };
+  const wanted = new URLSearchParams(location.search).get('view');
+  const view = Object.hasOwn(views, wanted) ? wanted : '';
+  const local = (pair) => l(...pair);
+  const enabled = () =>
+    document.body.classList.contains('player-home') && document.body.dataset.lobbyBrand === 'habibi';
+  const href = (params = {}, hash = '') =>
+    appPath('/?') + new URLSearchParams({ lang: l('en', 'fr'), ...params }) + hash;
+  let sport = 'football',
+    period = 7,
+    ticketSaved = false;
+  const picks = new Map();
+  function closeMenu() {
+    lobby.removeAttribute('data-menu-open');
+    menu.setAttribute('aria-expanded', 'false');
+  }
+  menu.addEventListener('click', () =>
+    menu.setAttribute('aria-expanded', String(lobby.toggleAttribute('data-menu-open')))
+  );
+  lobby.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && lobby.hasAttribute('data-menu-open')) {
+      closeMenu();
+      menu.focus();
+    }
+  });
+  function link(text, url) {
+    const a = el('a', text, 'hub-link');
+    a.href = url;
+    return a;
+  }
+  function note(text) {
+    return el('p', text, 'hub-note');
+  }
+  function box() {
+    return el('article', '', 'hub-card');
+  }
+  function control(label, run, id) {
+    const b = button(label, run, true);
+    b.dataset.hubControl = id;
+    return b;
+  }
+  function options(items, active, change) {
+    const nav = el('div', '', 'hub-choices');
+    for (const [id, label] of items) {
+      const b = control(
+        label,
+        () => {
+          change(id);
+          render();
+        },
+        String(id)
+      );
+      b.setAttribute('aria-pressed', String(id === active));
+      nav.append(b);
+    }
+    return nav;
+  }
+  const matches = [
+    { id: 'marina', sport: 'football', teams: ['Marina FC', 'Atlas 04'], odds: [2.15, 3.2, 2.7] },
+    { id: 'union', sport: 'football', teams: ['Union Nord', 'Rivage SC'], odds: [2.45, 3.1, 2.3] },
+    { id: 'comets', sport: 'basketball', teams: ['Metro Comets', 'Port Waves'], odds: [1.78, 2.05] },
+    { id: 'bears', sport: 'basketball', teams: ['North Bears', 'City Sparks'], odds: [1.92, 1.86] }
+  ];
+  function outcome(match, i) {
+    if (match.odds.length === 3 && i === 1) return l('Draw', 'Nul');
+    return match.teams[i === 0 ? 0 : 1];
+  }
+  function sportsPage() {
+    panel.append(
+      note(
+        l(
+          'Fictional fixtures and odds. Build a practice slip without using your balance.',
+          'Matchs et cotes fictifs. Composez un coupon d’entraînement sans utiliser votre solde.'
+        )
+      )
+    );
+    panel.append(
+      options(
+        [
+          ['football', l('Soccer', 'Soccer')],
+          ['basketball', l('Basketball', 'Basketball')]
+        ],
+        sport,
+        (id) => {
+          sport = id;
+        }
+      )
+    );
+    const layout = el('div', '', 'hub-sports'),
+      grid = el('div', '', 'hub-list'),
+      slip = box();
+    const decimal = new Intl.NumberFormat(l('en-CA', 'fr-CA'), {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    for (const m of matches.filter((item) => item.sport === sport)) {
+      const card = box(),
+        markets = el('div', '', 'hub-markets');
+      card.append(el('h2', m.teams.join('  /  ')), note(l('Match result', 'Résultat du match')));
+      m.odds.forEach((odd, i) => {
+        const b = control(
+          '',
+          () => {
+            ticketSaved = false;
+            if (picks.get(m.id) === i) picks.delete(m.id);
+            else picks.set(m.id, i);
+            render();
+          },
+          m.id + '-' + i
+        );
+        b.append(el('span', outcome(m, i)), el('strong', decimal.format(odd)));
+        b.setAttribute('aria-pressed', String(picks.get(m.id) === i));
+        markets.append(b);
+      });
+      card.append(markets);
+      grid.append(card);
+    }
+    slip.append(el('h2', l('Practice slip', 'Coupon démo')));
+    if (!picks.size)
+      slip.append(note(l('Select a price to add a pick.', 'Sélectionnez une cote pour ajouter un choix.')));
+    for (const [id, i] of picks) {
+      const m = matches.find((item) => item.id === id),
+        line = el('div', '', 'hub-slip-line');
+      const remove = control(
+        '×',
+        () => {
+          picks.delete(id);
+          ticketSaved = false;
+          render();
+        },
+        'remove-' + id
+      );
+      remove.setAttribute('aria-label', l('Remove ', 'Retirer ') + outcome(m, i));
+      line.append(el('span', outcome(m, i) + ' · ' + decimal.format(m.odds[i])), remove);
+      slip.append(line);
+    }
+    if (picks.size && !ticketSaved)
+      slip.append(
+        control(
+          l('Confirm practice slip', 'Valider le coupon démo'),
+          () => {
+            ticketSaved = true;
+            render();
+          },
+          'confirm'
+        )
+      );
+    if (ticketSaved) {
+      const receipt = note(
+        l('Demo slip confirmed for this visit.', 'Coupon démo validé pour cette visite.')
+      );
+      receipt.setAttribute('role', 'status');
+      slip.append(receipt);
+    }
+    layout.append(grid, slip);
+    panel.append(layout);
+  }
+  function directory() {
+    const counts = new Map();
+    const add = (key, n = 1) => counts.set(key, (counts.get(key) || 0) + n);
+    const builtins = house();
+    if (builtins.count) add(builtins.name, builtins.count);
+    for (const title of catalogue.titles()) if (title.studio) add(title.studio);
+    for (const title of providers()) add(title.provider);
+    const grid = el('div', '', 'hub-directory');
+    for (const [name, count] of [...counts].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const a = link(name, href({ q: name }, '#games'));
+      a.append(el('small', count + ' ' + (count === 1 ? l('game', 'jeu') : l('games', 'jeux'))));
+      grid.append(a);
+    }
+    panel.append(grid);
+  }
+  function activity() {
+    const player = account();
+    panel.append(
+      note(
+        player
+          ? l('Your most recent simulated rounds.', 'Vos dernières parties en crédits fictifs.')
+          : l(
+              'Illustrative results with demo credits. Sign in to see your own rounds.',
+              'Exemples de résultats en crédits fictifs. Connectez-vous pour voir vos propres parties.'
+            )
+      )
+    );
+    panel.append(
+      options(
+        [
+          [1, l('24 hours', '24 heures')],
+          [7, l('7 days', '7 jours')],
+          [30, l('30 days', '30 jours')]
+        ],
+        period,
+        (id) => {
+          period = id;
+        }
+      )
+    );
+    const day = 86400000,
+      now = Date.now();
+    const rows = player
+      ? (player.history || [])
+          .filter((e) => e.game && e.createdAt >= now - period * day)
+          .map((e) => [roundTitle(e), money(e.amount)])
+      : [
+          [0, 'Pulse 777', 250],
+          [2, l('Neon Blackjack', 'Blackjack Néon'), -100],
+          [12, l('Orbit Roulette', 'Roulette Orbit'), 400]
+        ]
+          .filter(([days]) => days < period)
+          .map(([, name, cents]) => [name, money(cents)]);
+    const list = el('ul', '', 'hub-results');
+    for (const [name, amount] of rows) {
+      const li = el('li');
+      li.append(el('strong', name), el('span', amount));
+      list.append(li);
+    }
+    panel.append(
+      rows.length ? list : note(l('No rounds in this period.', 'Aucune partie pour cette période.'))
+    );
+  }
+  function render() {
+    const active = enabled() && Boolean(view);
+    lobby.toggleAttribute('data-hub-open', active);
+    panel.hidden = !active;
+    if (!enabled()) return;
+    for (const a of document.querySelectorAll('[data-home-view]')) {
+      const key = a.dataset.homeView;
+      a.href = href(key === 'home' ? {} : { view: key });
+      const current = key === 'home' ? view !== 'sports' : key === view;
+      if (current) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    }
+    document.querySelector('[data-house-games]').href = href({}, '#home-originals');
+    if (!active) return;
+    for (const filter of document.querySelectorAll('#filters [data-filter]')) filter.setAttribute('aria-pressed', 'false');
+    const focused = panel.contains(document.activeElement)
+      ? document.activeElement.dataset.hubControl
+      : null;
+    const title = el('h1', local(views[view]));
+    title.id = 'hub-title';
+    title.tabIndex = -1;
+    panel.replaceChildren(title);
+    if (view === 'sports') sportsPage();
+    if (view === 'studios') directory();
+    if (view === 'activity') activity();
+    if (view === 'new') {
+      const titles = [...catalogue.titles()].sort((a, b) => b.id - a.id);
+      const grid = el('div', '', 'cards');
+      grid.append(...titles.slice(0, 24).map(catalogue.card));
+      panel.append(
+        titles.length
+          ? grid
+          : note(l('New releases will appear here.', 'Les nouveaux jeux apparaîtront ici.'))
+      );
+    }
+    if (view === 'promotions') {
+      const area = el('div', '', 'hub-offers');
+      const empty = note(l('No public offer is currently active.', 'Aucune offre publique en cours.'));
+      empty.classList.add('hub-empty');
+      area.append(offers, empty);
+      panel.append(area);
+      const buttons = el('div', '', 'hub-choices');
+      buttons.append(
+        button(l('View challenges', 'Voir les défis'), () => club('quests')),
+        button(l('My rewards', 'Mes récompenses'), () => club('rewards'), true)
+      );
+      panel.append(buttons);
+    }
+    if (view === 'invite') {
+      const card = box();
+      card.append(
+        el('h2', l('Share the casino', 'Partager le casino')),
+        note(
+          l(
+            'Send the French or English lobby link to a friend.',
+            'Envoyez le lien de l’accueil en français ou en anglais à un ami.'
+          )
+        )
+      );
+      shareLink(card, new URL(href(), location.origin).href, ui);
+      panel.append(
+        card,
+        button(l('Partner portal', 'Portail partenaire'), () => club('partner'), true)
+      );
+    }
+    if (view === 'help') {
+      panel.append(
+        help,
+        button(l('Contact support', 'Contacter l’assistance'), support),
+        button(
+          l('Notification preferences', 'Préférences de notification'),
+          () => club('preferences'),
+          true
+        )
+      );
+    }
+    if (focused)
+      [...panel.querySelectorAll('[data-hub-control]')]
+        .find((n) => n.dataset.hubControl === focused)
+        ?.focus({ preventScroll: true });
+  }
+  return { render, closeMenu, active: () => enabled() && Boolean(view), homeUrl: href };
 }

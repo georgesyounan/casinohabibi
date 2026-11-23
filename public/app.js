@@ -1,7 +1,7 @@
 import { casinoPageTitle } from './guide-metadata.js';
 import { createReviewUi, reviewCopy } from './review-desk.js';
 import { createPartnerUi, partnerLobbyCopy } from './partner-lobby.js';
-import { createPublicShelf, createShelfEditor, shelfCopy } from './lobby-shelves.js';
+import { createPublicShelf, createShelfEditor, createLobbySections, shelfCopy } from './lobby-shelves.js';
 import { createPilotUi, pilotCopy } from './finance-pilot.js';
 import { createOperatorUi, operatorCopy } from './operator-workflows.js';
 import { providerCatalogCopy, createProviderCatalogUi } from './provider-catalog.js';
@@ -39,6 +39,10 @@ const copy = {
   homeSpotlight: ['In the spotlight', 'À la une'], homePrev: ['Previous featured game', 'Jeu vedette précédent'],
   homeNext: ['Next featured game', 'Jeu vedette suivant'], homeOrder: ['Sort previews', 'Trier les aperçus'],
   homeFilters: ['Filters', 'Filtres'],
+  joinHome: ['Join now', 'S’inscrire'], newHome: ['New releases', 'Nouveautés'], studioHome: ['Studios & providers', 'Studios et fournisseurs'],
+  clubHome: ['Player club','Club des joueurs'], promoHome: ['Promotions','Promotions'], challengeHome: ['Challenges','Défis'],
+  rewardHome: ['Rewards','Récompenses'], activityHome: ['Game activity','Activité des jeux'], inviteHome: ['Invite a friend','Inviter un ami'],
+  helpHome: ['Guides & support','Guides et assistance'],
   homeOriginals: ['House games', 'Jeux maison'], homeProviders: ['Provider previews', 'Aperçus des fournisseurs'],
   homeSafer: ['Responsible play', 'Jeu responsable'],
   homeSafetyIntro: ['Manage your play time, set a demo wager limit or take a break.', 'Gérez votre temps de jeu, fixez une limite de mises fictives ou prenez une pause.'],
@@ -94,7 +98,8 @@ const copy = {
   browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
   clearGameSearch: ['Clear search', 'Effacer la recherche'],
   providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
-  catalogResultSummary: ['Playable demo games: {games} · Previews: {previews}', 'Jeux fictifs jouables : {games} · Aperçus : {previews}'],
+  demoCountOne: ['{n} playable demo', '{n} démo jouable'], demoCountMany: ['{n} playable demos', '{n} démos jouables'],
+  previewCountOne: ['{n} preview', '{n} aperçu'], previewCountMany: ['{n} previews', '{n} aperçus'],
   addFavorite: ['Add {game} to favorites', 'Ajouter {game} aux favoris'], removeFavorite: ['Remove {game} from favorites', 'Retirer {game} des favoris'], noFavoriteGames: ['You have not saved any games yet.', 'Vous n’avez pas encore enregistré de jeux.'],
   favoritesLocal: ['Favorites saved in this browser.', 'Favoris enregistrés dans ce navigateur.'], favoritesSynced: ['Favorites saved to your account.', 'Favoris enregistrés dans votre compte.'], favoriteSaveFailed: ['Could not sync favorites to your account. The change was reverted.', 'Impossible de synchroniser les favoris avec votre compte. Le changement a été annulé.'],
   disclaimer: ['Simulated funds only. No cash value.', 'Fonds fictifs uniquement. Aucune valeur monétaire.'],
@@ -437,6 +442,7 @@ function clearDemoSelection() {
   selectedGame = undefined;
   selectedPreview = undefined;
   afterSignIn = undefined;
+  requestedClubTab = undefined;
   clearPendingDemo();
 }
 function roundTitle(entry) {
@@ -585,6 +591,8 @@ function publicLanguage(locale) {
 function applyTenant(config) {
   const previousLanguage = language;
   tenantBrandName = config.brandName;
+  const habibi = config.brandName.trim().toLowerCase() === 'casino habibi';
+  document.body.dataset.lobbyBrand = habibi ? 'habibi' : 'default';
   $('#staff-brand').textContent = config.brandName;
   publicLocales = config.enabledLocales;
   primaryPublicLocale = config.primaryLocale;
@@ -633,7 +641,7 @@ function applyTenant(config) {
     const lightness = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
     document.body.style.setProperty('--button-ink', lightness > .179 ? '#080d10' : '#ffffff');
   }
-  document.querySelector('meta[name="theme-color"]').content = config.accentColor;
+  document.querySelector('meta[name="theme-color"]').content = habibi && !isAdminPage ? '#101018' : config.accentColor;
   for (const brand of document.querySelectorAll('.brand')) {
     const mark = config.brandLogo ? element('img') : element('span', '✧');
     if (config.brandLogo) {
@@ -642,7 +650,25 @@ function applyTenant(config) {
       mark.className = 'brand-logo';
     }
     mark.setAttribute('aria-hidden', 'true');
-    brand.replaceChildren(mark, document.createTextNode(` ${config.brandName.toUpperCase()}`));
+    if (habibi) {
+      const name = element('strong', '', 'habibi-wordmark');
+      name.append(element('small', 'Casino'), document.createTextNode(' Habibi'));
+      brand.replaceChildren(mark, name);
+      if (brand.tagName === 'A') brand.setAttribute('aria-label', config.brandName);
+    } else {
+      brand.removeAttribute('aria-label');
+      brand.replaceChildren(mark, document.createTextNode(` ${config.brandName.toUpperCase()}`));
+    }
+  }
+  for (const emblem of document.querySelectorAll('.admin-emblem')) {
+    if (habibi && config.brandLogo) {
+      const image = element('img');
+      image.src = config.brandLogo;
+      image.alt = '';
+      emblem.replaceChildren(image);
+    } else {
+      emblem.textContent = '✦';
+    }
   }
   const supportLink = $('#support-link');
   if (typeof config.supportEmail === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(config.supportEmail)) {
@@ -796,6 +822,7 @@ function updateDocumentTitle() {
 }
 
 function updateAccount() {
+  $('#join-home').hidden = Boolean(player) || currentRoute !== '/' || document.body.dataset.lobbyBrand !== 'habibi';
   $('#account').textContent = player ? money(player.balance) : t('signin');
   const unreadSupport = player?.supportReplies || 0;
   $('#account').setAttribute('aria-label', player ? t('account') + ' · ' + money(player.balance) + (unreadSupport ? ' · ' + t('supportUnreadLabel').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(unreadSupport)) : '') : t('signin'));
@@ -936,6 +963,18 @@ let supportList;
 let supportTicket;
 let supportRequest=0;
 let afterSignIn;
+let requestedClubTab;
+function openClub(tab) {
+  clearDemoSelection();
+  if (player) {
+    discoveryPlayer.openTab(tab, player.id);
+    openPanel('discovery');
+  } else {
+    requestedClubTab = tab;
+    afterSignIn = 'discovery';
+    openPanel('signin');
+  }
+}
 
 function supportCurrent(request,owner) {
   return request===supportRequest && player?.id===owner && screen==='support' && $('#dialog').open;
@@ -1059,6 +1098,7 @@ function renderDialog() {
       if (publicLocales.includes(auth.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
       render();
       const target = afterSignIn || (selectedGame ? 'play' : 'account');
+      if (target === 'discovery' && requestedClubTab) discoveryPlayer.openTab(requestedClubTab, player.id);
       if (target === 'play' && pendingSlug) {
         try {
           const fresh = await api('coming-soon/' + encodeURIComponent(pendingSlug) + '?locale=' + siteContentLocale(), undefined, 'GET');
@@ -1073,7 +1113,8 @@ function renderDialog() {
       }
       clearPendingDemo();
       afterSignIn = undefined;
-      openPanel(target);
+      requestedClubTab = undefined;
+      if (target === 'support') openSupportCenter(); else openPanel(target);
     }), action(t(signup ? 'signin' : 'signup'), () => openPanel(signup ? 'signin' : 'signup'), 'ghost'));
     if (!signup) {
       panel.append(action(t('passwordReset'), () => openPanel('passwordReset'), 'ghost'));
@@ -1806,10 +1847,13 @@ function renderCatalog() {
   options.querySelector('summary').toggleAttribute('data-applied', Boolean(selectedCollection || (!$('#provider-sort-control').hidden && providerSort !== 'recent')));
   $('#provider-sort').value = providerSort;
   const countFormat = new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA');
-  $('#catalog-summary').textContent = t('catalogResultSummary')
-    .replace('{games}', countFormat.format(demoGames.length + editorial.playable))
-    .replace('{previews}', countFormat.format(visibleGames.length + editorial.count - editorial.playable));
-  $('#catalog-summary').hidden = !hasCatalogue && !selectedCollection;
+  const playableCount = demoGames.length + editorial.playable;
+  const previewCount = visibleGames.length + editorial.count - editorial.playable;
+  const counts = [];
+  if (playableCount) counts.push(t(playableCount === 1 ? 'demoCountOne' : 'demoCountMany').replace('{n}', countFormat.format(playableCount)));
+  if (previewCount) counts.push(t(previewCount === 1 ? 'previewCountOne' : 'previewCountMany').replace('{n}', countFormat.format(previewCount)));
+  $('#catalog-summary').textContent = counts.join(' · ');
+  $('#catalog-summary').hidden = !counts.length;
   $('#catalog-empty').hidden = hasListings;
   const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
@@ -1877,6 +1921,7 @@ function renderCatalog() {
     const link=document.getElementById('provider-game-'+linkedProviderId);linkedProviderId=0;
     link?.focus({preventScroll:true});link?.scrollIntoView({block:'nearest'});
   }
+  lobbySections.render();
 }
 
 let providerStatus;
@@ -1908,6 +1953,14 @@ const comingSoonUi = createComingSoonUi({
 });
 
 const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
+const lobbySections = createLobbySections({
+  french: () => Boolean(language), appPath, catalogue: comingSoonUi, providers: () => providerGames,
+  house: () => ({name:demoProviderName(), count:games.length}), account: () => player, club:openClub, roundTitle, money,
+  support() {
+    if(player) openSupportCenter();
+    else { clearDemoSelection(); afterSignIn='support'; openPanel('signin'); }
+  }
+});
 const followupUi = createPublicationFollowup({ api, t, element, appPath, locale: siteContentLocale });
 const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
 const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale, brand: () => tenantBrandName,
@@ -2080,6 +2133,10 @@ $('#open-discovery').addEventListener('click',()=>{
   if(!player)afterSignIn='discovery';
   openPanel(player?'discovery':'signin');
 });
+$('#join-home').addEventListener('click', () => { clearDemoSelection(); openPanel('signup'); });
+for (const shortcut of document.querySelectorAll('[data-club]')) {
+  shortcut.addEventListener('click', () => { lobbySections.closeMenu(); openClub(shortcut.dataset.club); });
+}
 $('#account').addEventListener('click', () => {
   clearDemoSelection();
   openPanel(player ? 'account' : 'signin');
@@ -2113,6 +2170,7 @@ $('#home-options').addEventListener('keydown', (event) => {
 });
 $('#home-search').addEventListener('submit', (event) => {
   event.preventDefault();
+  if(lobbySections.active()){ location.assign(lobbySections.homeUrl({q:$('#game-search').value.trim()},'#games')); return; }
   $('#games').focus();
   $('#games').scrollIntoView({ block: 'start' });
 });
@@ -2131,6 +2189,8 @@ $('#catalog-collection').addEventListener('change', (event) => {
 $('#filters').addEventListener('click', (event) => {
   const button = event.target.closest('button[data-filter]');
   if (!button) return;
+  lobbySections.closeMenu();
+  if(lobbySections.active()){ location.assign(lobbySections.homeUrl(button.dataset.filter==='all'?{}:{category:button.dataset.filter},'#games')); return; }
   filter = button.dataset.filter;
   if(player&&filter==='favorites')void api('discovery/visit',{kind:'shelf'}).catch(()=>{});
   rememberCatalogue();
@@ -2153,6 +2213,7 @@ $('#clear-game-search').addEventListener('click', () => {
   renderCatalog();
 });
 $('#game-search').addEventListener('input', (event) => {
+  if(lobbySections.active()) return;
   searchQuery = event.currentTarget.value;
   rememberCatalogue();
   renderCatalog();
