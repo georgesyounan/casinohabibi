@@ -213,11 +213,11 @@ const copy = {
   staffOptionalUsername: ['Username (optional)', 'Nom d’utilisateur (facultatif)'],
   staffUsernameTaken: ['This username is already in use.', 'Ce nom d’utilisateur est déjà utilisé.'],
   staffEmail: ['Staff email', 'Courriel du membre du personnel'], staffPassword: ['Password', 'Mot de passe'],
-  staffChangePasswordTitle: ['Change my staff password', 'Changer mon mot de passe du personnel'],
+  staffChangePasswordTitle: ['Change my password', 'Changer mon mot de passe'],
   staffChangePasswordHelp: ['Enter your current password and choose a new one. Other staff sessions will be signed out.', 'Saisissez votre mot de passe actuel et choisissez-en un nouveau. Les autres sessions du personnel seront fermées.'],
   staffNewPassword: ['New password (12 characters minimum)', 'Nouveau mot de passe (au moins 12 caractères)'],
   staffConfirmPassword: ['Confirm new password', 'Confirmer le nouveau mot de passe'],
-  staffChangePasswordSave: ['Update staff password', 'Modifier le mot de passe du personnel'],
+  staffChangePasswordSave: ['Save my new password', 'Enregistrer mon nouveau mot de passe'],
   staffPasswordChanged: ['Password updated. Other staff sessions have been signed out.', 'Mot de passe modifié. Les autres sessions du personnel ont été fermées.'],
   showPassword: ['Show password', 'Afficher le mot de passe'], hidePassword: ['Hide password', 'Masquer le mot de passe'],
   staffSignIn: ['Sign in', 'Se connecter'], staffSigningIn: ['Signing in…', 'Connexion…'], staffSignOut: ['Sign out', 'Se déconnecter'],
@@ -242,6 +242,8 @@ const copy = {
   staffAuditFrom: ['From date (UTC)', 'Date de début (UTC)'], staffAuditTo: ['To date (UTC)', 'Date de fin (UTC)'], staffAuditRangeInvalid: ['The start date must be on or before the end date.', 'La date de début doit être antérieure ou égale à la date de fin.'],
   staffAuditTimestamp: ['Date and time (UTC)', 'Date et heure (UTC)'], staffAuditActor: ['Staff member', 'Membre du personnel'], staffAuditAction: ['Action', 'Action'], staffAuditTarget: ['Target', 'Cible'], staffAuditRequestId: ['Request ID', 'ID de requête'],
   mfaTitle: ['Two-step verification', 'Vérification en deux étapes'],
+  mfaStartHelp: ['Set up an authenticator app to add a code to staff sign-in.', 'Configurez une application d’authentification pour ajouter un code à la connexion.'],
+  mfaActiveHelp: ['Two-step verification is active. To turn it off, enter the current code from your authenticator app.', 'La vérification en deux étapes est activée. Pour la désactiver, saisissez le code actuel de votre application.'],
   mfaHelp: ['Add this account to an authenticator app with the secret or copied setup link below, then enter its six-digit code to enable two-step verification.', 'Ajoutez ce compte à une application d’authentification avec le secret ou le lien copié ci-dessous, puis saisissez le code à six chiffres pour activer la vérification en deux étapes.'],
   mfaSetup: ['Set up authenticator', 'Configurer l’authentificateur'], mfaCode: ['Authenticator code', 'Code de l’authentificateur'],
   mfaCopySetup: ['Copy authenticator setup link', 'Copier le lien de configuration de l’authentificateur'], mfaSetupCopied: ['Setup link copied.', 'Lien de configuration copié.'], mfaCopyFailed: ['Could not copy the setup link. Select and copy it from the text above.', 'Impossible de copier le lien. Sélectionnez-le et copiez-le à partir du texte ci-dessus.'],
@@ -3265,6 +3267,23 @@ $('#overview-refresh').addEventListener('click', () => {
 });
 $('#overview-export').addEventListener('click', exportOperatorOverview);
 
+function renderStaffMfa() {
+  const enabled = currentStaffMfaEnabled;
+  const pending = Boolean(currentMfaSetupUri);
+  const help = $('#mfa-help');
+  help.dataset.copy = enabled ? 'mfaActiveHelp' : pending ? 'mfaHelp' : 'mfaStartHelp';
+  help.textContent = t(help.dataset.copy);
+  $('#mfa-setup').hidden = enabled || pending;
+  $('#mfa-secret').hidden = !pending;
+  if (!pending) $('#mfa-secret').textContent = '';
+  $('#mfa-copy-setup').hidden = !pending;
+  const form = $('#mfa-verify');
+  form.reset();
+  form.hidden = !enabled && !pending;
+  form.querySelector('button[type=submit]').hidden = enabled;
+  $('#mfa-disable').hidden = !enabled;
+}
+
 function showStaffSession(session, focus = false) {
   currentStaffEmail = session.email;
   if (currentStaffId && (currentStaffId!==session.id || currentStaffRole!==session.role)){supportQueue.clear();providerCatalogUi.clear();operatorUi.clear();pilotUi.clear();shelfEditor.clear();partnerUi.clear();reviewUi.clear();}
@@ -3273,8 +3292,7 @@ function showStaffSession(session, focus = false) {
   currentStaffPermissions = {...session.permissions,testCredits:Boolean(session.testCredits)};
   currentStaffMfaEnabled = Boolean(session.mfaEnabled);
   currentMfaSetupUri = undefined;
-  $('#mfa-secret').hidden = true;
-  $('#mfa-copy-setup').hidden = true;
+  renderStaffMfa();
   $('#mfa-status').textContent = '';
   $('#staff-login').hidden = true;
   $('#admin-tools').hidden = false;
@@ -3289,10 +3307,6 @@ function showStaffSession(session, focus = false) {
   $('#coming-soon-publish-help').hidden = currentStaffPermissions.publishCatalogue;
   playerAccessUi.clear();
   comingSoonUi.setStaffAccess(session.role, currentStaffPermissions.publishCatalogue);
-  $('#mfa-setup').hidden = session.mfaEnabled;
-  $('#mfa-verify').hidden = false;
-  $('#mfa-verify').querySelector('button[type=submit]').hidden = session.mfaEnabled;
-  $('#mfa-disable').hidden = !session.mfaEnabled;
   adminWorkspace.setRole(session.role, currentStaffPermissions, focus);
 }
 $('#staff-login-form').addEventListener('submit', async (event) => {
@@ -3485,9 +3499,10 @@ $('#mfa-setup').addEventListener('click', async () => {
   try {
     const setup = await api('admin/mfa/setup', {});
     currentMfaSetupUri = setup.otpauth;
-    $('#mfa-secret').hidden = false;
     $('#mfa-secret').textContent = `${setup.secret}\n${setup.otpauth}`;
-    $('#mfa-copy-setup').hidden = false;
+    renderStaffMfa();
+    $('#mfa-status').textContent = '';
+    $('#mfa-verify').elements.code.focus();
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 $('#mfa-copy-setup').addEventListener('click', async () => {
@@ -3501,17 +3516,14 @@ $('#mfa-copy-setup').addEventListener('click', async () => {
 });
 $('#mfa-verify').addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (currentStaffMfaEnabled) { $('#mfa-disable').click(); return; }
   const code = event.currentTarget.elements.code.value;
   try {
     await api('admin/mfa/enable', { code });
     $('#mfa-status').textContent = t('mfaEnabled');
-    $('#mfa-setup').hidden = true;
-    $('#mfa-secret').hidden = true;
-    $('#mfa-copy-setup').hidden = true;
     currentMfaSetupUri = undefined;
-    $('#mfa-verify').querySelector('button[type=submit]').hidden = true;
-    $('#mfa-disable').hidden = false;
     currentStaffMfaEnabled = true;
+    renderStaffMfa();
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 $('#mfa-disable').addEventListener('click', async () => {
@@ -3520,13 +3532,9 @@ $('#mfa-disable').addEventListener('click', async () => {
   try {
     await api('admin/mfa/disable', { code });
     $('#mfa-status').textContent = t('mfaDisabled');
-    $('#mfa-setup').hidden = false;
-    $('#mfa-verify').querySelector('button[type=submit]').hidden = false;
-    $('#mfa-disable').hidden = true;
-    $('#mfa-copy-setup').hidden = true;
-    $('#mfa-secret').hidden = true;
     currentMfaSetupUri = undefined;
     currentStaffMfaEnabled = false;
+    renderStaffMfa();
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 

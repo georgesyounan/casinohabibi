@@ -127,7 +127,7 @@
 #admin-session-status:empty, #admin .admin-page [role=status]:empty { display: none; }
 .admin-section-picker,.local-picker { display: none; }
 .admin-pages { width: min(100%,1500px); margin: 0 auto; padding: clamp(1.35rem,3.1vw,3rem) clamp(1rem,3.5vw,3.4rem) 3rem; }
-.admin-page { padding: clamp(1rem,2.1vw,1.75rem); background: white; border: 1px solid var(--line); border-radius: 16px; }
+.admin-page { padding: clamp(1rem,2.1vw,1.75rem); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
 .admin-page#overview { background: transparent; padding: 0; border: 0; }
 .admin-page-heading { display: flex; justify-content: space-between; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
 .admin-page-heading > div { min-width: 0; }
@@ -515,7 +515,7 @@
 #admin .desk-transactions .transaction-row { border: 0; border-top: 1px solid #e2eae4; border-radius: 0; justify-content: space-between; text-align: start; font-size: .86rem; min-height: 44px; }
 .transaction-row::after { content: "\f0142"; font: 1rem 'Habibi Icons'; }
 @media(max-width:660px) {
-  #admin [data-admin-panel]:not(#overview-summary,#overview-reports) [data-admin-heading] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
+  #admin [data-admin-panel]:not(#overview-summary,#overview-reports,#staff-password,#mfa-settings) [data-admin-heading] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
   #admin .desk-filters { grid-template-columns: minmax(0,1fr) auto; }
   #admin .desk-filters label:first-child { grid-column: 1 / -1; }
   #admin .desk-cash-form { grid-template-columns: minmax(0,1fr); }
@@ -530,3 +530,13 @@
   .dashboard-columns .quick-tools a { min-width: 0; gap: .38rem; line-height: 1.3; font-size: .77rem; }
   .dashboard-columns .quick-tools a > .ui-icon:last-child { display: none; }
 }
+
+/* Keep both security settings within reach at every viewport width. */
+#my-security { max-width: 52rem; }
+#admin #my-security .admin-tabs { display: flex; }
+#admin #my-security .local-picker { display: none; }
+#admin #my-security .admin-tabs a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: .5rem; }
+#my-security .admin-panel { max-width: 37rem; }
+#my-security form { width: 100%; max-width: 30rem; }
+#my-security [role=status]:not(:empty) { padding: .65rem .85rem; border-inline-start: 3px solid var(--green); color: var(--text); background: var(--accent-pale); }
+#my-security #mfa-secret { max-width: 100%; }
