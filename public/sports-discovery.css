@@ -152,3 +152,5 @@
 .sports-centre .match-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .sports-centre .board-pause { width: 38px; height: 38px; border-radius: 8px; color: #dceeff; background: #1b304a; border: 1px solid #3e5774; }
 .sports-centre .board-pause[aria-pressed="true"] { color: #091a30; background: var(--habibi-accent); }
+
+.book-stake{display:grid;gap:.4rem;margin:.75rem 0;color:var(--text,#e9f3ff);font-weight:650}.book-stake input{width:100%;box-sizing:border-box;background:#0d1d32;border:1px solid #6586a6;color:#fff;border-radius:.5rem;padding:.55rem}.slip-history-card button{margin:.35rem .45rem .15rem 0}.sports-feedback:not(:empty){padding:.4rem .7rem;color:#bde4ff}

@@ -111,6 +111,7 @@ export function createPartnerUi({ api, t, french, appPath, staffId }) {
           const box = el('article', '', 'contact-card');
           box.append(
             el('h4', item.label),
+            el('p','lobby-v1 · lobby.read · '+(item.check? (item.check.result==='ok'?l('Checked','Vérifié'):l('Access denied','Accès refusé'))+' · '+new Date(item.check.checked).toLocaleString():l('No call yet','Aucun appel reçu'))),
             el(
               'p',
               (item.active ? l('Active', 'Actif') : l('Revoked', 'Révoqué')) + ' · v' + item.version,

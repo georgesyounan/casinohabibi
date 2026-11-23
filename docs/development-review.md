@@ -1,6 +1,6 @@
 # Revue de développement de Casino Habibi
 
-Mise à jour du 23 novembre 2026. Le cahier comprend 88 tickets et 28 modules. Les quatre derniers critères du socle ont été exercés sur une instance isolée. Les 24 tickets du socle passent leur scénario en démo.
+Mise à jour du 23 novembre 2026. Le cahier comprend 88 tickets et 28 modules. Le Club et le carnet sportif ont été exercés avec des comptes isolés, y compris les reprises après double clic et les demandes concurrentes. Les 24 tickets du socle passent leur scénario en démo.
 
 [Ouvrir les 88 tickets, leurs critères, les fichiers de preuve et les écarts](development-backlog.csv) · [Ouvrir les 174 références et leurs types de preuve](source-traceability.csv)
 
@@ -20,13 +20,17 @@ Dans **Vérifications et caisse → Dossiers fictifs**, créer un dossier pour l
 
 Dans **Caisse de test**, choisir le dossier, le montant et le moyen admissible. Un retour du navigateur laisse le dépôt en attente. Une confirmation crédite le portefeuille. Un retrait réservé peut être transmis puis rester en attente jusqu’à la réponse définitive du simulateur. **Politiques et moyens de paiement** permet de modifier les règles du marché et les moyens fictifs.
 
+Dans **Club → Boutique** ou **Tournois**, le compte joueur retrouve son journal, ses commandes, son rang et ses prix. Dans **Inviter un ami**, son lien attribue cinq points après la vérification de l’adresse et le premier favori studio de la personne invitée. L’administration du Club se trouve sous **Quêtes et récompenses**.
+
+Dans **Sports → Mes coupons**, le joueur connecté retrouve sa mise, son rachat et le reçu de règlement en CAD fictifs. Dans **Espace opérateur → Produits → Paris sportifs**, l’opérateur ajuste les cotes et les plafonds, suspend un marché ou enregistre le résultat. Le marché utilise les rencontres fictives de la marque.
+
 ## Couverture par module
 
 | Module | Fonction | Validés en démo | Partiels | Non livrés |
 | --- | --- | ---: | ---: | ---: |
 | D01 | Marques, équipe et audit | 2 | 1 | 0 |
 | D02 | Comptes et soutien joueur | 3 | 0 | 0 |
-| D03 | Produits et activation | 2 | 1 | 0 |
+| D03 | Produits et activation | 3 | 0 | 0 |
 | D04 | Mise en service et reprise | 2 | 1 | 0 |
 | D05 | Éditeur et traductions | 2 | 0 | 1 |
 | D06 | Catalogue fournisseur | 2 | 2 | 0 |
@@ -35,7 +39,7 @@ Dans **Caisse de test**, choisir le dossier, le montant et le moyen admissible. 
 | D09 | Segments et communications | 2 | 0 | 1 |
 | D10 | Affiliation | 2 | 0 | 1 |
 | D11 | Offres et bonus | 1 | 1 | 1 |
-| D12 | Fidélité et récompenses | 2 | 3 | 0 |
+| D12 | Fidélité et récompenses | 5 | 0 | 0 |
 | D13 | Rapports et indicateurs | 3 | 1 | 0 |
 | D14 | Vérification d’identité | 3 | 0 | 0 |
 | D15 | Risque et enquêtes | 3 | 0 | 0 |
@@ -46,13 +50,13 @@ Dans **Caisse de test**, choisir le dossier, le montant et le moyen admissible. 
 | D20 | Manches et relectures | 1 | 2 | 0 |
 | D21 | Rapprochement et clôture | 0 | 3 | 0 |
 | D22 | Services aux opérateurs | 3 | 0 | 0 |
-| D23 | Paris sportifs | 0 | 1 | 2 |
+| D23 | Paris sportifs | 3 | 0 | 0 |
 | D24 | Caisse crypto | 0 | 0 | 3 |
-| D25 | Canal Telegram | 0 | 2 | 1 |
+| D25 | Canal Telegram | 1 | 1 | 1 |
 | D26 | Jeux à prix | 0 | 1 | 2 |
-| D27 | API partenaires | 0 | 2 | 1 |
+| D27 | API partenaires | 1 | 1 | 1 |
 | D28 | Crédits de test | 2 | 0 | 0 |
-| **Total** | **88 tickets** | 46 | 28 | 14 |
+| **Total** | **88 tickets** | 55 | 21 | 12 |
 
 ## Couverture par phase
 
@@ -65,9 +69,9 @@ Dans **Caisse de test**, choisir le dossier, le montant et le moyen admissible. 
 | P4A | 1 | 1 | 0 | 0 |
 | P4B | 1 | 1 | 0 | 0 |
 | P1X | 2 | 2 | 0 | 0 |
-| E1 | 23 | 12 | 10 | 1 |
-| E2 | 22 | 5 | 12 | 5 |
-| E3 | 15 | 1 | 6 | 8 |
+| E1 | 23 | 14 | 8 | 1 |
+| E2 | 22 | 6 | 11 | 5 |
+| E3 | 15 | 7 | 2 | 6 |
 
 ## Parcours d’acceptation
 

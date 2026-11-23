@@ -1,4 +1,5 @@
 import { sports, leagues, matches, byId, prices, programTime, outcome, marketName, frameOf, clockLabel } from './sports-data.js';
+import {currentMarket,quotedPrice,bookHistory,stakeControls} from './sport-tickets.js';
 import { createRotation } from './banner-motion.js';
 import { sportsNavigation, carousel, carouselContent, scoreWire, featureRail, selectionsView, slotView, ticketHistory, bundles, slotSymbols, icon, combinedPrice } from './sports-discovery.js';
 
@@ -13,10 +14,12 @@ function fixtureCard(match, state, fr) {
   const frame = match.frames && frameOf(match, state.step);
   const expanded = state.detail === match.id;
   const teams = match.teams.map((team, i) => `<div class="sport-team"><span class="team-mark" aria-hidden="true">${match.marks[i]}</span><span>${team}</span>${frame ? `<b data-score="${match.id}-${i}">${frame[i + 1]}</b>` : ''}</div>`).join('');
-  const odds = match.odds.map((price, i) => {
+  const liveMarket=currentMarket(state,match);
+  const odds = liveMarket.prices.map((cents, i) => {
+    const price=cents/100;
     const name = outcome(match, i, fr);
     const label = match.odds.length === 3 && i === 1 ? (fr ? 'N' : 'X') : i ? '2' : '1';
-    return `<button type="button" class="ghost sport-odd" data-hub-control="${match.id}-${i}" aria-pressed="${state.picks.get(match.id) === i}" aria-label="${name}, ${prices[lang].format(price)}"><span>${label}</span><strong>${prices[lang].format(price)}</strong></button>`;
+    return `<button type="button" class="ghost sport-odd" ${liveMarket.status!=='open'?'disabled':''} data-hub-control="${match.id}-${i}" aria-pressed="${state.picks.get(match.id) === i}" aria-label="${name}, ${prices[lang].format(price)}"><span>${label}</span><strong>${prices[lang].format(price)}</strong></button>`;
   }).join('');
   const favorite = state.favorites.has(match.id);
   const favoriteLabel = (fr ? 'Favori' : 'Favorite') + ' · ' + match.teams.join(' / ');
@@ -29,7 +32,7 @@ function fixtureCard(match, state, fr) {
     <div class="fixture-top"><span>${leagues[match.league][lang]}</span><div class="fixture-tools"><button type="button" class="favorite-match" data-hub-control="save-${match.id}" aria-pressed="${favorite}" title="${favoriteLabel}" aria-label="${favoriteLabel}">${icon(favorite?'star':'star-outline')}</button><button type="button" class="match-detail" data-hub-control="detail-${match.id}" aria-expanded="${expanded}" aria-controls="detail-${match.id}" aria-label="${fr ? 'Détails du match' : 'Match details'} · ${match.teams.join(' / ')}">⌄</button></div></div>
     <div class="fixture-state">${status}</div><div class="sport-teams">${teams}</div>
     <div id="detail-${match.id}" class="fixture-detail"${expanded ? '' : ' hidden'}>${details}</div>
-    <div class="sport-market"><small>${marketName(match, fr)}</small><div class="hub-markets">${odds}</div></div></article>`;
+    <div class="sport-market"><small>${marketName(match, fr)}${liveMarket.status==='open'?'':fr?' · Fermé':' · Closed'}</small><div class="hub-markets">${odds}</div></div></article>`;
 }
 
 function slipMarkup(state, fr) {
@@ -39,15 +42,15 @@ function slipMarkup(state, fr) {
   const selections = [...state.picks].map(([id, i]) => {
     const match = byId.get(id);
     const name = outcome(match, i, fr);
-    return `<div class="hub-slip-line"><div><strong>${name}</strong><small>${match.teams.join(' / ')}</small></div><b>${prices[lang].format(match.odds[i])}</b><button type="button" class="ghost" data-hub-control="remove-${id}" aria-label="${t('Remove', 'Retirer')} · ${name}">×</button></div>`;
+    return `<div class="hub-slip-line"><div><strong>${name}</strong><small>${match.teams.join(' / ')}</small></div><b>${prices[lang].format(quotedPrice(state,id,i))}</b><button type="button" class="ghost" data-hub-control="remove-${id}" aria-label="${t('Remove', 'Retirer')} · ${name}">×</button></div>`;
   }).join('');
   const count = state.picks.size;
-  const result = state.confirmed ? `<p class="slip-confirmed" role="status" tabindex="-1">${t('Demo slip confirmed for this visit.', 'Coupon démo validé pour cette visite.')}</p>`
-    : `<button type="button" class="slip-submit" data-hub-control="confirm">${t('Confirm practice slip', 'Valider le coupon démo')}</button>`;
-  const body = count ? `${selections}<div class="slip-total"><span>${t('Combined odds', 'Cote combinée')}</span><b>${combinedPrice(state.picks,fr)}</b></div>${result}`
+  const result = state.confirmed ? `<p class="slip-confirmed" role="status" tabindex="-1">${(state.book?.owner?t('Slip accepted. Open My slips for the receipt.','Coupon accepté. Ouvrez Mes coupons pour le reçu.'):t('Demo slip confirmed for this visit.', 'Coupon démo validé pour cette visite.'))}</p>`
+    : `<button type="button" class="slip-submit" data-hub-control="confirm" ${state.busy||state.bookLoading?'disabled':''}>${t('Confirm practice slip', 'Valider le coupon démo')}</button>`;
+  const body = count ? `${selections}<div class="slip-total"><span>${t('Combined odds', 'Cote combinée')}</span><b>${prices[lang].format([...state.picks].reduce((n,[id,i])=>n*quotedPrice(state,id,i),1))}</b></div>${state.confirmed?'':stakeControls(state,fr)}${result}`
     : `<div class="slip-empty"><i class="ui-icon ico-listing" aria-hidden="true"></i><strong>${t('Your slip is empty', 'Ton coupon est vide')}</strong><span>${t('Select odds on a match to add a pick.', 'Sélectionne une cote sur un match pour ajouter ton premier choix.')}</span></div>`;
   return `<aside class="hub-slip" aria-label="${slipTitle}" data-slip-open="${state.slipOpen}"><h2><span class="slip-heading">${slipTitle}<b class="slip-count">${count}</b></span><button type="button" class="slip-toggle" data-hub-control="slip" aria-controls="sports-slip-body" aria-expanded="${state.slipOpen}"><i class="ui-icon ico-listing" aria-hidden="true"></i>${slipTitle}<b class="slip-count">${count}</b><span aria-hidden="true">⌃</span></button></h2>
-    <div id="sports-slip-body">${body}<p class="slip-funds">${t('Fictional odds. No funds are used.', 'Cotes fictives. Aucun fonds engagé.')}</p></div></aside>`;
+    <div id="sports-slip-body">${body}<p class="slip-funds">${state.book?.owner?t('Settled in demo CAD.','Règlement en CAD fictifs.'):t('Fictional odds. No funds are used.', 'Cotes fictives. Aucun fonds engagé.')}</p></div></aside>`;
 }
 
 const normalize = value => value.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim();
@@ -81,18 +84,19 @@ function featuredBoard(state) {
 export function sportsMarkup(fr, state = newBoard()) {
   const popular = featuredBoard(state);
   const views = { predictions: selectionsView, slots: slotView, tickets: ticketHistory };
-  const content = (views[state.area] || matchBoard)(state,fr);
+  const content = state.area==='tickets'&&state.book?.owner?'<section class="sports-view"><h2>'+ (fr?'Mes coupons démo':'My demo slips')+'</h2>'+(bookHistory(state,fr)||(fr?'Aucun coupon accepté.':'No accepted slips.'))+'</section>':(views[state.area] || matchBoard)(state,fr);
   return `<div class="sports-centre" data-sports-lang="${fr?'fr':'en'}">${sportsNavigation(state,fr)}
     ${popular ? carousel(state,fr)+scoreWire(state,fr)+featureRail(state,fr) : ''}
-    <div class="sports-feedback" aria-live="polite">${state.notice ? (fr ? 'Coupon démo mis à jour.' : 'Practice slip updated.') : ''}</div>
+    <div class="sports-feedback" aria-live="polite">${state.message?escapeMessage(state.message):state.notice ? (fr ? 'Coupon démo mis à jour.' : 'Practice slip updated.') : ''}</div>
     <div class="hub-sports"><div class="match-centre">${content}</div>${slipMarkup(state,fr)}</div></div>`;
 }
 
+const escapeMessage=v=>String(v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function validLeg(leg) {
   return Array.isArray(leg) && leg.length === 2 && Number.isInteger(leg[1]) && byId.get(leg[0])?.odds[leg[1]] !== undefined;
 }
 
-export function createSportsCentre(panel, french, account) {
+export function createSportsCentre(panel, french, account, {api,update,translate}) {
   let state = newBoard();
   let mounted = false, locale, timer, ownerKey;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -104,6 +108,31 @@ export function createSportsCentre(panel, french, account) {
     const next = [...track.children].find(card => card.offsetLeft > track.scrollLeft+3);
     track.scrollTo({left:end ? 0 : next?.offsetLeft || 0,behavior:'smooth'});
   }, french, 3000);
+  let refreshSequence=0;
+  async function refreshBook(){
+    const key=ownerKey,seq=++refreshSequence;
+    try{
+      const book=await api('sports/book',undefined,'GET');
+      if(key!==ownerKey || seq!==refreshSequence || (account()?.id||null)!==book.owner)return;
+      state.book=book;state.bookLoading=false;if(mounted)paint();
+    }catch(e){if(key===ownerKey && seq===refreshSequence){state.bookLoading=Boolean(account());state.message=translate(e.message);if(mounted)paint();}}
+  }
+  async function transact(action,fields){
+    if(state.busy||!account())return;
+    const current=state,key=ownerKey;
+    current.busy=true;current.message='';paint();
+    try{
+      const result=await api('sports/book',{action,owner:account().id,...fields});
+      if(key!==ownerKey||current!==state||account()?.id!==current.book?.owner)return;
+      if(action==='quote'){state.quote=result.quote;}
+      else{state.book=result.book;state.quote=null;if(action==='accept')state.confirmed=true;update(result.account);}
+    }catch(err){
+      if(key!==ownerKey||current!==state)return;
+      if(action==='accept'&&['sportPriceChanged','sportSuspended'].includes(err.message)){state.bookKey='';await refreshBook();}
+      if(action==='cash')state.quote=null;
+      state.message=translate(err.message);
+    }finally{current.busy=false;if(mounted&&current===state)paint();}
+  }
   function storageKey() {
     return 'habibi-sports-v1:' + location.pathname + ':' + (account()?.id || 'guest');
   }
@@ -225,6 +254,7 @@ export function createSportsCentre(panel, french, account) {
     paint();
     panel.querySelector('[data-sports-league]')?.focus({preventScroll:true});
   });
+  panel.addEventListener('input',event=>{if(event.target.matches('[data-book-stake]')){state.stake=event.target.valueAsNumber;state.bookKey='';}});
   panel.addEventListener('click', event => {
     const button = event.target.closest('button[data-hub-control]');
     if (!mounted || !button) return;
@@ -274,8 +304,23 @@ export function createSportsCentre(panel, french, account) {
       state.slipOpen=!state.slipOpen;
     } else if (id==='pause') {
       state.paused=!state.paused;runClock();
+    } else if(id.startsWith('book-')){
+      if(!state.book?.owner)return;
+      if(id==='book-cash'){if(state.quote)void transact('cash',{quote:state.quote.id});}
+      else{const [,which,slip]=id.split('-'),h=state.book.history.find(v=>v.id===Number(slip));
+        if(h)void transact('quote',{id:h.id,part:which==='full'?h.remaining:Math.floor(h.remaining/2)});}
+      return;
     } else if (id==='confirm') {
-      if (!state.picks.size || state.confirmed) return;
+      if (!state.picks.size || state.confirmed || state.bookLoading) return;
+      if(account()){
+        if(!state.book?.owner)return;
+        const stake=Math.round((state.stake??1)*100);
+        if(!Number.isSafeInteger(stake)||stake<1||stake>state.book.limits.maxStake){state.message=translate('sportRisk');paint();return;}
+        const legs=[...state.picks].map(([id,pick])=>{const m=currentMarket(state,byId.get(id));return {id,pick,price:m.prices[pick],version:m.version};});
+        const signature=JSON.stringify({stake,legs});
+        if(state.bookSignature!==signature||!state.bookKey){state.bookSignature=signature;state.bookKey=crypto.randomUUID();}
+        void transact('accept',{stake,legs,key:state.bookKey});return;
+      }
       state.confirmed=true;state.history.unshift({at:Date.now(),legs:[...state.picks]});state.history=state.history.slice(0,12);save();
     } else if (id.startsWith('remove-')) {
       state.picks.delete(id.slice(7));state.confirmed=false;state.pendingBundle='';
@@ -323,7 +368,8 @@ export function createSportsCentre(panel, french, account) {
     render() {
       const fr = french();
       const key=storageKey(), changed=key!==ownerKey;
-      if (changed) { state=newBoard();ownerKey=key;restoreSaved(); }
+      if (changed) { state=newBoard();ownerKey=key;restoreSaved();state.bookLoading=Boolean(account()); }
+      if(changed||!mounted)void refreshBook();
       if (mounted && fr===locale && !changed) return;
       const initial = panel.querySelector('.sports-centre');
       if (!mounted && !state.favorites.size && !state.history.length && initial?.dataset.sportsLang === (fr ? 'fr' : 'en')) {

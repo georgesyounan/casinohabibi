@@ -45,6 +45,15 @@ const copy = {
   telegramSettings:['Check the bot token and the channel username or numeric ID.','Vérifiez le jeton du bot et le nom ou l’identifiant numérique du canal.'],
   telegramAdminNeeded:['Make the bot an administrator of this channel.','Donnez au bot le rôle d’administrateur du canal.'],
   telegramBotBusy:['Choose a dedicated bot. This one is already connected to another service.','Choisissez un bot dédié. Celui-ci est déjà relié à un autre service.'],
+  sportSuspended:['This market is closed for picks.','Les sélections sont fermées pour ce marché.'],
+  sportPriceChanged:['Odds changed. Review the updated prices and confirm again.','Les cotes ont changé. Vérifiez les nouvelles cotes et confirmez de nouveau.'],
+  sportRisk:['The stake or exposure limit is reached.','La limite de mise ou d’exposition est atteinte.'],
+  sportExpired:['This offer expired. Request a new quote.','L’offre est expirée. Demandez un nouveau montant.'],
+  sportUnavailable:['This operation is unavailable for this slip.','Cette opération est indisponible pour ce coupon.'],
+  clubSoldOut:['This item is out of stock.','Cet article est épuisé.'],
+  clubNotEnoughPoints:['You need more club points.','Votre solde de points est insuffisant.'],
+  clubOrderClosed:['This action has closed.','Cette opération est close.'],
+  clubTierRequired:['VIP membership is required.','Le niveau VIP est requis.'],
   telegramInviteNeeded:['Give the bot permission to invite members and provide a Telegram invite link for this chat.','Autorisez le bot à inviter des membres et activez un lien d’invitation Telegram pour ce canal.'],
   telegramBusy:['Telegram setup is in progress. Try again shortly.','La configuration Telegram est en cours. Réessayez dans un instant.'],
   telegramChanged:['The Telegram settings changed. Review the channel and save again.','Les paramètres Telegram ont changé. Vérifiez le canal, puis enregistrez.'],
@@ -470,6 +479,7 @@ function clearDemoSelection() {
   clearPendingDemo();
 }
 function roundTitle(entry) {
+  if(entry.game==='sports')return language?'Coupon sportif démo':'Demo sports slip';
   return demoTitle(entry.game, roundPreview(entry.outcome), language ? 'fr-CA' : 'en-CA');
 }
 let tenantCopy = { headline: copy.headline, intro: copy.intro, announcement: ['', ''] };
@@ -2108,6 +2118,7 @@ const clubHome = createClubHome({
   signIn(section){clearDemoSelection();requestedClubTab=section;afterSignIn='clubHome';openPanel('signin');},
   updateAccount(fresh){player=fresh;updateAccount();void giftMenu.sync(true);}
 });
+document.addEventListener('club-telegram-updated',()=>{void giftMenu.sync(true);});
 const giftMenu=createGiftMenu({api,base:appBasePath,french:()=>Boolean(language),account:()=>player,pending:()=>accountPending,translate:t,
   signin(key){clearDemoSelection();afterSignIn='gifts';requestedGift=key;openPanel('signin');},
   async refreshIdentity(expected){
@@ -2121,6 +2132,7 @@ const giftMenu=createGiftMenu({api,base:appBasePath,french:()=>Boolean(language)
 const eventBoard=createEventBoard({api,base:appBasePath,ticketsChanged:()=>giftMenu.sync(true),french:()=>Boolean(language),account:()=>player,pending:()=>accountPending,translate:t,
   signin(){clearDemoSelection();afterSignIn='raffle';openPanel('signin');}});
 const lobbySections = createLobbySections({
+  bookApi:api,applyBookAccount(fresh){if(player?.id===fresh.id){player=fresh;updateAccount();}},translate:t,
   french: () => Boolean(language), appPath, catalogue: comingSoonUi, providers: () => providerGames,
   house: () => ({name:demoProviderName(), count:games.length}), account: () => player, club:openClub, roundTitle, money,
   ready(view) {

@@ -42,6 +42,8 @@ export const operatorCopy = {
   service_assign: ['Order reassigned', 'Commande réattribuée'],
 };
 
+import { sportsAdmin } from './sport-tickets.js';
+
 export function createOperatorUi({ api, t, french, role, staffId, canPublish, open }) {
   const { el, l, button, field, pages, date, local } = uiKit(french);
   const get = (path) => api('admin/operator/' + path, undefined, 'GET');
@@ -51,6 +53,7 @@ export function createOperatorUi({ api, t, french, role, staffId, canPublish, op
     off: ['Inactive', 'Inactif'],
     active: ['Active', 'Actif'],
     suspended: ['Suspended', 'Suspendu'],
+    pending: ['Awaiting connector check','Vérification en attente'],
     failed: ['Check failed', 'Vérification échouée'],
     setup: ['Setup available', 'Configuration disponible'],
     listed: ['Reference listing', 'Fiche de référence'],
@@ -216,6 +219,7 @@ export function createOperatorUi({ api, t, french, role, staffId, canPublish, op
       return;
     }
     back(view, 'products', 'product');
+    if(p.id==='sportsbook' && role()==='operator_admin')sportsAdmin(view,{get,post,t,ui:uiKit(french)});
     view.append(el('h4', local(p, 'name')), el('p', label(p.category) + ' · ' + label(p.availability)));
     if (p.availability === 'setup') {
       view.append(
@@ -288,6 +292,7 @@ export function createOperatorUi({ api, t, french, role, staffId, canPublish, op
     const profile = field(f, 'profile', l('Test connector', 'Connecteur de test'), {
       items: [
         ['healthy', l('Available', 'Disponible')],
+        ['pending', l('Awaiting credentials','En attente des identifiants')],
         ['offline', l('Simulate an outage', 'Simuler une panne')],
       ],
       value: binding.profile,
@@ -320,7 +325,7 @@ export function createOperatorUi({ api, t, french, role, staffId, canPublish, op
             'v' + e.version,
             label(e.state),
             e.reason,
-            date(e.happened),
+            date(e.happened), ...(e.incident?['Incident #'+e.incident]:[]),
           ].join(' · '),
         ),
       );
