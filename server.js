@@ -200,6 +200,9 @@ const defaultBrandOptions = {
   displayMarket: '',
   reportingTimeZone: 'UTC'
 };
+const habibiMark = 'data:image/png;base64,' + readFileSync(new URL('./public/habibi-mark.png', import.meta.url)).toString('base64');
+const legacyHabibiMarkHash = '6d5f6336b7f4f5c7ff9890cca4a447d7e9fb2093b920b089eae60bed1b37126e';
+
 const defaultTenantConfig = {
   brandName: 'Northplay', brandLogo: '', brandFavicon: '', primaryLocale: 'en-CA', enabledLocales: ['en-CA', 'fr-CA'], accentColor: '#d7b45a', supportEmail: '',
   heroTitleEn: 'Your seat at the table.', heroTitleFr: 'Votre place à la table.',
@@ -547,6 +550,15 @@ function lobbyPresentation(tenantId) {
     published.config.brandName = 'Casino Habibi';
   }
   if(published.config.brandName.trim().toLowerCase()==='casino habibi'){
+    const config = published.config;
+    // Existing Habibi tenants saved the original H as a data URL. Preserve later operator uploads.
+    for (const field of ['brandLogo', 'brandFavicon']) {
+      if (!config[field] || createHash('sha256').update(config[field]).digest('hex') === legacyHabibiMarkHash) config[field] = habibiMark;
+    }
+    if (config.accentColor.toLowerCase() === '#91ccff' ||
+        (published.version === 1 && config.accentColor === defaultTenantConfig.accentColor)) {
+      config.accentColor = '#1242dc';
+    }
     const standard=defaultTenantConfig.faqItems[1];
     published.config.faqItems=published.config.faqItems.map(item=>({...item,
       ...(item.answerFr===standard.answerFr && {answerFr:'Le hall propose quatre jeux maison. Habibi Studio publie aussi des éditions jouables, dont Roulette Orbit, Blackjack Néon et Pulse 777. Les éditions disponibles figurent dans les nouveautés.'}),
@@ -2556,6 +2568,12 @@ const assets = {
   '/partner-lobby.js':['partner-lobby.js','text/javascript'],
   '/lobby-shelves.js':['lobby-shelves.js','text/javascript'],
   '/banner-motion.js': ['banner-motion.js', 'text/javascript'],
+  '/habibi-campaigns.js': ['habibi-campaigns.js', 'text/javascript'],
+  ...Object.fromEntries(Array.from({ length: 32 }, (_, i) =>
+    ['en', 'fr'].map(locale => {
+      const file = 'habibi-art/' + String(i + 1).padStart(2, '0') + '-' + locale + '.webp';
+      return ['/' + file, [file, 'image/webp']];
+    })).flat()),
   '/sports-nav.png': ['sports-nav.png', 'image/png'],
   '/campaign-casino.webp': ['campaign-casino.webp', 'image/webp'],
   '/campaign-match.webp': ['campaign-match.webp', 'image/webp'],

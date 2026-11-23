@@ -1,6 +1,6 @@
 /* Shared Casino Habibi palette for the lobby, player dialogs, and staff workspace. */
 body[data-lobby-brand="habibi"],body.player-home[data-lobby-brand="habibi"],body[data-lobby-brand="habibi"]:not(:has(#admin:not([hidden]))) {
-  --habibi-accent: var(--published-lobby-accent,#91ccff);
+  --habibi-accent: var(--published-lobby-accent,#1242dc);
   --bg: #0b162b; --panel: #15253d; --raised: #1b2e49; --selected: #254768; --line: #344c68;
   --text: #f1f6fc; --muted: #b8c9de; --green: var(--habibi-accent); --dark: #08182d;
   --home-accent: var(--habibi-accent); --rail: #101f37; --accent-pale: #223c59; --gold: #afd9ff;
@@ -83,11 +83,11 @@ body[data-lobby-brand="habibi"] #dialog.habibi-auth .auth-input input {flex:1 1 
 .auth-referral[open] summary>svg:last-child,.auth-options[open] summary>svg{transform:rotate(180deg)}
 body[data-lobby-brand="habibi"] #dialog .auth-referral input{width:100%;min-height:42px;margin:7px 0 0;padding:8px 11px;border-radius:8px}
 .auth-agreement {display:flex;align-items:flex-start;gap:10px;color:#c6d7ea;font-size:.81rem;line-height:1.5}
-.habibi-auth .auth-agreement input {margin:1px 0 0;width:18px;height:18px;flex-shrink:0;accent-color:#9ad9ff;cursor:pointer}
+.habibi-auth .auth-agreement input {margin:1px 0 0;width:18px;height:18px;flex-shrink:0;accent-color:var(--habibi-accent);cursor:pointer}
 .habibi-auth .auth-agreement label {display:inline;margin:0;color:inherit;font:inherit;cursor:pointer}
 .auth-agreement a,.auth-agreement .auth-text-button {font:inherit;color:#b6e4ff;text-decoration:underline;text-underline-offset:2px}
 .auth-terms-note {margin:6px 0 0;color:#b8cadc;font-size:.77rem}
-.habibi-auth .auth-submit {width:100%;min-height:45px;margin:0;padding:10px 14px;border-radius:9px;border:1px solid #9be3ff;background:linear-gradient(105deg,#9de1ff,#7dbbff);color:#071b33;font:750 .94rem/1.25 Inter,system-ui,sans-serif;box-shadow:0 3px 16px #2089fa25}
+.habibi-auth .auth-submit {width:100%;min-height:45px;margin:0;padding:10px 14px;border-radius:9px;border:1px solid color-mix(in srgb,var(--habibi-accent) 70%,white);background:var(--habibi-accent);color:var(--button-ink,white);font:750 .94rem/1.25 Inter,system-ui,sans-serif;box-shadow:0 3px 16px #2089fa25}
 .habibi-auth .auth-submit:hover:enabled{filter:brightness(1.08)}.habibi-auth .auth-submit:disabled{background:#263c54;border-color:#3c536d;color:#abc0d3;opacity:1;cursor:not-allowed;box-shadow:none}
 .habibi-auth form[aria-busy=true] .auth-submit {cursor:progress}
 .auth-error {margin:0;padding:9px 11px;border-left:3px solid #ff94a7;border-radius:5px;background:#412434;color:#ffdae0;font-size:.82rem;line-height:1.45}
@@ -594,3 +594,59 @@ body.player-home #lobby[data-club-promotions] .lobby-content > #gift-catalogue {
 #scheduled-shelf .shelf-art{width:100%;max-height:180px;object-fit:cover;border-radius:.8rem}#scheduled-shelf>button{margin:.3rem 0 1rem}
 
 .round-proof{width:100%;font-size:.88rem}.round-proof summary{cursor:pointer;color:#99d8ff}.round-proof code{display:block;overflow-wrap:anywhere;margin:.2rem 0 .6rem}
+
+/* Approved campaign blue for filled controls; lighter tints keep small labels legible on navy. */
+body[data-lobby-brand="habibi"] {
+  --habibi-link: color-mix(in srgb, var(--habibi-accent) 39%, white);
+}
+body.player-home[data-lobby-brand="habibi"] { --button-ink: white; }
+body[data-lobby-brand="habibi"] :focus-visible { outline-color: var(--habibi-link); }
+body[data-lobby-brand="habibi"] .hub-directory small,
+body.player-home[data-lobby-brand="habibi"] .lobby-rail [aria-pressed="true"] .ui-icon { color: var(--habibi-link); }
+body[data-lobby-brand="habibi"] .favorite-toggle[aria-pressed="true"] { color: var(--button-ink, white); }
+body.player-home[data-lobby-brand="habibi"] #join-home,
+body.player-home[data-lobby-brand="habibi"] #hero-join,
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-browse {
+  color: var(--button-ink); background: var(--habibi-accent); border: 1px solid color-mix(in srgb,var(--habibi-accent) 70%,white); box-shadow: none;
+}
+body.player-home[data-lobby-brand="habibi"] #hero-join:not([hidden]) + .hero-browse {
+  color: #fff; background: transparent; border-color: #5f7294;
+}
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  height: auto; min-height: 0; padding: 0; background: #15253d; border-color: #344c68;
+}
+.habibi-carousel-art { order: -1; width: 100%; aspect-ratio: 3 / 1; background: #fff8ee; }
+.habibi-carousel-art img:not([hidden]) { display: block; width: 100%; height: auto; }
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content {
+  width: 100%; max-width: none; padding: 13px 18px 7px;
+}
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content[hidden] { display: none; }
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content h1 {
+  margin: 3px 0; font-size: clamp(1rem,2vw,1.55rem); line-height: 1.16;
+}
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-mode { color: var(--habibi-link); margin: 0; }
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-description { margin: 4px 0 9px; color: #d6e1f0; font-size: .88rem; }
+#default-lobby-hero .campaign-controls { position: static; padding: 3px 15px 9px; margin-top: auto; }
+#default-lobby-hero .campaign-all { margin-left: auto; color: #ecf0ff; font-size: .82rem; font-weight: 700; text-underline-offset: 3px; }
+#default-lobby-hero .campaign-dot[aria-current="true"]::before { background: var(--habibi-link); }
+body.player-home #lobby[data-club-promotions] .lobby-content > #habibi-promo-gallery:not([hidden]) { display: block; margin: 0 0 26px; }
+#habibi-campaigns h2 { margin: 0 0 6px; color: var(--text); font: 750 clamp(1.15rem,2vw,1.5rem)/1.25 Inter,sans-serif; }
+.habibi-proposal-note { margin: 0 0 15px; color: var(--muted); max-width: 72ch; font-size: .9rem; }
+.habibi-offer-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,330px),1fr)); gap: 16px; }
+.habibi-campaign-card { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.habibi-campaign-card a,.habibi-campaign-card img { display: block; width: 100%; height: auto; }
+.habibi-campaign-card a:focus-visible { outline-offset: -3px; }
+.habibi-campaign-card > div { padding: 11px 14px 13px; }
+.habibi-campaign-card h3 { margin: 0; color: var(--text); font: 710 1rem/1.25 Inter,sans-serif; }
+.habibi-campaign-card p { margin: 4px 0 0; color: #dce5f2; font-size: .88rem; }
+.habibi-campaign-card small { display: block; margin-top: 6px; color: var(--habibi-link); }
+#habibi-campaigns .habibi-studio-title { margin-top: 25px; }
+.habibi-studio-group { border-bottom: 1px solid var(--line); }
+.habibi-studio-group summary { padding: 12px 2px; cursor: pointer; color: var(--text); font-weight: 700; }
+.habibi-studio-group[open] .habibi-offer-grid { margin: 2px 0 15px; }
+@media(max-width:620px) {
+  body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content { padding: 11px 12px 4px; }
+  #default-lobby-hero .campaign-controls { padding: 3px 10px 7px; }
+  .habibi-offer-grid { gap: 10px; }
+}

@@ -1,5 +1,6 @@
 import { uiKit } from './discovery.js';
 import { lobbyView, viewTitle } from './lobby-navigation.js';
+import { campaignGallery } from './habibi-campaigns.js';
 import { createHomeCampaign } from './banner-motion.js';
 import {distributionEditor} from './catalogue-distribution.js';
 import { createSportsCentre } from './sports-centre.js';
@@ -562,6 +563,15 @@ export function createLobbySections({
   function render() {
     const active = enabled() && Boolean(view);
     homeCampaign(enabled() && !active);
+    const gallery = document.getElementById('habibi-promo-gallery');
+    if (gallery) {
+      gallery.hidden = !(active && view === 'promotions');
+      const locale = french() ? 'fr' : 'en';
+      if (!gallery.hidden && gallery.dataset.locale !== locale) {
+        gallery.innerHTML = campaignGallery(Boolean(french()), appPath(''));
+        gallery.dataset.locale = locale;
+      }
+    }
     lobby.toggleAttribute('data-hub-open', active);
     lobby.toggleAttribute('data-club-promotions', active && view==='promotions');
     panel.hidden = !active;
