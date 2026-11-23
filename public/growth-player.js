@@ -85,6 +85,7 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
     bannerTimer;
   async function banner(root) {
     const request = ++bannerVersion;
+    root.setAttribute('aria-busy', 'true');
     clearTimeout(bannerTimer);
     try {
       const { banner: b } = await get('growth/banner?locale='+(french()?'fr-CA':'en-CA'));
@@ -107,6 +108,8 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
         root.hidden = true;
         root.replaceChildren();
       }
+    } finally {
+      if (request === bannerVersion) root.removeAttribute('aria-busy');
     }
   }
   const ui=uiKit(french);

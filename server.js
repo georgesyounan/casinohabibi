@@ -2230,6 +2230,7 @@ const assets = {
   '/review-desk.js':['review-desk.js','text/javascript'],
   '/partner-lobby.js':['partner-lobby.js','text/javascript'],
   '/lobby-shelves.js':['lobby-shelves.js','text/javascript'],
+  '/lobby-navigation.js': ['lobby-navigation.js', 'text/javascript'],
   '/operator-workflows.js':['operator-workflows.js','text/javascript'],
   '/provider-catalog.js':['provider-catalog.js','text/javascript'],
   '/referral-views.js':['referral-views.js','text/javascript'],
@@ -2323,7 +2324,9 @@ createServer(async (req, res) => {
     if (type === 'text/html') {
       if (path === '/') content = content.toString().replace('<body>', '<body class="player-home">');
       const view = transaction(() => describePublicPage(tenantId, lobbyPresentation(tenantId).config, {
-        path, params: requestUrl.searchParams, helpSlug: help?.[1], previewSlug: preview?.[1]
+        path, params: requestUrl.searchParams, helpSlug: help?.[1], previewSlug: preview?.[1],
+        preferredLocale: req.headers.cookie?.match(/(?:^|;\s*)northplay_ui_locale=(fr|en)(?:;|$)/)?.[1],
+        signedIn: Boolean((path === '/' || help || preview) && signedPlayer(req, tenantId))
       }), { readOnly: true });
       if (view.destination) {
         const quest=requestUrl.searchParams.get('quest');
@@ -2355,6 +2358,17 @@ createServer(async (req, res) => {
       if (view.meta) content = pageHead(content.toString(), view.meta, new URL(playerLinkBase(req, tenantId)).origin);
       if (view.noindex || view.status === 404 || ['reset','verify','email-change','preview','editContent','editCard'].some((key) => requestUrl.searchParams.has(key))) {
         res.setHeader('X-Robots-Tag', 'noindex');
+      }
+    }
+    if (type !== 'text/html') {
+      // Public assets keep their stable URLs. Revalidate across releases without transferring identical files.
+      const etag = '"' + createHash('sha256').update(content).digest('base64url') + '"';
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'public, no-cache');
+      const validators = (req.headers['if-none-match'] || '').split(',').map(tag => tag.trim().replace(/^W\//, ''));
+      if (validators.includes(etag) || validators.includes('*')) {
+        res.writeHead(304);
+        return res.end();
       }
     }
     res.setHeader('Content-Type', type.startsWith('text/') ? `${type}; charset=utf-8` : type);

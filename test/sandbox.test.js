@@ -112,6 +112,24 @@ test('the mounted lobby renders its brand and artwork and respects a newly publi
   const first = await (await fetch(url + '/?lang=fr')).text();
   assert.match(first, /<title>Casino Habibi<\/title>/);
   assert.match(first, /<h1 data-copy="headline">Votre place à la table\.<\/h1>/);
+  assert.match(first, /<body class="player-home" data-lobby-brand="habibi"/);
+  assert.match(first, /data-copy="homeAll">Hall du casino<\/span>/);
+  assert.match(first, /id="home-originals-title"[^>]*>Jeux maison<\/h3><div class="cards"><article/);
+  const sportResponse = await fetch(url + '/?view=sports', { headers: { Cookie: 'northplay_ui_locale=fr' } });
+  assert.equal(sportResponse.headers.get('cache-control'), 'no-store');
+  const sports = await sportResponse.text();
+  assert.match(sports, /<title>Sports en démo · Casino Habibi<\/title>/);
+  assert.match(sports, /<main id="lobby"[^>]* data-hub-open/);
+  assert.match(sports, /<h1 id="hub-title" tabindex="-1">Sports en démo<\/h1>/);
+  assert.match(sports, /data-hub-control="marina-0"/);
+  assert.match(sports, /Coupon démo/);
+  const english = await (await fetch(url + '/?lang=en&view=sports', { headers: { Cookie: 'northplay_ui_locale=fr' } })).text();
+  assert.match(english, /<title>Sports demo · Casino Habibi<\/title>/);
+  const asset = await fetch(url + '/lobby-navigation.js');
+  const etag = asset.headers.get('etag');
+  assert.ok(etag);
+  assert.equal((await fetch(url + '/lobby-navigation.js', { headers: { 'If-None-Match': etag } })).status, 304);
+  assert.equal((await fetch(url + '/lobby-navigation.js', { headers: { 'If-None-Match': '"outdated"' } })).status, 200);
   for (const file of ['lobby.css', 'lobby-coast.webp', 'game-gold.webp', 'game-roulette.webp', 'game-blackjack.webp', 'game-aurora.webp']) {
     const asset = await fetch(url + '/' + file);
     assert.equal(asset.status, 200, file);
@@ -128,6 +146,7 @@ test('the mounted lobby renders its brand and artwork and respects a newly publi
   assert.equal((await request('tenant')).data.config.brandName, 'Table & Coast');
   const updated = await (await fetch(url + '/?lang=fr')).text();
   assert.match(updated, /<title>Casino Table &amp; Coast<\/title>/);
+  assert.doesNotMatch(updated, /id="lobby-settings"|data-lobby-brand="habibi"/);
   assert.match(updated, /<h1 data-copy="headline">Une table &lt;ouverte&gt;<\/h1>/);
 });
 

@@ -1,3 +1,4 @@
+import { lobbyCopy, lobbyView, viewTitle } from './lobby-navigation.js';
 import { casinoPageTitle } from './guide-metadata.js';
 import { createReviewUi, reviewCopy } from './review-desk.js';
 import { createPartnerUi, partnerLobbyCopy } from './partner-lobby.js';
@@ -34,29 +35,16 @@ const copy = {
   ...websiteContentCopy,
   ...followupCopy,
   ...adminWorkspaceCopy,
-  homeExplore: ['Browse', 'Explorer'], homeAll: ['Casino lobby', 'Hall du casino'],
-  homeLive: ['Live casino', 'Casino en direct'], homeLibrary: ['My library', 'Ma bibliothèque'],
-  homeSpotlight: ['In the spotlight', 'À la une'], homePrev: ['Previous featured game', 'Jeu vedette précédent'],
-  homeNext: ['Next featured game', 'Jeu vedette suivant'], homeOrder: ['Sort previews', 'Trier les aperçus'],
-  homeFilters: ['Filters', 'Filtres'],
-  joinHome: ['Join now', 'S’inscrire'], newHome: ['New releases', 'Nouveautés'], studioHome: ['Studios & providers', 'Studios et fournisseurs'],
-  clubHome: ['Player club','Club des joueurs'], promoHome: ['Promotions','Promotions'], challengeHome: ['Challenges','Défis'],
-  rewardHome: ['Rewards','Récompenses'], activityHome: ['Game activity','Activité des jeux'], inviteHome: ['Invite a friend','Inviter un ami'],
-  helpHome: ['Guides & support','Guides et assistance'],
-  homeOriginals: ['House games', 'Jeux maison'], homeProviders: ['Provider previews', 'Aperçus des fournisseurs'],
-  homeSafer: ['Responsible play', 'Jeu responsable'],
+  ...lobbyCopy,
   homeSafetyIntro: ['Manage your play time, set a demo wager limit or take a break.', 'Gérez votre temps de jeu, fixez une limite de mises fictives ou prenez une pause.'],
-  lobby: ['Casino lobby', 'Hall du casino'], admin: ['Administration', 'Administration'],
+
   primaryNav: ['Main navigation', 'Navigation principale'], footerNav: ['Footer links', 'Liens de pied de page'],
-  skipToContent: ['Skip to main content', 'Passer au contenu principal'],
-  playSafely: ['Play safely', 'Jouer de façon responsable'],
-  signin: ['Sign in', 'Se connecter'], signup: ['Create an account', 'Créer un compte'],
+
+  signup: ['Create an account', 'Créer un compte'],
   account: ['My account', 'Mon compte'], logout: ['Sign out', 'Se déconnecter'],
-  sandbox: ['Play-money casino', 'Casino en argent fictif'],
   headline: ['Your seat at the table.', 'Votre place à la table.'],
   pageDescription: ['Explore the Northplay casino demo with simulated CAD credits. No deposits or withdrawals are available, and no external game providers are connected.', 'Découvrez la démo du casino Northplay avec des crédits fictifs en dollars canadiens. Aucun dépôt ni retrait n’est possible et aucun fournisseur de jeux externe n’est connecté.'],
   intro: ['Explore the game lobby and try a round with simulated CAD funds.', 'Explorez le hall et essayez une partie avec des fonds fictifs en dollars canadiens.'],
-  browse: ['Explore games', 'Explorer les jeux'], games: ['Casino games', 'Jeux de casino'],
   infoLabel: ['Key information', 'À savoir'], cadDisplay: ['CAD currency display', 'Affichage en dollars canadiens'],
   twoLanguages: ['English and Canadian French', 'Anglais et français canadien'], simulatedOnly: ['Simulated play only', 'Jeu simulé seulement'],
   switchToFrench: ['Switch to French', 'Passer au français'], switchToEnglish: ['Switch to English', 'Passer à l’anglais'],
@@ -75,7 +63,7 @@ const copy = {
   breakTitle: ['Take a pause', 'Faites une pause'], breakText: ['Choose a break from 15 minutes to 30 days in your account.', 'Choisissez une pause de 15 minutes à 30 jours dans votre compte.'],
   limitTitle: ['Set a demo limit', 'Fixez une limite fictive'], limitText: ['Choose a daily cap for simulated wagers. The limit can only be lowered.', 'Choisissez une limite quotidienne de mises fictives. Vous pouvez seulement la réduire.'],
   excludeTitle: ['Exclude your account', 'Excluez votre compte'], excludeText: ['Self-exclusion blocks future sign-ins to this demo account and cannot be undone here.', 'L’autoexclusion bloque les prochaines connexions à ce compte de démonstration et ne peut pas être annulée ici.'],
-  helpEyebrow: ['Good to know', 'À retenir'], faqTitle: ['Frequently asked questions', 'Questions fréquentes'],
+  helpEyebrow: ['Good to know', 'À retenir'],
   faqBalanceQuestion: ['Can I withdraw my demo balance?', 'Puis-je retirer mon solde de démonstration?'],
   faqBalanceAnswer: ['No. The balance is simulated, has no cash value, and cannot be deposited or withdrawn.', 'Non. Le solde est fictif, n’a aucune valeur monétaire et ne peut être ni déposé ni retiré.'],
   faqGamesQuestion: ['Can I play games from external providers?', 'Puis-je jouer aux jeux de fournisseurs externes?'],
@@ -83,7 +71,7 @@ const copy = {
   faqSafetyQuestion: ['What account controls are available?', 'Quels contrôles sont offerts dans le compte?'],
   faqSafetyAnswer: ['You can set a daily limit for simulated wagers, pause demo play for 15 minutes, or self-exclude the account. These controls apply to this prototype account only.', 'Vous pouvez fixer une limite quotidienne de mises fictives, mettre le jeu en pause pendant 15 minutes ou exclure le compte. Ces contrôles s’appliquent uniquement au compte de ce prototype.'],
   faqEditorTitle: ['Lobby FAQ', 'FAQ du hall'], faqEditorHelp: ['Edit these three entries in both languages. Answers are limited to 500 characters.', 'Modifiez ces trois entrées dans les deux langues. Les réponses sont limitées à 500 caractères.'],
-  termsLink: ['Terms', 'Conditions'], privacyLink: ['Privacy', 'Confidentialité'],
+
   policyLinksTitle: ['Policy links (optional)', 'Liens vers les politiques (facultatifs)'],
   termsUrlEn: ['Terms page URL · English', 'URL des conditions · anglais'], termsUrlFr: ['Terms page URL · Canadian French', 'URL des conditions · français canadien'],
   privacyUrlEn: ['Privacy page URL · English', 'URL de confidentialité · anglais'], privacyUrlFr: ['Privacy page URL · Canadian French', 'URL de confidentialité · français canadien'],
@@ -94,7 +82,7 @@ const copy = {
   faqQuestionEn: ['Question · English', 'Question · anglais'], faqQuestionFr: ['Question · Canadian French', 'Question · français canadien'],
   faqAnswerEn: ['Answer · English', 'Réponse · anglais'], faqAnswerFr: ['Answer · Canadian French', 'Réponse · français canadien'],
   faqOne: ['FAQ entry 1', 'Entrée FAQ 1'], faqTwo: ['FAQ entry 2', 'Entrée FAQ 2'], faqThree: ['FAQ entry 3', 'Entrée FAQ 3'],
-  all: ['All games', 'Tous les jeux'], ...catalogueCategories, favorites: ['Favorites', 'Favoris'], recentGames: ['Recently played', 'Joués récemment'],
+  all: ['All games', 'Tous les jeux'], ...catalogueCategories,
   browseAllGames: ['Browse all games', 'Parcourir tous les jeux'],
   clearGameSearch: ['Clear search', 'Effacer la recherche'],
   providerSortLabel: ['Sort preview listings', 'Trier les fiches de prévisualisation'], providerSortRecent: ['Recently added first', 'Ajouts récents en premier'], providerSortAlpha: ['Alphabetical', 'Ordre alphabétique'],
@@ -160,7 +148,7 @@ const copy = {
   overviewUpdated: ['Updated {time}', 'Mis à jour à {time}'],
   featuredDemoGames: ['Featured demo games', 'Jeux de démonstration en vedette'],
   featuredDemoGamesHelp: ['Choose up to three built-in demo games to show first in the lobby. Provider catalog listings are managed separately.', 'Choisissez jusqu’à trois jeux de démonstration intégrés à afficher en premier dans le hall. Les fiches des fournisseurs sont gérées séparément.'],
-  featuredBadge: ['Featured', 'En vedette'], featuredPreview: ['Featured first: {games}', 'En vedette en premier : {games}'],
+   featuredPreview: ['Featured first: {games}', 'En vedette en premier : {games}'],
   featuredLimit: ['Choose no more than three featured games.', 'Choisissez au plus trois jeux en vedette.'],
   brandName: ['Casino name', 'Nom du casino'], accentColor: ['Accent colour', 'Couleur d’accent'],
   brandLogoLabel: ['Upload logo (PNG, JPEG or WebP; up to 48 KB)', 'Téléverser un logo (PNG, JPEG ou WebP; 48 Ko maximum)'],
@@ -177,7 +165,7 @@ const copy = {
   heroTitleEn: ['Lobby headline · English', 'Titre du hall · anglais'], heroTitleFr: ['Lobby headline · Canadian French', 'Titre du hall · français canadien'],
   heroIntroEn: ['Lobby introduction · English', 'Présentation du hall · anglais'], heroIntroFr: ['Lobby introduction · Canadian French', 'Présentation du hall · français canadien'],
   heroPreviewEn: ['English preview', 'Aperçu en anglais'], heroPreviewFr: ['Canadian French preview', 'Aperçu en français canadien'],
-  supportEmail: ['Support email', 'Courriel du soutien'], supportContact: ['Contact support', 'Contacter le soutien'],
+  supportEmail: ['Support email', 'Courriel du soutien'],
   tenantPreviewTitle: ['Brand preview', 'Aperçu de la marque'], tenantPreviewHelp: ['Live preview of the settings in this form. Save the draft, then publish it for players to see.', 'Aperçu en direct des paramètres de ce formulaire. Enregistrez le brouillon, puis publiez-le pour que les joueurs le voient.'],
   previewBrandPlaceholder: ['Your casino name', 'Le nom de votre casino'], previewEmailPlaceholder: ['No support email set', 'Aucun courriel de soutien défini'],
   supportStatusTotals: ['All requests · {open} open · {answered} answered · {closed} closed','Toutes les demandes · {open} ouvertes · {answered} répondues · {closed} fermées'],
@@ -266,12 +254,10 @@ const copy = {
   catalogEmpty: ['Games will appear here after an approved provider is connected and its catalog is synced.', 'Les jeux apparaîtront ici après la connexion d’un fournisseur approuvé et la synchronisation de son catalogue.'],
   noFavoriteGamesTitle: ['No favorites yet', 'Aucun favori pour le moment'],
   noRecentGamesTitle: ['No recent games yet', 'Aucun jeu récent'], noRecentGames: ['Games you play will appear here.', 'Les jeux auxquels vous jouez apparaîtront ici.'],
-  searchGames: ['Search the catalogue', 'Rechercher dans le catalogue'],
   catalogNoMatchesTitle: ['No matching games', 'Aucun jeu correspondant'],
   catalogNoMatches: ['Try another search or choose a different category.', 'Essayez une autre recherche ou choisissez une autre catégorie.'],
   catalogListing: ['Provider preview · not playable', 'Aperçu fournisseur · non jouable'],
   demoGameLabel: ['Playable demo game', 'Jeu de démonstration jouable'],
-  playNow: ['Play demo', 'Jouer à la démo'],
   catalogSync: ['Catalog data', 'Données du catalogue'],
   catalogSyncHelp: ['Choose the provider and review the full file before publishing. Omitted titles leave the lobby.', 'Choisissez le fournisseur et vérifiez le fichier complet avant de publier. Les titres absents du fichier quittent le hall.'],
   catalogListings: ['Catalog listings', 'Fiches du catalogue'],
@@ -354,7 +340,13 @@ function auditActionLabel(action) {
   const readableAction = action.replaceAll('_', ' ');
   return language ? `Action : ${readableAction}` : `Action: ${readableAction}`;
 }
-let language = localStorage.getItem('northplay-language') === 'fr' ? 1 : 0;
+const bootNode = document.getElementById('lobby-settings');
+const initialBrand = bootNode ? JSON.parse(bootNode.textContent) : null;
+if (initialBrand) {
+  initialBrand.brandLogo = document.querySelector('header .brand-logo')?.getAttribute('src') || '';
+  initialBrand.brandFavicon = initialBrand.brandFavicon ? document.getElementById('tenant-favicon').getAttribute('href') : '';
+}
+let language = (localStorage.getItem('northplay-language') || document.documentElement.lang.slice(0, 2)) === 'fr' ? 1 : 0;
 let staffMemberCache = [];
 let staffAuditCache = [];
 let staffAuditNextCursor = null;
@@ -376,6 +368,10 @@ if (['en', 'fr'].includes(requestedLanguage)) {
   localStorage.setItem('northplay-language', requestedLanguage);
 }
 let player;
+let accountPending = true;
+let editionStatus = 'loading';
+let providersStatus = 'loading';
+let editionRequest = 0;
 let playerSessionStartedAt;
 let displayedReminderPeriod;
 let displayedReminderLanguage;
@@ -633,6 +629,7 @@ function applyTenant(config) {
   updateDocumentTitle();
   for (const node of document.querySelectorAll('[data-copy="headline"], [data-copy="intro"]')) node.textContent = t(node.dataset.copy);
   document.documentElement.style.setProperty('--green', config.accentColor);
+  document.body.style.setProperty('--published-lobby-accent', config.accentColor);
   if (currentRoute === '/') {
     const channels = config.accentColor.slice(1).match(/../g).map(pair => {
       const value = parseInt(pair, 16) / 255;
@@ -798,7 +795,7 @@ function readTenantConfig() {
     heroIntroFr: fields.heroIntroFr.value.trim(),
     announcementEn: fields.announcementEn.value.trim(),
     announcementFr: fields.announcementFr.value.trim(),
-    faqItems: Array.from({ length: 3 }, (_, index) => ({
+   faqItems: Array.from({ length: 3 }, (_, index) => ({
       questionEn: fields[`faq${index}QuestionEn`].value.trim(),
       answerEn: fields[`faq${index}AnswerEn`].value.trim(),
       questionFr: fields[`faq${index}QuestionFr`].value.trim(),
@@ -815,17 +812,19 @@ function readTenantConfig() {
 
 function updateDocumentTitle() {
   if ((publicWebsite.isHelp || comingSoonUi.isDetail) && document.querySelector('link[rel="canonical"]')) return;
-  document.title = isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
+  const view = currentRoute === '/' && document.body.dataset.lobbyBrand === 'habibi' ? lobbyView(new URLSearchParams(location.search).get('view')) : '';
+  document.title = view ? viewTitle(view, Boolean(language)) + ' · ' + tenantBrandName : isAdminPage ? `${t('adminWorkspace')} · ${tenantBrandName}`
     : publicWebsite.isHelp && publicWebsite.title() ? publicWebsite.title() + ' · ' + tenantBrandName
     : casinoPageTitle(tenantBrandName, Boolean(language));
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('pageDescription'));
 }
 
 function updateAccount() {
-  $('#join-home').hidden = Boolean(player) || currentRoute !== '/' || document.body.dataset.lobbyBrand !== 'habibi';
-  $('#account').textContent = player ? money(player.balance) : t('signin');
+  const knownMember = accountPending && document.body.hasAttribute('data-member-pending');
+  $('#join-home').hidden = Boolean(player) || knownMember || currentRoute !== '/' || document.body.dataset.lobbyBrand !== 'habibi';
+  $('#account').textContent = player ? money(player.balance) : t(knownMember ? 'account' : 'signin');
   const unreadSupport = player?.supportReplies || 0;
-  $('#account').setAttribute('aria-label', player ? t('account') + ' · ' + money(player.balance) + (unreadSupport ? ' · ' + t('supportUnreadLabel').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(unreadSupport)) : '') : t('signin'));
+  $('#account').setAttribute('aria-label', player ? t('account') + ' · ' + money(player.balance) + (unreadSupport ? ' · ' + t('supportUnreadLabel').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(unreadSupport)) : '') : t(knownMember ? 'account' : 'signin'));
   $('#account').classList.toggle('has-support-reply', Boolean(unreadSupport));
   $('#account').title = unreadSupport ? t('supportUnreadLabel').replace('{count}', String(unreadSupport)) : '';
   $('#safety-controls').textContent = player ? t('accountControls') : t('safetyCta');
@@ -1956,6 +1955,38 @@ const siteContentLocale = () => language ? 'fr-CA' : 'en-CA';
 const lobbySections = createLobbySections({
   french: () => Boolean(language), appPath, catalogue: comingSoonUi, providers: () => providerGames,
   house: () => ({name:demoProviderName(), count:games.length}), account: () => player, club:openClub, roundTitle, money,
+  ready(view) {
+    if (view === 'activity') return !accountPending;
+    return editionStatus !== 'loading' && (view !== 'studios' || providersStatus !== 'loading');
+  },
+  editionFailed: () => editionStatus === 'error',
+  retryEdition: () => void refreshEdition(),
+  onNavigate(url) {
+    const params = url.searchParams;
+    const category = params.get('category');
+    filter = ['slots', 'table', 'live', 'favorites', 'recent'].includes(category) ? category : 'all';
+    searchQuery = (params.get('q') || '').slice(0, 120);
+    selectedCollection = normalizeCatalogueText((params.get('collection') || '').slice(0, 128));
+    $('#game-search').value = searchQuery;
+    providerPage = 1;
+    markSelectedFilter();
+    const locale = params.get('lang');
+    if ((locale === 'fr' || locale === 'en') && Boolean(language) !== (locale === 'fr')) {
+      language = publicLanguage(locale + '-CA');
+      localStorage.setItem('northplay-language', language ? 'fr' : 'en');
+      render();
+    } else {
+      renderCatalog();
+      updateDocumentTitle();
+    }
+    if (initialBrand) {
+      const view = lobbyView(params.get('view'));
+      for (const link of document.querySelectorAll('link[rel="canonical"],link[rel="alternate"][hreflang]')) {
+        const lang = link.hreflang ? link.hreflang.slice(0, 2) : (language ? 'fr' : 'en');
+        link.href = location.origin + appPath('/?') + new URLSearchParams(view ? { lang, view } : { lang });
+      }
+    }
+  },
   support() {
     if(player) openSupportCenter();
     else { clearDemoSelection(); afterSignIn='support'; openPanel('signin'); }
@@ -2025,9 +2056,13 @@ function render() {
   if (languageChanged && !isAdminPage && currentRoute==='/') void publicShelf.refresh();
   if (languageChanged && !isAdminPage) {
     void publicWebsite.load();
-    if (!publicWebsite.isHelp) void comingSoonUi.loadLobby().catch(() => {}).finally(renderCatalog);
+    if (!publicWebsite.isHelp) void refreshEdition();
   }
   document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
+  if (initialBrand) {
+    const preference = 'northplay_ui_locale=' + (language ? 'fr' : 'en');
+    if (!document.cookie.split('; ').includes(preference)) document.cookie = preference + '; Path=' + appPath('/') + '; Max-Age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+  }
   updateDocumentTitle();
   updateTenantPreview();
   renderFeaturedGameEditor();
@@ -2044,6 +2079,7 @@ function render() {
   $('footer nav').setAttribute('aria-label', t('footerNav'));
   updatePolicyLinks();
   $('#game-search').placeholder = t('searchGames');
+  $('#home-search').dataset.compact = t('searchCompact');
   $('#open-discovery').title = t('discovery');
   $('#language').textContent = language ? 'EN' : 'FR';
   $('#language').setAttribute('aria-label', t(language ? 'switchToEnglish' : 'switchToFrench'));
@@ -2125,7 +2161,7 @@ $('#language').addEventListener('click', async () => {
     if (publicWebsite.isHelp || url.searchParams.has('lang')) {
       url.searchParams.set('lang', language ? 'fr' : 'en');
       if (url.searchParams.has('locale')) url.searchParams.set('locale', siteContentLocale());
-      history.replaceState(null, '', url);
+      history.replaceState(history.state, '', url);
     }
   }
 });
@@ -2170,7 +2206,7 @@ $('#home-options').addEventListener('keydown', (event) => {
 });
 $('#home-search').addEventListener('submit', (event) => {
   event.preventDefault();
-  if(lobbySections.active()){ location.assign(lobbySections.homeUrl({q:$('#game-search').value.trim()},'#games')); return; }
+  if(lobbySections.active()){ lobbySections.navigate(lobbySections.homeUrl({q:$('#game-search').value.trim()},'#games')); return; }
   $('#games').focus();
   $('#games').scrollIntoView({ block: 'start' });
 });
@@ -2190,7 +2226,11 @@ $('#filters').addEventListener('click', (event) => {
   const button = event.target.closest('button[data-filter]');
   if (!button) return;
   lobbySections.closeMenu();
-  if(lobbySections.active()){ location.assign(lobbySections.homeUrl(button.dataset.filter==='all'?{}:{category:button.dataset.filter},'#games')); return; }
+  if (lobbySections.active()) {
+    if (player && button.dataset.filter === 'favorites') void api('discovery/visit', { kind: 'shelf' }).catch(() => {});
+    lobbySections.navigate(lobbySections.homeUrl(button.dataset.filter === 'all' ? {} : { category: button.dataset.filter }, '#games'));
+    return;
+  }
   filter = button.dataset.filter;
   if(player&&filter==='favorites')void api('discovery/visit',{kind:'shelf'}).catch(()=>{});
   rememberCatalogue();
@@ -3247,6 +3287,23 @@ $('#mfa-disable').addEventListener('click', async () => {
   } catch (error) { $('#mfa-status').textContent = t(error.message); }
 });
 
+async function refreshEdition() {
+  const request = ++editionRequest;
+  editionStatus = 'loading';
+  if (initialBrand && publicComingSoon) document.body.setAttribute('data-edition-pending', '');
+  try {
+    await comingSoonUi.loadLobby();
+    if (request === editionRequest) editionStatus = 'ready';
+  } catch {
+    if (request === editionRequest) editionStatus = 'error';
+  } finally {
+    if (request === editionRequest) {
+      document.body.removeAttribute('data-edition-pending');
+      renderCatalog();
+    }
+  }
+}
+
 document.body.classList.toggle('admin-route', isAdminPage);
 document.body.classList.toggle('player-home', currentRoute === '/');
 $('#admin-view-lobby').hidden = !isAdminPage;
@@ -3254,29 +3311,25 @@ $('#lobby').hidden = isAdminPage || comingSoonUi.isDetail || publicWebsite.isHel
 $('#site-public-help').hidden = !publicWebsite.isHelp;
 $('#admin').hidden = !isAdminPage;
 $('#coming-soon-detail').hidden = !comingSoonUi.isDetail;
+if (initialBrand) applyTenant(initialBrand);
 render();
 if (isAdminPage) {
   try { showStaffSession(await api('admin/session', undefined, 'GET')); }
   catch { $('#staff-login').hidden = false; $('#admin-tools').hidden = true; }
 }
-if (!isAdminPage && !publicWebsite.isHelp) {
-  try { await comingSoonUi.loadLobby(); }
-  catch { /* The preview renders its localized unavailable state. */ }
-  renderCatalog();
-}
-try {
-  const published = await api('tenant', undefined, 'GET');
-  applyTenant(published.config);
-} catch {
-  // Use the shared default brand if tenant settings are unavailable.
+if (!initialBrand) {
+  try { applyTenant((await api('tenant', undefined, 'GET')).config); }
+  catch { /* The shared defaults also work offline. */ }
 }
 if (!isAdminPage) {
   void publicWebsite.load();
-  if(currentRoute==='/')publicShelf.start();
+  if (currentRoute === '/') publicShelf.start();
   if (!publicWebsite.isHelp) {
-    try { providerGames = await api('games', undefined, 'GET'); }
-    catch { /* Keep the local catalogue available. */ }
-    renderCatalog();
+    void refreshEdition();
+    void api('games', undefined, 'GET').then(items => {
+      providerGames = items;
+      providersStatus = 'ready';
+    }).catch(() => { providersStatus = 'error'; }).finally(renderCatalog);
   }
   try {
     player = await api('account', undefined, 'GET');
@@ -3285,14 +3338,16 @@ if (!isAdminPage) {
       if (!favoritesSynced) $('#favorites-status').textContent = t('favoriteSaveFailed');
     }
     playerSessionStartedAt = player?.sessionStartedAt;
-    if (player?.preferredLocale && !['en','fr'].includes(requestedLanguage)) {
+    if (player?.preferredLocale && !['en','fr'].includes(new URLSearchParams(location.search).get('lang'))) {
       language = publicLanguage(player.preferredLocale);
       if (publicLocales.includes(player.preferredLocale)) localStorage.setItem('northplay-language', language ? 'fr' : 'en');
     }
-    updateAccount();
-    render();
   } catch {
-    // The catalogue remains available when the account service is offline.
+    // The public catalogue also works without an account.
+  } finally {
+    accountPending = false;
+    document.body.removeAttribute('data-member-pending');
+    render();
   }
   window.setInterval(updateSessionReminder, 60_000);
   updateSessionReminder();
