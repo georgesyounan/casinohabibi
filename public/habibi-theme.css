@@ -612,23 +612,45 @@ body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-browse {
 body.player-home[data-lobby-brand="habibi"] #hero-join:not([hidden]) + .hero-browse {
   color: #fff; background: transparent; border-color: #5f7294;
 }
+body.player-home[data-lobby-brand="habibi"] .home-lead { container: lobby-lead / inline-size; }
 body.player-home[data-lobby-brand="habibi"] #default-lobby-hero {
-  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
-  height: auto; min-height: 0; padding: 0; background: #15253d; border-color: #344c68;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "art art" "actions controls";
+  align-items: center; gap: 6px 12px; height: auto; min-height: 0;
+  padding: 0; border: 0; border-radius: 0; background: transparent; overflow: visible;
 }
-.habibi-carousel-art { order: -1; width: 100%; aspect-ratio: 3 / 1; background: #fff8ee; }
+.habibi-carousel-art {
+  grid-area: art; width: 100%; aspect-ratio: 3 / 1;
+  overflow: hidden; border-radius: 14px; background: #fff8ee;
+}
 .habibi-carousel-art img:not([hidden]) { display: block; width: 100%; height: auto; }
 body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content {
-  width: 100%; max-width: none; padding: 13px 18px 7px;
+  grid-area: actions; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+  width: auto; max-width: none; padding: 0;
 }
 body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content[hidden] { display: none; }
-body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content h1 {
-  margin: 3px 0; font-size: clamp(1rem,2vw,1.55rem); line-height: 1.16;
+/* The banner carries the headline visually. Keep its equivalent text available to screen readers. */
+#default-lobby-hero .hero-content :is(h1, .hero-description, .hero-mode) {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
 }
-body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-mode { color: var(--habibi-link); margin: 0; }
-body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-description { margin: 4px 0 9px; color: #d6e1f0; font-size: .88rem; }
-#default-lobby-hero .campaign-controls { position: static; padding: 3px 15px 9px; margin-top: auto; }
-#default-lobby-hero .campaign-all { margin-left: auto; color: #ecf0ff; font-size: .82rem; font-weight: 700; text-underline-offset: 3px; }
+body.player-home[data-lobby-brand="habibi"] #default-lobby-hero :is(.hero-browse, #hero-join) {
+  margin: 0; min-height: 36px; padding: 6px 11px; font-size: .8rem;
+}
+#default-lobby-hero .hero-content:not([data-campaign-panel="1"]) .hero-mode {
+  position: static; width: auto; height: auto; overflow: visible; clip-path: none;
+  order: 1; white-space: normal; margin: 0; color: var(--muted);
+  font-size: .7rem; line-height: 1.25; letter-spacing: .01em; text-transform: none;
+}
+#default-lobby-hero .hero-content .hero-mode::before { display: none; }
+#default-lobby-hero .campaign-controls { grid-area: controls; position: static; gap: 5px; margin: 0; padding: 0; }
+#default-lobby-hero .campaign-all { display: inline-flex; align-items: center; min-height: 36px; margin-left: 9px; color: #ecf0ff; font-size: .82rem; font-weight: 700; text-underline-offset: 3px; }
+@container lobby-lead (max-width: 540px) {
+  body.player-home[data-lobby-brand="habibi"] #default-lobby-hero {
+    grid-template-columns: minmax(0, 1fr); grid-template-areas: "art" "actions" "controls"; row-gap: 3px;
+  }
+  #default-lobby-hero .campaign-all { margin-left: auto; }
+}
 #default-lobby-hero .campaign-dot[aria-current="true"]::before { background: var(--habibi-link); }
 body.player-home #lobby[data-club-promotions] .lobby-content > #habibi-promo-gallery:not([hidden]) { display: block; margin: 0 0 26px; }
 #habibi-campaigns h2 { margin: 0 0 6px; color: var(--text); font: 750 clamp(1.15rem,2vw,1.5rem)/1.25 Inter,sans-serif; }
@@ -646,7 +668,5 @@ body.player-home #lobby[data-club-promotions] .lobby-content > #habibi-promo-gal
 .habibi-studio-group summary { padding: 12px 2px; cursor: pointer; color: var(--text); font-weight: 700; }
 .habibi-studio-group[open] .habibi-offer-grid { margin: 2px 0 15px; }
 @media(max-width:620px) {
-  body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content { padding: 11px 12px 4px; }
-  #default-lobby-hero .campaign-controls { padding: 3px 10px 7px; }
   .habibi-offer-grid { gap: 10px; }
 }
