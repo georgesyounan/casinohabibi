@@ -31,7 +31,6 @@ export const playerSignInCopy = {
   providerUnverified:['Verify your email with the provider, or use an email code.','Confirmez votre courriel auprès du fournisseur ou utilisez un code par courriel.'],
   providerEmailUsed:['This email already has a player account. Use your usual password or an email code.','Ce courriel est déjà associé à un compte joueur. Utilisez votre mot de passe habituel ou un code par courriel.'],
   authSending:['Sending…','Envoi…'], authChecking:['Verifying…','Vérification…'], authCreating:['Creating…','Création…'],
-  demoFunds:['Demo account','Compte démo'], initialCredit:['Starting balance','Solde de départ'],
   verifiedVia:['Verified with','Confirmé par'], accessMethods:['Account access','Accès au compte'],
   registerPrompt:['New to Habibi?','Nouveau sur Habibi?'], loginPrompt:['Already have an account?','Vous avez déjà un compte?']
 };
@@ -63,9 +62,7 @@ export function createPlayerSignInUi({element,action,api,t,locale,open,complete,
     const aside=element('aside','','auth-portrait'); aside.setAttribute('aria-hidden','true');
     const identity=element('div','','auth-wordmark');
     for(const child of document.querySelector('header .brand')?.childNodes || []) identity.append(child.cloneNode(true));
-    const balance=element('div','','auth-credit');
-    balance.append(element('small',t('demoFunds')),element('span',t('initialCredit')),element('strong',new Intl.NumberFormat(locale(),{style:'currency',currency:'CAD',currencyDisplay:'code',maximumFractionDigits:0}).format(100)));
-    aside.append(identity,balance);
+    aside.append(identity);
     return aside;
   }
   function recovery(panel) {
