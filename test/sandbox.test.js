@@ -3832,6 +3832,10 @@ test('Habibi club credits one daily gift, tracks distinct games and ranks real q
   const {base,database}=await startSandbox(t,{appBasePath:mount});
   const player=client(base+mount), guest=client(base+mount);
   const publicClub=(await guest('discovery/club')).data;
+  const html=await (await fetch(base+mount+'/?lang=fr&view=promotions&club=quests')).text();
+  assert.match(html,/<a class="club-signin"[^>]+href="[^"]*club=quests&amp;access=signin#player-club"/);
+  const model=html.match(/<script type="application\/json" id="club-public-model">([\s\S]*?)<\/script>/);
+  assert.deepEqual(JSON.parse(model[1]).items,publicClub.items);
   const house=publicClub.items.find(i=>i.template==='Q10'), offer=publicClub.items.find(i=>i.template==='offer');
   assert.ok(house && offer);
   assert.equal(publicClub.points,null);
