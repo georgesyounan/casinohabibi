@@ -9,8 +9,13 @@ test('the first Habibi paint exposes real, localized campaign destinations and a
     const home = homeCampaignExtras(fr,'/casinohabibi');
     assert.ok(home.includes('/casinohabibi/?lang='+locale+'&amp;category=slots#games'));
     assert.ok(home.includes('/casinohabibi/?lang='+locale+'&amp;view=sports'));
-    assert.equal([...home.matchAll(/data-campaign-select=/g)].length,4);
-    assert.equal([...home.matchAll(/data-campaign-panel="\d+" hidden/g)].length,3);
+    const sources = [...home.matchAll(/<img data-art-slide="(\d+)" (src|data-src)="([^"]+)"/g)];
+    const allArt = Array.from({length:32}, (_,i) => '/casinohabibi/habibi-art/' + String(i+1).padStart(2,'0') + '-' + locale + '.webp');
+    assert.deepEqual(sources.map(m=>m[3]).sort(), allArt);
+    assert.equal(sources.filter(m=>m[2]==='src').length, 1);
+    assert.match(home, /data-campaign-position>1 \/ 32</);
+    assert.match(homeCampaignExtras(fr,'/casinohabibi',31), /data-art-slide="31" src="[^"]+32-(?:fr|en)\.webp"/);
+    assert.equal([...home.matchAll(/data-campaign-panel="\d+" hidden/g)].length,31);
     assert.ok(home.includes('view=promotions&amp;club=quests#player-club'));
     const board = sportsMarkup(fr);
     const wire = board.match(/<div class="wire-track">([\s\S]*?)<\/div>/)[1];

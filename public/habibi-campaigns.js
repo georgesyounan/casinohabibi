@@ -36,6 +36,8 @@ const studio = [
   {id: 20, title: ["Replay", "On rembobine"]},
 ];
 
+export const habibiCampaigns = [...studio, ...promotions];
+
 export function artPath(base, id, french) {
   return base + '/habibi-art/' + String(id).padStart(2, '0') + (french ? '-fr.webp' : '-en.webp');
 }

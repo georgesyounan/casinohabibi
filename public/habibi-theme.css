@@ -656,10 +656,13 @@ body.player-home[data-lobby-brand="habibi"] #default-lobby-hero .hero-content .h
   #default-lobby-hero :is(.hero-entry-actions, .hero-content > .hero-browse) { grid-area: actions; justify-self: start; }
   #default-lobby-hero .hero-mode { grid-area: mode; text-align: center; }
   #default-lobby-hero .rotation-toggle { grid-area: pause; }
-  #default-lobby-hero .campaign-dots { grid-area: dots; }
+  #default-lobby-hero .campaign-pager { grid-area: dots; }
   #default-lobby-hero .campaign-all { grid-area: promos; justify-self: end; margin-left: 0; }
 }
-#default-lobby-hero .campaign-dot[aria-current="true"]::before { background: var(--habibi-link); }
+.campaign-pager { display: inline-flex; align-items: center; gap: 1px; }
+.campaign-pager button { display: grid; place-items: center; margin: 0; padding: 0; width: 28px; min-height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 1.3rem; }
+.campaign-pager button:hover { background: var(--panel); }
+.campaign-pager [data-campaign-position] { min-width: 5ch; text-align: center; white-space: nowrap; color: var(--muted); font: 650 .75rem/1.2 Inter,sans-serif; font-variant-numeric: tabular-nums; }
 body.player-home #lobby[data-club-promotions] .lobby-content > #habibi-promo-gallery:not([hidden]) { display: block; margin: 0 0 26px; }
 #habibi-campaigns h2 { margin: 0 0 6px; color: var(--text); font: 750 clamp(1.15rem,2vw,1.5rem)/1.25 Inter,sans-serif; }
 .habibi-proposal-note { margin: 0 0 15px; color: var(--muted); max-width: 72ch; font-size: .9rem; }

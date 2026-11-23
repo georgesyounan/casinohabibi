@@ -1,4 +1,4 @@
-import { artPath } from './habibi-campaigns.js';
+import { artPath, habibiCampaigns } from './habibi-campaigns.js';
 
 // Shared player preference. Imported by both server-rendered and hydrated carousels.
 let paused;
@@ -82,7 +82,7 @@ export function createRotation(advance, french, dwell = 3800) {
   };
 }
 
-const themes = [
+const featured = [
   {art: 1, names:['Habibi Studio','Habibi Studio']},
   {art: 13, names:['Neon reels','Rouleaux néon'], tag:['Slots','Machines à sous'],
     detail:['Explore the slot demos in the game lobby.','Retrouve les machines à sous jouables du hall.'],
@@ -94,41 +94,60 @@ const themes = [
     detail:['100% match up to CA$500. Launch terms to be confirmed.','100 % jusqu’à 500 $ CA. Modalités à confirmer pour le lancement.'],
     action:['Explore the club','Explorer le club'], query:'&amp;view=promotions&amp;club=quests#player-club'}
 ];
-export function homeCampaignExtras(fr, base) {
+const themes = [
+  ...featured,
+  ...habibiCampaigns.filter(campaign => !featured.some(theme => theme.art === campaign.id))
+    .map(campaign => ({ art: campaign.id, names: campaign.title, detail: campaign.detail }))
+];
+
+export function homeCampaignExtras(fr, base, current = 0) {
   const lang = Number(fr);
-  const art = '<div class="habibi-carousel-art" aria-hidden="true">' + themes.map((theme, i) =>
-    `<img data-art-slide="${i}" src="${artPath(base, theme.art, fr)}" width="1440" height="480" alt="" ${i ? 'loading="lazy" hidden' : 'fetchpriority="high"'}>`
-  ).join('') + '</div>';
-  const slides = themes.slice(1).map(({names,tag,detail,action,query},i)=>
-    `<div class="hero-content" data-campaign-panel="${i+1}" hidden><p class="hero-mode">${tag[lang]}</p><h1>${names[lang]}</h1><p class="hero-description">${detail[lang]}</p><a class="button hero-browse hub-link" href="${base}/?lang=${fr?'fr':'en'}${query}">${action[lang]} <i class="ui-icon ico-next" aria-hidden="true"></i></a></div>`).join('');
-  const dots = themes.map((theme,i) => `<button type="button" class="campaign-dot" data-campaign-select="${i}" aria-label="${fr?'Bannière':'Slide'} ${i+1} · ${theme.names[lang]}"${i===0?' aria-current="true"':''}></button>`).join('');
-  return art + slides + `<div class="campaign-controls">${rotationButton(fr)}<div class="campaign-dots">${dots}</div><a class="hub-link campaign-all" href="${base}/?lang=${fr?'fr':'en'}&amp;view=promotions">${fr?'Toutes les promos':'All promotions'} ↗</a></div>`;
+  const home = base + '/?lang=' + (fr ? 'fr' : 'en');
+  const art = themes.map((theme, i) => {
+    const source = artPath(base, theme.art, fr);
+    const image = i === current ? `src="${source}" fetchpriority="high"` : `data-src="${source}" hidden`;
+    return `<img data-art-slide="${i}" ${image} width="1440" height="480" alt="">`;
+  }).join('');
+  const slides = themes.slice(1).map((theme, i) => {
+    const title = theme.names[lang];
+    const tag = theme.tag?.[lang] ?? (theme.detail ? (fr ? 'Promotion proposée' : 'Proposed promotion') : '');
+    const detail = theme.detail ? `<p class="hero-description">${theme.detail[lang]}</p>` : '';
+    const link = theme.query
+      ? `<a class="button hero-browse hub-link" href="${home}${theme.query}">${theme.action[lang]} <i class="ui-icon ico-next" aria-hidden="true"></i></a>`
+      : `<a class="button hero-browse" href="${artPath(base, theme.art, fr)}" target="_blank" rel="noopener">${fr ? 'Agrandir la bannière' : 'View full banner'}</a>`;
+    const mode = tag ? `<p class="hero-mode">${tag}</p>` : '';
+    return `<div class="hero-content" data-campaign-panel="${i + 1}" hidden>${mode}<h1>${title}</h1>${detail}${link}</div>`;
+  }).join('');
+  const previous = fr ? 'Bannière précédente' : 'Previous banner';
+  const next = fr ? 'Bannière suivante' : 'Next banner';
+  const pager = `<div class="campaign-pager" role="group" aria-label="${fr ? 'Navigation des bannières' : 'Banner navigation'}"><button type="button" data-campaign-step="-1" aria-label="${previous}">‹</button><span data-campaign-position>${current + 1} / ${themes.length}</span><button type="button" data-campaign-step="1" aria-label="${next}">›</button></div>`;
+  return `<div class="habibi-carousel-art" aria-hidden="true">${art}</div>${slides}<div class="campaign-controls">${rotationButton(fr)}${pager}<a class="hub-link campaign-all" href="${home}&amp;view=promotions">${fr ? 'Toutes les promos' : 'All promotions'} ↗</a></div>`;
 }
 
 export function createHomeCampaign(root, french, base) {
   let index = 0, locale;
-  const rotation = createRotation(() => select((index+1)%themes.length),french);
+  const rotation = createRotation(() => select(index + 1), french);
   function select(next) {
-    if (!Number.isInteger(next) || !themes[next]) return;
-    index = next;
+    index = (next + themes.length) % themes.length;
     root.dataset.campaignIndex = String(index);
-    for (const image of root.querySelectorAll('[data-art-slide]')) image.hidden = Number(image.dataset.artSlide) !== index;
-    root.querySelectorAll(':scope > .hero-content').forEach((panel,i) => { panel.hidden = i !== index; });
-    for (const button of root.querySelectorAll('[data-campaign-select]')) {
-      if (Number(button.dataset.campaignSelect) === index) button.setAttribute('aria-current','true');
-      else button.removeAttribute('aria-current');
+    for (const image of root.querySelectorAll('[data-art-slide]')) {
+      const active = Number(image.dataset.artSlide) === index;
+      if (active && !image.hasAttribute('src')) image.src = image.dataset.src;
+      image.hidden = !active;
     }
+    root.querySelectorAll(':scope > .hero-content').forEach((panel, i) => { panel.hidden = i !== index; });
+    root.querySelector('[data-campaign-position]').textContent = (index + 1) + ' / ' + themes.length;
   }
-  root.addEventListener('click',event => {
-    const button = event.target.closest('[data-campaign-select]');
-    if (button) select(Number(button.dataset.campaignSelect));
+  root.addEventListener('click', event => {
+    const button = event.target.closest('[data-campaign-step]');
+    if (button) select(index + Number(button.dataset.campaignStep));
   });
-  root.addEventListener('keydown',event => {
-    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+  root.addEventListener('keydown', event => {
     if (!event.target.closest('.campaign-controls')) return;
+    const positions = { ArrowLeft: index - 1, ArrowRight: index + 1, Home: 0, End: themes.length - 1 };
+    if (!Object.hasOwn(positions, event.key)) return;
     event.preventDefault();
-    select(event.key === 'Home' ? 0 : event.key === 'End' ? themes.length-1 : (index + (event.key === 'ArrowLeft' ? themes.length-1 : 1)) % themes.length);
-    root.querySelector('[data-campaign-select="'+index+'"]').focus({preventScroll:true});
+    select(positions[event.key]);
   });
   let touch;
   root.addEventListener('touchstart',e => { touch = e.touches.length===1 ? [e.touches[0].clientX,e.touches[0].clientY] : null; },{passive:true});
@@ -143,15 +162,16 @@ export function createHomeCampaign(root, french, base) {
     if (!enabled) { rotation.attach(null); return; }
     const fr = Boolean(french()), tag = fr ? 'fr' : 'en';
     if (locale !== tag) {
-      if (root.dataset.campaignLocale !== tag || !root.querySelector('.campaign-controls')) {
+      if (root.dataset.campaignLocale !== tag || !root.querySelector('[data-campaign-position]')) {
         for (const el of root.querySelectorAll(':scope > .habibi-carousel-art,:scope > [data-campaign-panel],:scope > .campaign-controls')) el.remove();
-        root.insertAdjacentHTML('beforeend',homeCampaignExtras(fr,base));
+        root.insertAdjacentHTML('beforeend',homeCampaignExtras(fr,base,index));
       }
       root.dataset.campaignLocale=tag;
       root.setAttribute('aria-roledescription',fr?'carrousel':'carousel');
       root.setAttribute('aria-label',fr?'À la une du casino':'Casino highlights');
       for (const b of root.querySelectorAll('.campaign-controls button')) b.disabled=false;
       select(index);locale=tag;
+      rotation.sync();
     }
     rotation.attach(root);
   };
