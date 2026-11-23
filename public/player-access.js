@@ -44,6 +44,8 @@ export const playerAccessCopy = {
   recoveryDeliveryUnavailable: ['Email delivery is unavailable. Try again later.', 'L’envoi de courriels est indisponible. Réessayez plus tard.']
 };
 
+import {noticeEditor} from './safety-notice.js';
+
 export function createPlayerAccessUi({ api, t, element, action, canManage, locale, renderRound, supportHref, appPath }) {
   const byId = (id) => document.getElementById(id);
   const form = byId('coming-soon-save-search');
@@ -98,6 +100,7 @@ export function createPlayerAccessUi({ api, t, element, action, canManage, local
     }));
     record.hidden = !player;
     if (!player) return;
+    if(canManage())noticeEditor(record,player.id,{api,t,fr:locale().startsWith('fr'),element});
     const suspended = player.status === 'suspended';
     byId('player-record-title').textContent = player.email;
     byId('player-record-summary').textContent = ['player-' + player.id, t(suspended ? 'playerSuspendedState' : 'playerActive'),

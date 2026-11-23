@@ -32,11 +32,11 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 
 | Module | Fonction | Validés en démo | Partiels | Non livrés |
 | --- | --- | ---: | ---: | ---: |
-| D01 | Marques, équipe et audit | 2 | 1 | 0 |
+| D01 | Marques, équipe et audit | 3 | 0 | 0 |
 | D02 | Comptes et soutien joueur | 3 | 0 | 0 |
 | D03 | Produits et activation | 3 | 0 | 0 |
-| D04 | Mise en service et reprise | 2 | 1 | 0 |
-| D05 | Éditeur et traductions | 2 | 0 | 1 |
+| D04 | Mise en service et reprise | 3 | 0 | 0 |
+| D05 | Éditeur et traductions | 3 | 0 | 0 |
 | D06 | Catalogue fournisseur | 4 | 0 | 0 |
 | D07 | Sélections du hall | 3 | 0 | 0 |
 | D08 | Découverte et favoris | 4 | 0 | 0 |
@@ -47,7 +47,7 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 | D13 | Rapports et indicateurs | 3 | 1 | 0 |
 | D14 | Vérification d’identité | 3 | 0 | 0 |
 | D15 | Risque et enquêtes | 3 | 0 | 0 |
-| D16 | Jeu responsable | 2 | 1 | 0 |
+| D16 | Jeu responsable | 3 | 0 | 0 |
 | D17 | Portefeuille et journal | 3 | 0 | 0 |
 | D18 | Caisse et retraits | 3 | 0 | 0 |
 | D19 | Lancements et événements de jeu | 3 | 0 | 0 |
@@ -60,7 +60,7 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 | D26 | Jeux à prix | 3 | 0 | 0 |
 | D27 | API partenaires | 2 | 0 | 1 |
 | D28 | Crédits de test | 2 | 0 | 0 |
-| **Total** | **88 tickets** | 73 | 6 | 9 |
+| **Total** | **88 tickets** | 77 | 3 | 8 |
 
 ## Couverture par phase
 
@@ -73,8 +73,8 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 | P4A | 1 | 1 | 0 | 0 |
 | P4B | 1 | 1 | 0 | 0 |
 | P1X | 2 | 2 | 0 | 0 |
-| E1 | 23 | 20 | 2 | 1 |
-| E2 | 22 | 15 | 3 | 4 |
+| E1 | 23 | 23 | 0 | 0 |
+| E2 | 22 | 16 | 2 | 4 |
 | E3 | 15 | 10 | 1 | 4 |
 
 ## Parcours d’acceptation

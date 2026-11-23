@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/admin.css">
 <link rel="stylesheet" href="/lobby.css">
+<link rel="stylesheet" href="/page-layout.css">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -71,6 +72,7 @@
     <div class="spotlight-nav" hidden><button type="button" id="spotlight-prev" data-copy="homePrev" class="spotlight-prev" aria-label="Previous featured game"></button><button type="button" id="spotlight-next" data-copy="homeNext" aria-label="Next featured game"></button></div>
   </section>
 </div>
+<!-- page-layout -->
 <!-- wins-wire -->
 <nav class="home-shortcuts" aria-label="Casino">
   <a data-home-view="new" href="/?view=new"><i class="ui-icon ico-active" aria-hidden="true"></i><span data-copy="newHome"></span></a>
@@ -617,6 +619,7 @@
                 <label><span data-copy="siteSearch"></span><input type="search" id="site-search" autocomplete="off"></label>
                 <button type="button" id="site-new-page" data-copy="siteNewPage" disabled></button>
               </div>
+              <details class="admin-disclosure"><summary data-copy="pageLayout"></summary><div id="page-layout-editor"></div></details>
               <ul id="site-content-items" class="site-content-items"></ul>
               <div id="site-pagination" class="actions" hidden><button id="site-prev" type="button" class="ghost" data-copy="playerPrevious"></button><span id="site-page"></span><button id="site-next" type="button" class="ghost" data-copy="playerNext"></button></div>
             </div>

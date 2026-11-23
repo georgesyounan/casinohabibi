@@ -592,6 +592,9 @@ body.player-home #lobby[data-club-promotions] .lobby-content > #gift-catalogue {
 .wire-source-switch { padding: 3px 7px; min-height: 30px; color: #c7e7ff; background: #1d344f; border: 1px solid #3d5877; border-radius: 7px; font-size: .72rem; }
 
 #scheduled-shelf .shelf-art{width:100%;max-height:180px;object-fit:cover;border-radius:.8rem}#scheduled-shelf>button{margin:.3rem 0 1rem}
+
+.round-proof{width:100%;font-size:.88rem}.round-proof summary{cursor:pointer;color:#99d8ff}.round-proof code{display:block;overflow-wrap:anywhere;margin:.2rem 0 .6rem}
+
 /* Approved campaign blue for filled controls; lighter tints keep small labels legible on navy. */
 body[data-lobby-brand="habibi"] {
   --habibi-link: color-mix(in srgb, var(--habibi-accent) 39%, white);

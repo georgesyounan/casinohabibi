@@ -11,6 +11,7 @@ import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createAccountBreaks } from '../lib/account-breaks.js';
+import {reproduce} from '../public/round-verifier.js';
 import {createPrizeClub} from '../lib/club-prizes.js';
 import { createSavedTitles } from '../lib/saved-titles.js';
 import { reportPeriod } from '../lib/dashboard.js';
@@ -21,7 +22,7 @@ const staffCredentials = { email: 'admin@example.test', password: 'example-staff
 const playerCredentials = { email: 'player@example.test', password: 'example-test-password' };
 
 async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTenantHosts = '', captureMail = false,
-  dataDirectory, testCredits = false, encryptionKey = randomBytes(32).toString('hex'), onRequest } = {}) {
+  dataDirectory, platformToken='', testCredits = false, encryptionKey = randomBytes(32).toString('hex'), onRequest } = {}) {
   const directory = dataDirectory || await mkdtemp(join(tmpdir(), 'northplay-test-'));
   const database = join(directory, 'northplay.sqlite');
   if (initializeDatabase) {
@@ -47,7 +48,7 @@ async function startSandbox(t, { initializeDatabase, appBasePath = '', sandboxTe
       BOOTSTRAP_ADMIN_EMAIL: staffCredentials.email, BOOTSTRAP_ADMIN_PASSWORD: staffCredentials.password,
       PROVIDER_KEY_ENCRYPTION: encryptionKey, SECURE_COOKIES: '0',
       SANDBOX_TENANT_HOSTS: sandboxTenantHosts, ENABLE_TEST_CREDITS:testCredits?'1':'0', DEMO_CREDITS_TEST_DATA_DIR:testCredits?directory:'',
-      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_SENDMAIL: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: '',
+      APP_BASE_PATH: appBasePath, PUBLIC_BASE_URL: '', RESET_EMAIL_API_KEY: '', RESET_EMAIL_SENDMAIL: '', RESET_EMAIL_FROM: '', PLATFORM_ADMIN_TOKEN: platformToken,
       ...(captureMail && { TEST_MAILBOX: mailbox, PUBLIC_BASE_URL: 'https://localhost' + appBasePath, RESET_EMAIL_API_KEY: 'fixture', RESET_EMAIL_FROM: 'test@example.test' })
     }
   });
@@ -4213,4 +4214,71 @@ test('D26 free prize entries keep currencies separate, follow the configured day
   assert.equal((await staff(admin,yes)).status,409);await checked(staff,admin,{...yes,checked:true});await checked(staff,admin,{...yes,checked:true});
   p=await read();assert.equal(p.claims[0].state,'fulfilled');assert.equal(p.prize,2);
   assert.equal(db.prepare('SELECT count(*) n FROM prize_wallet WHERE player=? AND ref=?').get(owner,'decision/'+second).n,1);
+});
+
+test('House receipts reproduce each game and mandatory notices survive acknowledgment and reconnection',async t=>{
+  const {base,database}=await startSandbox(t,{appBasePath:'/casinohabibi'}),site=base+'/casinohabibi';
+  const staff=client(site),p=client(site),second=client(site),guest=client(site);await checked(staff,'admin/login',staffCredentials);await register(p);
+  const owner=(await checked(p,'account')).id;
+  for(const game of ['gold','aurora','roulette','blackjack']){
+    const {commitment}=await checked(p,'account/round-commitment',{}),drawProof={commitment,client:randomUUID()},requestId=randomUUID();
+    const wager={game,wager:100,requestId,drawProof,...(game==='roulette'&&{choice:'red'})};
+    const first=await checked(p,'play',wager),receipt=first.history[0].id;
+    assert.equal((await checked(p,'play',wager)).history[0].id,receipt);
+    const proof=await checked(p,'account/round-proof/'+receipt);
+    assert.equal(proof.commitment,commitment);assert.equal(proof.precommitted,1);assert.equal((await reproduce(proof)).valid,true);
+    assert.equal((await reproduce({...proof,amount:proof.amount+1})).valid,false);
+    assert.equal((await guest('account/round-proof/'+receipt)).status,401);
+    assert.equal((await p('play',{...wager,requestId:randomUUID()})).data.error,'proofChanged');
+  }
+  const admin='admin/players/'+owner+'/notice',input={action:'create',kind:'break',minutes:15,reason:'Mandatory fixture break'};
+  const notice=await checked(staff,admin,input),fresh=await checked(second,'login',playerCredentials);
+  assert.equal(fresh.safety.notice.id,notice.id);
+  const wager={game:'gold',wager:100,requestId:randomUUID()};
+  assert.equal((await p('play',wager)).data.error,'playRestricted');
+  await checked(second,'safety/acknowledge',{id:notice.id});assert.ok((await checked(second,'account')).safety.notice.acknowledged);
+  assert.equal((await second('play',wager)).data.error,'playRestricted');
+  await checked(staff,admin,{action:'lift',id:notice.id});assert.equal((await p('play',wager)).status,200);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  assert.equal(db.prepare('SELECT count(*) n FROM round_proofs').get().n,5);
+});
+
+test('Partner onboarding isolates English/Spanish defaults, records and DNS alerts and resumes one verified site launch',async t=>{
+  const platformToken=randomBytes(32).toString('hex'),{base,database}=await startSandbox(t,{platformToken}),p=client(base);
+  const call=(url,data)=>p('platform/'+url,data,undefined,{Authorization:'Bearer '+platformToken});
+  const create=async(name)=>{const r=await call('tenants',{name,slug:name,kind:'company',locales:['en-CA','es'],currencies:['TST'],zone:'America/Toronto'});assert.equal(r.status,200);return r.data.id;};
+  const a=await create('coast-test'),b=await create('north-test'),host='club-fixture.example.test';
+  const domains=await Promise.all([a,b].map(tenantId=>call('domains',{tenantId,host})));
+  assert.deepEqual(domains.map(x=>x.status).sort(),[200,409]);const owner=domains[0].status===200?a:b,other=owner===a?b:a;
+  const target={tenant:owner,host,template:'midnight'};
+  const first=await call('tenants/launch',target);assert.equal(first.data.status,'awaiting_dns');
+  const work=async id=>(await call('tenants/workspace?tenant='+id)).data;
+  const own=await work(owner),alternate=await work(other);
+  assert.deepEqual(own.settings.locales,['en-CA','es']);assert.deepEqual(own.settings.currencies,['TST']);assert.equal(own.alerts[0].host,host);
+  assert.ok(!JSON.stringify(alternate).includes(host));assert.equal(alternate.sites.length,0);
+  assert.equal((await call('tenants/launch',{...target,tenant:other})).status,409);
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  db.prepare('UPDATE tenant_domains SET verified=1,verified_at=? WHERE host=?').run(Date.now(),host);
+  for(let i=0;i<2;i++){const result=await call('tenants/launch',target);assert.equal(result.data.id,first.data.id);assert.equal(result.data.status,'published');}
+  const done=await work(owner);assert.equal(done.sites.length,1);assert.equal(done.sites[0].version,1);assert.equal(done.alerts.length,0);
+  assert.equal(done.recent.filter(e=>e.action==='site_published').length,1);
+  assert.equal((await p('platform/tenants/workspace?tenant='+owner)).status,401);
+});
+
+test('Versioned page blocks publish in order below the carousel, reject stale edits and restore theme and order in both languages',async t=>{
+  const {base}=await startSandbox(t,{appBasePath:'/casinohabibi'}),site=base+'/casinohabibi',s=client(site),guest=client(site);
+  await checked(s,'admin/login',staffCredentials);
+  const url='admin/website-content/layout',read=()=>checked(s,url+'?role=home'),change=async(data)=>{const h=await read();return checked(s,url,{role:'home',version:h.draft,live:h.live,...data});};
+  const one={theme:'navy',font:'system',blocks:[{type:'slider',en:'Highlights',fr:'À la une',pictures:['campaign-casino.webp','campaign-match.webp']},{type:'section',en:'First shelf',fr:'Première sélection'}]};
+  assert.equal((await guest(url+'?role=home')).status,401);
+  const saved=await change({action:'save',document:one});const live=async lang=>(await fetch(site+'/?lang='+lang)).text();
+  assert.ok(!(await live('fr')).includes('Première sélection'));await change({action:'publish'});
+  const second={theme:'ice',font:'editorial',blocks:[one.blocks[1],{type:'text',en:'A <new> story',fr:'Un nouveau récit'},one.blocks[0]]};
+  await change({action:'save',document:second});await change({action:'publish'});
+  assert.match(await live('en'),/theme-ice[\s\S]*?First shelf[\s\S]*?A &lt;new&gt; story[\s\S]*?Highlights/);
+  assert.equal((await s(url,{role:'home',action:'restore',version:1,live:1,target:0})).status,409);
+  await change({action:'restore',target:saved.draft});
+  for(const lang of ['fr','en']){const html=await live(lang);assert.ok(html.indexOf('id="lobby-spotlight"')<html.indexOf('class="published-blocks theme-navy'));
+    assert.ok(html.indexOf('class="block-slides"')<html.indexOf(lang==='fr'?'Première sélection':'First shelf'));assert.ok(!html.includes('theme-ice font-editorial'));}
+  assert.ok((await read()).roles.includes('accounts'));assert.equal((await s(url,{role:'home',action:'save',version:1,live:1,document:{...one,blocks:[{type:'image',en:'X',media:'https://untrusted.example/a'}]}})).status,400);
 });

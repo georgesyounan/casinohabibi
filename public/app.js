@@ -1,3 +1,5 @@
+import {playerNotice} from './safety-notice.js';
+import {proofControl} from './round-verifier.js';
 import { createPlayerSignInUi, playerSignInCopy } from './player-signin-ui.js';
 import { lobbyCopy, lobbyView, viewTitle } from './lobby-navigation.js';
 import { casinoPageTitle } from './guide-metadata.js';
@@ -11,6 +13,7 @@ import { createSupportQueue } from './support-queue.js';
 import { catalogueCategories, games, roundPreview, demoTitle, matchesCatalogue, normalizeCatalogueText } from './catalog.js';
 import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
+import {createLayoutEditor} from './layout-editor.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
 import {createGiftMenu, giftLabel} from './gift-menu.js';
@@ -45,6 +48,8 @@ const copy = {
   telegramSettings:['Check the bot token and the channel username or numeric ID.','Vérifiez le jeton du bot et le nom ou l’identifiant numérique du canal.'],
   telegramAdminNeeded:['Make the bot an administrator of this channel.','Donnez au bot le rôle d’administrateur du canal.'],
   telegramBotBusy:['Choose a dedicated bot. This one is already connected to another service.','Choisissez un bot dédié. Celui-ci est déjà relié à un autre service.'],
+  playRestricted:['Play is temporarily blocked. See the notice in your account.','Le jeu est temporairement bloqué. Consultez l’avis dans votre compte.'],
+  proofChanged:['The round commitment expired. Submit again for a fresh receipt.','L’empreinte de la manche a expiré. Relancez pour obtenir un nouveau reçu.'],
   prizeThreshold:['Insufficient eligible prize units or below the redemption threshold.','Le solde admissible ou le seuil de remise est insuffisant.'],
   prizeJoin:['Join the demo prize program first.','Rejoignez le programme de prix fictifs.'],
   prizeUnit:['Only prize units are eligible.','Seules les unités de prix sont admissibles.'],
@@ -547,6 +552,10 @@ function demoBalanceResetDetails(rawOutcome) {
 function updateSessionReminder() {
   const banner = $('#session-reminder');
   if (!banner) return;
+  if(player&&!isAdminPage&&playerNotice(banner,player.safety?.notice,{fr:Boolean(language),element,
+    acknowledge:async id=>{const owner=player.id,fresh=await api('safety/acknowledge',{id});if(player?.id===owner){player=fresh;updateSessionReminder();}},
+    help:()=>openSupportCenter()}))return;
+  if(banner.dataset.blocking){delete banner.dataset.blocking;banner.replaceChildren();displayedReminderPeriod=undefined;}
   if (!player || !playerSessionStartedAt || isAdminPage) {
     banner.hidden = true;
     displayedReminderPeriod = undefined;
@@ -938,6 +947,7 @@ function historyEntryElement(entry, showSupport = true) {
   const ref = 'round-' + entry.id;
   row.append(element('strong', clubCreditLabel(entry.outcome) || roundTitle(entry)), element('span', date + ' · ' + t('wager') + ' ' + money(entry.wager) +
     ' · ' + t('balanceChange') + ' ' + change + outcome), element('small', ref, 'round-reference'));
+  if(games.some(g=>g.id===entry.game)&&entry.wager>0)proofControl(row,entry,{api,fr:Boolean(language),element});
   if (showSupport) {
     const help = action(t('roundSupport'), () => openSupportCenter(ref), 'round-support-link');
     help.setAttribute('aria-label', t('roundSupport') + ' · ' + ref);
@@ -1480,8 +1490,14 @@ function renderDialog() {
       const playingAccount = player.id;
       let response;
       try {
+        if(!pending.drawProof){
+          const committed=await api('account/round-commitment',{});
+          if(player?.id!==playingAccount)throw Error('signin');
+          pending.drawProof={commitment:committed.commitment,client:crypto.randomUUID()};
+        }
         response = await api('play', pending);
       } catch (error) {
+        if(error.message==='proofChanged'&&pending)delete pending.drawProof;
         roundError.textContent = t(error.message);
         throw error;
       }
@@ -2178,6 +2194,7 @@ const lobbySections = createLobbySections({
 });
 const followupUi = createPublicationFollowup({ api, t, element, appPath, locale: siteContentLocale });
 const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
+createLayoutEditor({api,base:appBasePath,french:()=>Boolean(language),t,canPublish:()=>Boolean(currentStaffPermissions.publishWebsite)});
 const websiteEditor = createWebsiteEditor({ api, element, action, t, appPath, locale: siteContentLocale, brand: () => tenantBrandName,
   canPublish: () => Boolean(currentStaffPermissions.publishWebsite) });
 
