@@ -1,3 +1,5 @@
+import {dealerLobby} from './dealer-tables.js';
+import {budgetControls} from './budget-controls.js';
 import {playerNotice} from './safety-notice.js';
 import {proofControl} from './round-verifier.js';
 import { createPlayerSignInUi, playerSignInCopy } from './player-signin-ui.js';
@@ -152,6 +154,7 @@ const copy = {
   exportData: ['Download my account data', 'Télécharger mes données de compte'], exportDataHelp: ['Download a JSON copy of your profile, demo activity, safer-play settings, and support conversations.', 'Téléchargez une copie JSON de votre profil, de votre activité fictive, de vos paramètres de jeu responsable et de vos conversations avec le soutien.'], exportReady: ['Your account data download is ready.', 'Le téléchargement de vos données de compte est prêt.'], exportActivityCsv: ['Download activity as CSV', 'Télécharger l’activité en CSV'], exportCsvReady: ['Your activity CSV download is ready.', 'Le téléchargement CSV de votre activité est prêt.'],
   starter: ['Starting credit', 'Crédit de départ'], balanceChange: ['Balance change', 'Variation du solde'], loadOlderActivity: ['Load older activity', 'Charger l’activité précédente'], loadingActivity: ['Loading…', 'Chargement…'], close: ['Close', 'Fermer'],
   wager: ['Wager', 'Mise'], play: ['Play a demo round', 'Jouer une partie de démonstration'],
+  periodBudget: ['This amount exceeds your weekly or monthly budget.','Ce montant dépasse votre budget hebdomadaire ou mensuel.'],
   simulation: ['Demo rounds use simulated funds only.', 'Les parties de démonstration utilisent uniquement des fonds fictifs.'],
   pickColor: ['Choose a colour', 'Choisissez une couleur'], red: ['Red', 'Rouge'], black: ['Black', 'Noir'], green: ['Green', 'Vert'],
   spinResult: ['The wheel landed on', 'La roulette s’est arrêtée sur'],
@@ -455,7 +458,7 @@ let favoriteSavePending = false;
 let favoriteStatusKey;
 let favoriteActivityId;
 let screen = 'signin';
-let selectedPlacement;
+let selectedPlacement,selectedDealerSeat;
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let selectedPreview;
 let result;
@@ -468,8 +471,8 @@ function selectDemo(gameId, preview) {
   selectedGame = games.find(game => game.id === gameId);
   selectedPreview = preview;
 }
-function startDemo(gameId, preview, placement) {
-  selectedPlacement=placement;
+function startDemo(gameId, preview, placement, dealerSeat) {
+  selectedPlacement=placement;selectedDealerSeat=dealerSeat;
   selectDemo(gameId, preview);
   if (!selectedGame) return;
   clearPendingDemo();
@@ -482,7 +485,7 @@ function startDemo(gameId, preview, placement) {
   openPanel(player ? 'play' : 'signin');
 }
 function clearDemoSelection() {
-  selectedPlacement=undefined;
+  selectedPlacement=undefined;selectedDealerSeat=undefined;
   selectedGame = undefined;
   selectedPreview = undefined;
   afterSignIn = undefined;
@@ -1487,7 +1490,7 @@ function renderDialog() {
       if (!pending || pending.wager !== Number(wager) || pending.choice !== choice) {
         const bytes = crypto.getRandomValues(new Uint8Array(18));
         const requestId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-        pending = { game: selectedGame.id, ...(selectedPlacement&&{placement:selectedPlacement}), wager: Number(wager), requestId, ...(choice ? { choice } : {}),
+        pending = { game: selectedGame.id, ...(selectedPlacement&&{placement:selectedPlacement}), ...(selectedDealerSeat&&{dealerSeat:selectedDealerSeat}), wager: Number(wager), requestId, ...(choice ? { choice } : {}),
           ...(selectedPreview && {previewSlug: selectedPreview.slug, locale: siteContentLocale()}) };
       }
       const playingAccount = player.id;
@@ -1815,7 +1818,7 @@ function renderDialog() {
       limitButton.disabled = false;
     }
   });
-  panel.append(limitForm);
+  panel.append(limitForm,budgetControls({api,element,t,fr:Boolean(language)}));
   const reminderForm = element('form');
   const reminderLabel = element('label', t('reminderFrequencyLabel'));
   const reminderSelect = element('select');
@@ -2017,6 +2020,8 @@ function renderCatalog() {
   const hasListings = demoGames.length + visibleGames.length + editorial.count > 0;
   const hasCatalogue = Boolean(games.length || providerGames.length || editorial.available);
   $('#catalog-controls').hidden = !hasCatalogue && !selectedCollection;
+  const showTables=filter==='live'&&document.body.dataset.lobbyBrand==='habibi'&&!searchQuery&&!selectedCollection;
+  dealerLobby($('#dealer-tables'),{show:showTables,fr:Boolean(language),api,identity:player?.id||0,signIn:()=>openPanel('signin'),start:startDemo});
   const summary = $('#catalog-summary');
   const seedProviders = providersStatus === 'loading' && summary.dataset.locale === (language ? 'fr-CA' : 'en-CA') ? Number(summary.dataset.providers) : 0;
   $('#provider-sort-control').hidden = !(providerGames.length || seedProviders) || Boolean(selectedCollection);
@@ -2031,8 +2036,8 @@ function renderCatalog() {
   if (playableCount) counts.push(t(playableCount === 1 ? 'demoCountOne' : 'demoCountMany').replace('{n}', countFormat.format(playableCount)));
   if (previewCount) counts.push(t(previewCount === 1 ? 'previewCountOne' : 'previewCountMany').replace('{n}', countFormat.format(previewCount)));
   $('#catalog-summary').textContent = counts.join(' · ');
-  $('#catalog-summary').hidden = !counts.length;
-  $('#catalog-empty').hidden = hasListings;
+  $('#catalog-summary').hidden = showTables||!counts.length;
+  $('#catalog-empty').hidden = hasListings||showTables;
   const hasAvailableFavorite = editorial.hasFavorites || games.some((game) => favorites.has(`demo:${game.id}`)) ||
     providerGames.some((game) => favorites.has(`provider:${game.provider}:${game.externalId}`));
   const noFavorites = filter === 'favorites' && !hasAvailableFavorite;
