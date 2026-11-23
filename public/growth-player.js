@@ -152,6 +152,12 @@ export function createGrowthPlayer({ api, t, french, appPath, openSupport }) {
         body.append(el('p',report.period.from+' – '+report.period.to+' · '+report.period.zone),list,
           button(l('Export aggregate counts','Exporter les totaux'),()=>downloadReport('referrals-'+p.code+'.csv',rows),true));
         showLinkReport(body,report,ui,urlFor);
+        const terms=await api('growth/statements',undefined,'GET');if(request!==generation)return;
+        const statements=el('details');statements.append(el('summary',l('Demo commission statements','Relevés de commission fictive')));
+        for(const s of terms.statements)statements.append(el('p','#'+s.id+' · '+(s.amount/100).toFixed(2)+' TST · '+date(s.at)));
+        if(!terms.statements.length)statements.append(el('p',l('No closed statements.','Aucun relevé clôturé.')));
+        if(terms.grants?.length){const input=field(statements,'recipient',l('Qualified referral','Parrainage qualifié'),{items:terms.grants.map(g=>[String(g.entry),'#'+g.entry])});statements.append(button(l('Issue 10 demo units','Accorder 10 unités fictives'),async()=>{try{await api('growth/statements',{entry:Number(input.value)});status.textContent=l('Offer granted.','Offre accordée.');}catch(err){status.textContent=t(err.message);}},true));}
+        body.append(statements);
         const creative=el('details'),cards=el('div');
         creative.append(el('summary',l('Approved creatives','Publicités approuvées')+' ('+p.creatives.length+')'),cards);
         body.append(creative);

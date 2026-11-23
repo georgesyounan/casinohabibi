@@ -455,6 +455,7 @@ let favoriteSavePending = false;
 let favoriteStatusKey;
 let favoriteActivityId;
 let screen = 'signin';
+let selectedPlacement;
 let selectedGame = games.find(({ id }) => id === sessionStorage.getItem('northplay-pending-game'));
 let selectedPreview;
 let result;
@@ -467,7 +468,8 @@ function selectDemo(gameId, preview) {
   selectedGame = games.find(game => game.id === gameId);
   selectedPreview = preview;
 }
-function startDemo(gameId, preview) {
+function startDemo(gameId, preview, placement) {
+  selectedPlacement=placement;
   selectDemo(gameId, preview);
   if (!selectedGame) return;
   clearPendingDemo();
@@ -480,6 +482,7 @@ function startDemo(gameId, preview) {
   openPanel(player ? 'play' : 'signin');
 }
 function clearDemoSelection() {
+  selectedPlacement=undefined;
   selectedGame = undefined;
   selectedPreview = undefined;
   afterSignIn = undefined;
@@ -1484,7 +1487,7 @@ function renderDialog() {
       if (!pending || pending.wager !== Number(wager) || pending.choice !== choice) {
         const bytes = crypto.getRandomValues(new Uint8Array(18));
         const requestId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-        pending = { game: selectedGame.id, wager: Number(wager), requestId, ...(choice ? { choice } : {}),
+        pending = { game: selectedGame.id, ...(selectedPlacement&&{placement:selectedPlacement}), wager: Number(wager), requestId, ...(choice ? { choice } : {}),
           ...(selectedPreview && {previewSlug: selectedPreview.slug, locale: siteContentLocale()}) };
       }
       const playingAccount = player.id;
@@ -2210,7 +2213,7 @@ const operatorUi=createOperatorUi({api,t,french:()=>Boolean(language),role:()=>c
 const reviewUi=createReviewUi({api,t,french:()=>Boolean(language),role:()=>currentStaffRole,staffId:()=>currentStaffId,open:target=>adminWorkspace.open('review-'+target)});
 const partnerUi=createPartnerUi({api,t,french:()=>Boolean(language),appPath,staffId:()=>currentStaffId});
 const shelfEditor=createShelfEditor({api,t,french:()=>Boolean(language),staffId:()=>currentStaffId,canPublish:()=>Boolean(currentStaffPermissions.publishCatalogue)});
-const publicShelf=createPublicShelf({api,appPath,french:()=>Boolean(language)});
+const publicShelf=createPublicShelf({api,appPath,openDemo:startDemo,signIn:()=>openPanel('signin'),french:()=>Boolean(language)});
 const pilotUi=createPilotUi({api,t,french:()=>Boolean(language),staffId:()=>currentStaffId});
 const adminLoaders = {
   ...Object.fromEntries(['subjects','cashier','settings'].map(key=>['review-'+key,()=>reviewUi.load(key)])),

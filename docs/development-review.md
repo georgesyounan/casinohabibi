@@ -1,10 +1,18 @@
 # Revue de développement de Casino Habibi
 
-Mise à jour du 23 novembre 2026. Le cahier comprend 88 tickets et 28 modules. Le Club et le carnet sportif ont été exercés avec des comptes isolés, y compris les reprises après double clic et les demandes concurrentes. Les 24 tickets du socle passent leur scénario en démo.
+Mise à jour du 23 novembre 2026. Les 88 scénarios d’acceptation des 28 modules passent en démonstration. La version de référence PR 46 en validait 46. Les tests utilisent des comptes isolés, la caisse TST, le carnet sportif simulé et un réseau d’actifs local.
 
 [Ouvrir les 88 tickets, leurs critères, les fichiers de preuve et les écarts](development-backlog.csv) · [Ouvrir les 174 références et leurs types de preuve](source-traceability.csv)
 
 « Validé en démo » indique un scénario exercé avec des comptes et ressources de test. « Partiel » indique un parcours dont certains critères restent ouverts. « Non livré » désigne une fonction restant à réaliser. La colonne Classification du CSV conserve le périmètre initial de chaque ticket.
+
+## Parcours ajoutés après la PR 46
+
+- Dans le **Club**, ouvrir **Récompenses** pour l’offre de mise, la remise hebdomadaire, le tour du studio et les préférences de partage. La boutique de points, les tournois et les participations gratuites disposent de leurs propres onglets.
+- Dans **Mon compte → Historique**, ouvrir le reçu d’une manche maison jouée depuis la mise à jour pour vérifier l’engagement et reproduire le tirage.
+- Dans **Site → Bannière et guides → Mise en page et thèmes**, composer la page, choisir la largeur d’aperçu, enregistrer le brouillon, publier ou restaurer une révision.
+- Dans **Espace opérateur**, les **Clients d’intégration** présentent les abonnements et leur journal. Les **Sélections planifiées** donnent accès à la performance par place et par jeu. La **Caisse de test** et le **Réseau d’actifs fictifs** suivent les reçus et les exceptions. Dans la liste des partenaires, ouvrir **Relevés de commission**.
+- L’argent réel, les comptes OAuth de la marque, les droits de diffusion sportive, un fournisseur de tables de croupiers et le canal Telegram officiel demandent une configuration ou un contrat distinct. Les promotions de test utilisent un récepteur simulé. Les tests de la caisse Telegram vérifient la continuité du même paiement dans le bot, le compte joueur et le portail du personnel.
 
 ## Prise en main
 
@@ -40,11 +48,11 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 | D06 | Catalogue fournisseur | 4 | 0 | 0 |
 | D07 | Sélections du hall | 3 | 0 | 0 |
 | D08 | Découverte et favoris | 4 | 0 | 0 |
-| D09 | Segments et communications | 2 | 0 | 1 |
-| D10 | Affiliation | 2 | 0 | 1 |
-| D11 | Offres et bonus | 1 | 1 | 1 |
+| D09 | Segments et communications | 3 | 0 | 0 |
+| D10 | Affiliation | 3 | 0 | 0 |
+| D11 | Offres et bonus | 3 | 0 | 0 |
 | D12 | Fidélité et récompenses | 5 | 0 | 0 |
-| D13 | Rapports et indicateurs | 3 | 1 | 0 |
+| D13 | Rapports et indicateurs | 4 | 0 | 0 |
 | D14 | Vérification d’identité | 3 | 0 | 0 |
 | D15 | Risque et enquêtes | 3 | 0 | 0 |
 | D16 | Jeu responsable | 3 | 0 | 0 |
@@ -55,12 +63,12 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 | D21 | Rapprochement et clôture | 3 | 0 | 0 |
 | D22 | Services aux opérateurs | 3 | 0 | 0 |
 | D23 | Paris sportifs | 3 | 0 | 0 |
-| D24 | Caisse crypto | 0 | 0 | 3 |
-| D25 | Canal Telegram | 1 | 1 | 1 |
+| D24 | Caisse crypto | 3 | 0 | 0 |
+| D25 | Canal Telegram | 3 | 0 | 0 |
 | D26 | Jeux à prix | 3 | 0 | 0 |
-| D27 | API partenaires | 2 | 0 | 1 |
+| D27 | API partenaires | 3 | 0 | 0 |
 | D28 | Crédits de test | 2 | 0 | 0 |
-| **Total** | **88 tickets** | 77 | 3 | 8 |
+| **Total** | **88 tickets** | 88 | 0 | 0 |
 
 ## Couverture par phase
 
@@ -74,8 +82,8 @@ Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, o
 | P4B | 1 | 1 | 0 | 0 |
 | P1X | 2 | 2 | 0 | 0 |
 | E1 | 23 | 23 | 0 | 0 |
-| E2 | 22 | 16 | 2 | 4 |
-| E3 | 15 | 10 | 1 | 4 |
+| E2 | 22 | 22 | 0 | 0 |
+| E3 | 15 | 15 | 0 | 0 |
 
 ## Parcours d’acceptation
 

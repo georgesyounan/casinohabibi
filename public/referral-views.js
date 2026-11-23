@@ -51,7 +51,7 @@ export function showLinkReport(root,report,ui,urlFor) {
   },'',5);
 }
 
-export function partnerDirectory(root,{ui,t,get,edit,manage}) {
+export function partnerDirectory(root,{ui,t,get,edit,manage,statements}) {
   const {el,l,button}=ui;
   const list=el('div');
   root.replaceChildren(button(l('New partner','Nouveau partenaire'),()=>edit(null)),list);
@@ -64,6 +64,7 @@ export function partnerDirectory(root,{ui,t,get,edit,manage}) {
       const item=el('article','','discovery-card');
       item.append(button(p.name+' · '+p.code,()=>edit(p),true),el('small',[p.email,p.active?l('Active','Actif'):l('Inactive','Inactif')].join(' · ')),
         button(l('Manage links','Gérer les liens')+' ('+p.linkCount+')',()=>manage(p),true));
+      if(statements)item.append(button(l('Commission statements','Relevés de commission'),()=>statements(p),true));
       return item;
     }});
 }

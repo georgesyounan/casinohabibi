@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHmac, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -4281,4 +4281,139 @@ test('Versioned page blocks publish in order below the carousel, reject stale ed
   for(const lang of ['fr','en']){const html=await live(lang);assert.ok(html.indexOf('id="lobby-spotlight"')<html.indexOf('class="published-blocks theme-navy'));
     assert.ok(html.indexOf('class="block-slides"')<html.indexOf(lang==='fr'?'Première sélection':'First shelf'));assert.ok(!html.includes('theme-ice font-editorial'));}
   assert.ok((await read()).roles.includes('accounts'));assert.equal((await s(url,{role:'home',action:'save',version:1,live:1,document:{...one,blocks:[{type:'image',en:'X',media:'https://untrusted.example/a'}]}})).status,400);
+});
+
+test('Welcome bonus pays after two eligible stakes, reversal removes progress, and net-loss cashback and studio spins credit once',async t=>{
+  const {base,database}=await startSandbox(t,{appBasePath:'/casinohabibi'}),site=base+'/casinohabibi',p=client(site),s=client(site);
+  await checked(s,'admin/login',staffCredentials);await register(p);const owner=(await checked(p,'account')).id,db=new DatabaseSync(database);t.after(()=>db.close());
+  const endpoint='discovery/membership',ops=(action,more={})=>checked(p,endpoint,{owner,action,...more}),view=async()=>(await checked(p,endpoint)).promotions;
+  const active=await ops('bonus-start');assert.equal(active.promotions.offer.progress,0);await ops('bonus-start');
+  const played=async game=>(await checked(p,'play',{game,wager:1000,requestId:randomUUID()})).history[0].id;
+  db.prepare('INSERT INTO player_safety(player,daily_limit_cents) VALUES(?,10000) ON CONFLICT(player) DO UPDATE SET daily_limit_cents=10000').run(owner);
+  await played('blackjack');assert.equal((await view()).offer.progress,0);
+  await played('gold');const last=await played('aurora');assert.equal((await view()).offer.unlocked,1000);
+  const entry=db.prepare('SELECT id FROM ledger WHERE player=? AND wager=1000 AND game=?').get(owner,'aurora').id;
+  for(let i=0;i<2;i++)await checked(s,'admin/discovery/membership',{action:'bonus-correct',entry,reason:'Fixture round was reversed'});
+  assert.notEqual(last,null);assert.equal((await view()).offer.progress,1000);assert.equal((await view()).offer.unlocked,0);
+  const week=(await view()).cashback;
+  const insert=db.prepare("INSERT INTO ledger(player,tenant_id,game,wager,amount,request_id,created_at) VALUES(?,'sandbox','gold',?,?,?,?)");
+  insert.run(owner,10000,-7000,'loss-fixture',week.start+3600000);assert.equal((await view()).cashback.amount,700);
+  insert.run(owner,10000,8000,'win-fixture',week.start+3600000);assert.equal((await view()).cashback.amount,0);
+  await checked(s,'admin/discovery/membership',{action:'bonus-correct',entry:db.prepare('SELECT id FROM ledger WHERE request_id=?').get('win-fixture').id,reason:'Rejected fixture round'});
+  await Promise.all([ops('bonus-cashback'),ops('bonus-cashback')]);assert.equal((await view()).cashback.amount,700);
+  const [a,b]=await Promise.all([ops('bonus-spin-grant'),ops('bonus-spin-grant')]);assert.equal(a.promotions.spin.ref,b.promotions.spin.ref);
+  await Promise.all([ops('bonus-spin-use',{ref:a.promotions.spin.ref}),ops('bonus-spin-use',{ref:a.promotions.spin.ref})]);
+  assert.equal(db.prepare("SELECT count(*) n FROM ledger WHERE player=? AND request_id LIKE 'offer:spin:%'").get(owner).n,1);
+  assert.equal(db.prepare("SELECT count(*) n FROM ledger WHERE player=? AND request_id LIKE 'offer:cashback:%'").get(owner).n,1);
+});
+
+test('CRM and Telegram delivery recheck consent, resume batches and retain event identity through retries and dead letters',async t=>{
+  const {base,database}=await startSandbox(t,{appBasePath:'/casinohabibi'}),site=base+'/casinohabibi',a=client(site),b=client(site),s=client(site);
+  await checked(s,'admin/login',staffCredentials);const pa=await growthAccount(a,'crm-a'),pb=await growthAccount(b,'crm-b');
+  const db=new DatabaseSync(database);t.after(()=>db.close());
+  const adm='admin/operator/subscriptions',op=(action,i)=>checked(s,adm,{action,...i}),member=(w,owner,purpose,enabled)=>checked(w,'discovery/membership',{action:'sharing',owner,purpose,enabled});
+  for(const [w,id] of [[a,pa],[b,pb]]){await checked(w,'account/consents',{marketingEmail:true});await checked(w,'discovery/preferences',{topic:'rewards',channel:'email',granted:true});await member(w,id,'crm',true);}
+  assert.equal((await s(adm,{action:'configure',name:'wrong',purpose:'crm',fields:['balance']})).status,400);
+  const id=(await op('configure',{name:'Test CRM',purpose:'crm',mode:'lost-reply',fields:['id','locale','email']})).id;
+  await op('snapshot',{id,campaign:'nov-one'});await checked(a,'account/consents',{marketingEmail:false});
+  for(let i=0;i<4;i++){db.prepare('UPDATE outbound_events SET next=0 WHERE sub=?').run(id);await op('deliver',{id,limit:1});}
+  const rows=()=>db.prepare('SELECT * FROM outbound_events WHERE sub=? ORDER BY rowid').all(id);
+  assert.equal(rows().find(r=>r.player===pa).state,'suppressed');
+  const delivered=rows().find(r=>r.player===pb);assert.equal(delivered.state,'delivered');assert.equal(delivered.attempts,2);
+  const effects=db.prepare('SELECT * FROM outbound_effects WHERE sub=?').all(id);assert.equal(effects.length,1);assert.equal(JSON.parse(effects[0].body).id,delivered.id);
+  assert.equal(effects[0].signature.length,64);assert.equal(JSON.parse(effects[0].body).mapping,1);
+  await op('configure',{id,version:1,name:'Test CRM',purpose:'crm',mode:'permanent',fields:['id']});
+  await op('snapshot',{id,campaign:'nov-two'});
+  for(let i=0;i<3;i++){db.prepare('UPDATE outbound_events SET next=0 WHERE sub=?').run(id);await op('deliver',{id});}
+  const dead=rows().find(r=>r.state==='dead');assert.ok(dead);await op('configure',{id,version:2,name:'Test CRM',purpose:'crm',mode:'accept',fields:['id','locale']});
+  await op('replay',{id,event:dead.id});await op('deliver',{id});const replay=JSON.parse(db.prepare('SELECT body FROM outbound_effects WHERE id=?').get(dead.id).body);
+  assert.equal(replay.mapping,2);assert.deepEqual(Object.keys(replay.contact),['contact_id']);
+  const tg=(await op('configure',{name:'Demo bot',purpose:'telegram',mode:'accept'})).id;
+  db.prepare('INSERT INTO monthly_telegram_players VALUES(?,?,?,?)').run('sandbox',pb,1234567,Date.now());
+  await member(b,pb,'telegram',true);await op('snapshot',{id:tg,campaign:'scheduled'});await member(b,pb,'telegram',false);await op('deliver',{id:tg});await op('deliver',{id:tg});
+  assert.equal(db.prepare("SELECT count(*) n FROM outbound_events WHERE sub=? AND state='suppressed'").get(tg).n,1);
+});
+test('An affiliate reversal retains the closed statement and rule, and only the granted partner may issue a demo offer',async t=>{
+  const {base,database}=await startSandbox(t),s=client(base),a=client(base),b=client(base),p=client(base);
+  await checked(s,'admin/login',staffCredentials);const A=await growthAccount(a,'acct-a'),B=await growthAccount(b,'acct-b'),P=await growthAccount(p,'referred');
+  const partner=async(id,code)=>(await checked(s,'admin/growth/partner',{name:code,code,playerId:id})).id,one=await partner(A,'partner-one'),two=await partner(B,'partner-two');
+  const op=(action,extra={})=>checked(s,'admin/growth/statements',{action,partner:one,...extra});
+  await op('terms',{version:0,rate:250,grant:false});await op('terms',{partner:two,version:0,rate:500,grant:false});
+  const db=new DatabaseSync(database);t.after(()=>db.close());const now=Date.now();
+  db.prepare("UPDATE growth_signups SET partner=?,review='valid',decided_at=? WHERE player=?").run(one,now,P);
+  db.prepare("UPDATE players SET email_verified=1,first_verified_at=? WHERE id=?").run(now,P);
+  db.prepare("INSERT INTO growth_first_saves(player,tenant,title,at) VALUES(?,'sandbox',1,?)").run(P,now);
+  await op('close');const original=await checked(a,'growth/statements');assert.equal(original.statements[0].amount,250);const first=original.entries[0];
+  await op('terms',{version:1,rate:500,grant:true});assert.equal((await b('growth/statements',{entry:first.id})).status,403);
+  await checked(a,'growth/statements',{entry:first.id});await checked(a,'growth/statements',{entry:first.id});
+  for(let i=0;i<2;i++)await op('reverse',{entry:first.id,reason:'Qualification reversed after close'});await op('close');const revised=await checked(a,'growth/statements');
+  const adj=revised.entries.find(x=>x.kind==='reversal');assert.equal(adj.rule,1);assert.equal(adj.originalStatement,original.statements[0].id);assert.equal(adj.amount,-250);assert.notEqual(adj.originalStatement,adj.statement);
+  assert.equal((await checked(b,'growth/statements')).entries.length,0);
+  assert.equal(db.prepare("SELECT count(*) n FROM ledger WHERE player=? AND request_id LIKE 'affiliate:offer:%'").get(P).n,1);
+});
+
+test('The test network verifies wallet ownership, credits indexed transfers once, keeps a timed-out payout and shares Telegram withdrawal IDs with the web cashier',async t=>{
+  const key=randomBytes(32),mount='/casinohabibi',{base,database}=await startSandbox(t,{appBasePath:mount,encryptionKey:key.toString('hex')}),site=base+mount;
+  const s=client(site),p=client(site),stranger=client(site),bot=client(site),db=new DatabaseSync(database);t.after(()=>db.close());
+  await checked(s,'admin/login',staffCredentials);const owner=await growthAccount(p,'network-wallet'),other=await growthAccount(stranger,'network-other');
+  db.prepare('UPDATE players SET report_fixture=1 WHERE id=?').run(owner);
+  const desk='admin/desk/',subject=(await checked(s,desk+'review',{action:'create',label:'Network integration',market:'north',player:owner})).id;
+  const review=async(action,extra)=>checked(s,desk+'review',{action,id:subject,version:(await checked(s,desk+'subject?id='+subject)).version,...extra});
+  for(const type of ['age','photo'])await review('evidence',{type});
+  await review('callback',{cycle:1,eventId:'test-screen',outcome:'review'});await review('decide',{outcome:'approved',reason:'confirmed'});
+  const endpoint='account/demo-network',admin='admin/operator/demo-network',currency={network:'Habibi-Test',asset:'TUSD-DEMO'};
+  const act=(action,extra={})=>checked(p,endpoint,{owner,...currency,action,...extra}),op=(action,extra={})=>checked(s,admin,{action,...currency,...extra});
+  const {publicKey,privateKey}=generateKeyPairSync('ed25519'),address=publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('hex');
+  assert.equal((await p(endpoint,{owner,...currency,action:'challenge',address})).status,409);await op('settings',{enabled:true,confirmations:3,fee:2});
+  const c=await act('challenge',{address}),sig=sign(null,Buffer.from(c.message),privateKey).toString('hex');
+  assert.equal((await stranger(endpoint,{owner:other,...currency,action:'link',id:c.id,signature:sig})).status,409);
+  assert.equal((await p(endpoint,{owner,...currency,action:'link',id:c.id,signature:'00'.repeat(64)})).status,403);
+  await act('link',{id:c.id,signature:sig});assert.equal((await p(endpoint,{owner,...currency,action:'link',id:c.id,signature:sig})).status,409);
+  assert.equal((await act('instruction')).address,address);assert.equal((await p(endpoint,{owner,...currency,action:'instruction',network:'mainnet'})).status,409);
+  const tx=randomBytes(32).toString('hex'),sample=(index,confirmations)=>({tx,address,index,confirmations,amount:1000+index*500});
+  assert.equal((await op('observe',sample(0,0))).state,'observed');assert.equal((await op('observe',sample(1,1))).state,'confirming');
+  const first=await op('observe',sample(0,3));await op('observe',sample(0,5));const last=await op('observe',sample(1,3));assert.notEqual(first.payment,last.payment);
+  const wallet=async()=>(await checked(s,desk+'cashier?id='+subject)).balance;assert.equal((await wallet()).available,2500);
+  const request={key:randomUUID(),address,amount:500},pay=await act('payout',request);assert.equal((await act('payout',request)).id,pay.id);
+  const step=async(action)=>op(action,{id:pay.id,version:(await checked(s,desk+'intent?id='+pay.id)).version});
+  await step('send');await step('timeout');assert.equal((await checked(s,desk+'intent?id='+pay.id)).status,'unknown');await step('confirm');await step('confirm');
+  assert.equal((await wallet()).available,2000);const after=await checked(p,endpoint);
+  assert.deepEqual(after.deposits.map(x=>x.idx).sort(),[0,1]);assert.equal(after.payouts[0].fee,2);
+  await op('reorg',{tx,index:0,reason:'Fork observed in fixture'});await op('reorg',{tx,index:0,reason:'Fork observed in fixture'});
+  assert.equal((await checked(s,admin)).exceptions.length,1);assert.equal((await checked(s,desk+'intent?id='+first.payment)).status,'confirmed');
+  const token='123456789:'+randomBytes(25).toString('base64url'),iv=randomBytes(12),aes=createCipheriv('aes-256-gcm',key,iv);aes.setAAD(Buffer.from('monthly-telegram:sandbox'));
+  const encrypted=Buffer.concat([aes.update(token),aes.final()]),sealed=Buffer.concat([iv,aes.getAuthTag(),encrypted]).toString('base64');
+  db.prepare("INSERT INTO monthly_telegram_settings VALUES('sandbox',1,123456789,'fixture_test_bot',?,'-1','Fixture','https://t.me/fixture_example',1,?)").run(sealed,Date.now());
+  db.prepare("INSERT INTO monthly_telegram_players VALUES('sandbox',?,1234567,?)").run(owner,Date.now());
+  const secret=createHmac('sha256',token).update('monthly-hook:sandbox').digest('hex'),hook=(id,text)=>checked(bot,'discovery/telegram/webhook',{update_id:id,message:{text,chat:{type:'private',id:1234567},from:{id:1234567,is_bot:false,language_code:'fr'}}},undefined,{'x-telegram-bot-api-secret-token':secret});
+  const start=await hook(310,'/withdraw 5'),payment=new URL(start.reply_markup.inline_keyboard[0][0].url).searchParams.get('cashier');assert.ok(payment);assert.deepEqual(await hook(310,'/withdraw 5'),{});
+  const wrong=await stranger('discovery/membership',{owner:other,action:'cashier-confirm',ref:payment});assert.equal(wrong.status,404);
+  for(let i=0;i<2;i++)await checked(p,'discovery/membership',{owner,action:'cashier-confirm',ref:payment});
+  assert.equal((await checked(s,desk+'intent?id='+payment)).status,'held');assert.equal((await wallet()).available,1500);
+  const secondStart=await hook(311,'/withdraw 1'),second=new URL(secondStart.reply_markup.inline_keyboard[0][0].url).searchParams.get('cashier');
+  const risk=await review('signal',{kind:'shared_device',marker:'sample-a',eventId:'review-hold'});
+  await review('hold',{risk:risk.risk,reason:'risk_confirmed'});
+  assert.match((await hook(312,'/withdraw 1')).text,/blocage/);assert.equal((await p('discovery/membership',{owner,action:'cashier-confirm',ref:second})).data.error,'payout_hold');
+  assert.match((await hook(313,'/start '+randomBytes(24).toString('base64url'))).text,/nouveau code/);
+});
+
+test('Eligible shelf impressions produce five unique launches in one hundred views, with corrected round GGR and zero-sample reporting',async t=>{
+  const {base}=await startSandbox(t,{appBasePath:'/casinohabibi'}),site=base+'/casinohabibi',s=client(site),p=client(site);
+  await checked(s,'admin/login',staffCredentials);await register(p);
+  const name=(await checked(s,'providers/catalog/sample')).name,feed={name,sample:true,games:[{externalId:'demo-slot',titleEn:'Demo slot',titleFr:'Jeu démo',category:'slots'}]};
+  const preview=await checked(s,'providers/catalog/preview',feed);await checked(s,'providers/catalog',{...feed,expectedRevision:preview.revision});
+  const spec={name:'track-slot',titleEn:'Track',titleFr:'Mesurer',titleEs:'',market:'',channel:'all',zone:'UTC',start:'2020-01-01T00:00',end:'2090-01-01T00:00',priority:1,category:'all',sort:'popular',cap:3,hide:[],pins:[]};
+  await checked(s,'admin/shelves/change',{action:'publish',version:0,name:spec.name,spec});
+  const [shelf]=(await checked(p,'v1/lobby?channel=desktop&lang=fr')).categories,game=shelf.items[0].id,ctx={slot:shelf.key,revision:shelf.revision,position:1,game,lang:'fr',channel:'desktop'},refs=[];
+  for(let i=0;i<100;i++){const ref=randomUUID();refs.push(ref);await checked(p,'shelf-events',{...ctx,ref,action:'impression'});}
+  await checked(p,'shelf-events',{...ctx,ref:refs[0],action:'impression'});
+  assert.equal((await p('shelf-events',{...ctx,ref:randomUUID(),game:game+100,action:'impression'})).status,409);
+  let first;
+  for(const ref of refs.slice(0,5)){await checked(p,'shelf-events',{...ctx,ref,action:'launch'});const round=await checked(p,'play',{game:'gold',wager:100,requestId:randomUUID(),placement:ref});first??=round.history[0].id;}
+  await checked(p,'shelf-events',{...ctx,ref:refs[0],action:'launch'});
+  const report=()=>checked(s,'admin/shelves/metrics?slot=track-slot&game='+game);
+  const row=(await report()).entries[0];assert.deepEqual([row.impressions,row.launches,row.conversion,row.currency],[100,5,5,'CAD-demo']);assert.equal(row.receipts.length,5);
+  await checked(s,'admin/discovery/membership',{action:'bonus-correct',entry:first,reason:'Round correction in test'});
+  const corrected=(await report()).entries[0];assert.equal(corrected.receipts.filter(r=>r.corrected).length,1);assert.equal(corrected.ggr,corrected.receipts.filter(r=>!r.corrected).reduce((n,r)=>n+r.stake-r.wins,0));
+  assert.equal((await checked(s,'admin/shelves/metrics?slot=no-sample')).conversion,null);
 });
