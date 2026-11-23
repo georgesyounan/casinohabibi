@@ -1,6 +1,7 @@
 import { uiKit } from './discovery.js';
 import { lobbyView, viewTitle } from './lobby-navigation.js';
 import { createHomeCampaign } from './banner-motion.js';
+import {distributionEditor} from './catalogue-distribution.js';
 import { createSportsCentre } from './sports-centre.js';
 import { shareLink } from './referral-views.js';
 
@@ -32,13 +33,15 @@ export function createPublicShelf({ api, french, appPath }) {
       const data = await api('v1/lobby?lang=' + lang + '&channel=' + channel, undefined, 'GET');
       if (token !== generation) return;
       section.replaceChildren();
-      section.hidden = !data.shelf?.items?.length;
-      if (!section.hidden) {
+      const categories=(data.categories||[data.shelf]).filter(row=>row?.items?.length);
+      section.hidden = !categories.length;
+      for (const category of categories) {
         const h = document.createElement('h2');
-        h.textContent = data.shelf.title;
+        h.textContent = category.title;
+        if(category.art){const cover=document.createElement('img');cover.src=appPath('/'+category.art);cover.alt='';cover.loading='lazy';cover.className='shelf-art';section.append(cover);}
         const ul = document.createElement('ul');
         ul.className = 'shelf-titles';
-        for (const game of data.shelf.items) {
+        for (const game of category.items) {
           const li = document.createElement('li'),
             a = document.createElement('a');
           a.textContent = game.title;
@@ -49,6 +52,14 @@ export function createPublicShelf({ api, french, appPath }) {
           ul.append(li);
         }
         section.append(h, ul);
+        const discover=document.createElement('button');discover.type='button';discover.className='ghost';
+        discover.textContent=lang==='fr'?'Un jeu au hasard':'Random game';
+        discover.addEventListener('click',async()=>{discover.disabled=true;try{
+          const {game}=await api('games/random?channel='+channel,undefined,'GET');
+          if(game)location.assign(appPath('/?'+new URLSearchParams({q:game.externalId,lang})+'#provider-game-'+game.id));
+          else await refresh(true);
+        }finally{discover.disabled=false;}});
+        section.append(discover);
       }
       // Re-read current eligibility when a long-running page crosses a publication boundary.
       const delay =
@@ -110,6 +121,7 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
       }
       const row = items.find((r) => r.name === selected);
       if (selected === null) {
+        distributionEditor(view,{ui:uiKit(french),api,t,canPublish});
         if (canPublish()) view.append(button(l('Create shelf', 'Créer une sélection'), () => edit('')));
         const list = el('div', '', 'contact-list');
         view.append(list);
@@ -181,6 +193,9 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
           ],
           value: s.channel || 'all',
         });
+        const cohort=field(f,'cohort',l('Audience','Public'),{items:[['all',l('All players','Tous les joueurs')],['vip','VIP']],value:s.cohort||'all'});
+        const artKeys=['','game-gold.webp','game-aurora.webp','game-roulette.webp','game-blackjack.webp','campaign-match.webp','campaign-casino.webp','campaign-reels.webp'];
+        const artwork=['En','Fr','Es'].map(lang=>field(translations,'art'+lang,l('Artwork','Visuel')+' · '+lang,{items:artKeys.map(a=>[a,a||'—']),value:s['art'+lang]||''}));
         const start = field(f, 'start', l('Start (local time)', 'Début (heure locale)'), {
           type: 'datetime-local',
           required: true,
@@ -208,7 +223,7 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
         const sort = field(f, 'sort', l('Fill remaining slots', 'Remplir les places restantes'), {
           items: [
             ['name', l('By title', 'Par titre')],
-            ['new', l('Newest first', 'Plus récents')],
+            ['new', l('Newest first', 'Plus récents')],['popular',l('Most launched in 7 days','Plus lancés sur 7 jours')],['jackpot','Jackpot'],
           ],
           value: s.sort || 'name',
         });
@@ -286,7 +301,7 @@ export function createShelfEditor({ api, t, french, canPublish, staffId }) {
             end: end.value,
             zone: timezone.value,
             category: category.value,
-            sort: sort.value,
+            sort: sort.value,cohort:cohort.value,artEn:artwork[0].value,artFr:artwork[1].value,artEs:artwork[2].value,
             cap: Number(cap.value),
             priority: Number(priority.value),
             pins,

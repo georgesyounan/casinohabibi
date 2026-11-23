@@ -103,7 +103,9 @@ export function createClubHome({root,api,base,french,account,accountPending=()=>
     const focused=document.activeElement, hadFocus=root.contains(focused);
     const key=hadFocus && (focused.dataset.clubCard || focused.dataset.clubAction);
     const id=hadFocus && focused.dataset.program;
+    const prizeOpen=root.querySelector('[data-prize-program]')?.open;
     root.innerHTML=html; signature=html;
+    const prizePanel=root.querySelector('[data-prize-program]');if(prizeOpen&&prizePanel)prizePanel.open=true;
     if(key){
       const candidates=[...root.querySelectorAll('[data-club-card],[data-club-action]')];
       const next=candidates.find(el=>(el.dataset.clubCard===key||el.dataset.clubAction===key)&&el.dataset.program===id&&!el.disabled)
@@ -169,7 +171,7 @@ export function createClubHome({root,api,base,french,account,accountPending=()=>
       if(memberRequest?.operation!==operation)memberRequest={operation,key:crypto.randomUUID()};
       busy=true;control.disabled=true;
       try{
-        const value=await api('discovery/membership',{action:verb,owner:user,key:memberRequest.key,sku:control.dataset.sku,price:Number(control.dataset.price)||undefined,id:Number(control.dataset.id)||undefined});
+        const value=await api('discovery/membership',{action:verb,owner:user,key:memberRequest.key,sku:control.dataset.sku,period:control.dataset.period,amount:Number(control.dataset.amount)||undefined,unit:verb==='prize-request'?'prize':undefined,price:Number(control.dataset.price)||undefined,id:Number(control.dataset.id)||undefined});
         if(user!==auth()||value.owner!==user)return;
         memberRequest=null;snapshot.membership=value;
         status=msg('Saved.','Enregistré.');signature='';paint();

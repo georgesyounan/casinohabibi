@@ -24,5 +24,18 @@ export function marketPanel(data,fr,tab,base) {
     const participation=t.own?'<strong>'+l('Your rank','Votre rang')+' #'+t.own.place+' · '+t.own.score+' pts</strong>':t.closed?'':act('enter',l('Enter','Participer'),'data-id="'+t.id+'"',t.minTier && !data.wallet?.vip);
     return `<article class="club-tourney"><h4>${safe(t.title)}</h4><p>${t.prize} pts · ${t.closed?l('Closed','Terminé'):l('Ends','Fin')} ${safe(when(t.ends))}</p><small>${safe(terms)}</small><p>${l('Earn one point per daily gift and three per completed quest after entry.','Après inscription, un cadeau quotidien vaut un point et une quête terminée en vaut trois.')}</p>${participation}${ranking?'<ol class="club-ranks">'+ranking+'</ol>':''}</article>`;
   });
-  return '<h3>'+l('Club tournaments','Tournois du Club')+'</h3>'+ (cards.join('')||'<p>'+l('No tournaments scheduled.','Aucun tournoi programmé.')+'</p>');
+  let awards='';
+  const p=data.prizes;
+  if(p){
+    const claimState={pending:l('Pending','En attente'),denied:l('Returned','Restitué'),fulfilled:l('Award delivered','Prix remis')};
+    const controls=p.member?
+      '<p>'+l('Play coins','Jetons loisir')+' · '+p.play+' &nbsp; '+l('Prize units','Unités de prix')+' · '+p.prize+'</p>'+
+      act('prize-free',p.entered?l('Entered today','Participation enregistrée'):l('Free daily entry','Participation quotidienne gratuite'),'data-period="'+safe(p.period)+'"',p.entered)+
+      act('prize-request',l('Request a demo prize','Demander un prix fictif')+' · '+p.rules.threshold,'data-amount="'+p.rules.threshold+'"',p.prize<p.rules.threshold)+
+      p.claims.map(c=>'<p>#'+c.id+' · '+c.amount+' · '+claimState[c.state]+'</p>').join(''):
+      act('prize-join',l('Join the prize demo','Rejoindre le programme fictif'));
+    awards='<details class="club-tourney" data-prize-program><summary>'+l('Free entries and demo prizes','Participations gratuites et prix fictifs')+'</summary><p>'+l('Join for 100 play coins and 5 prize units. Each free entry grants ','À l’inscription, recevez 100 jetons loisir et 5 unités de prix. Chaque participation gratuite ajoute ')+p.rules.freeUnits+
+      l(' prize units. Daily reset in ',' unités de prix. Journée selon le fuseau ')+safe(p.rules.zone)+'.</p>'+controls+'</details>';
+  }
+  return awards+'<h3>'+l('Club tournaments','Tournois du Club')+'</h3>'+ (cards.join('')||'<p>'+l('No tournaments scheduled.','Aucun tournoi programmé.')+'</p>');
 }

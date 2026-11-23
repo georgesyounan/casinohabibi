@@ -24,6 +24,10 @@ Dans **Club → Boutique** ou **Tournois**, le compte joueur retrouve son journa
 
 Dans **Sports → Mes coupons**, le joueur connecté retrouve sa mise, son rachat et le reçu de règlement en CAD fictifs. Dans **Espace opérateur → Produits → Paris sportifs**, l’opérateur ajuste les cotes et les plafonds, suspend un marché ou enregistre le résultat. Le marché utilise les rencontres fictives de la marque.
 
+Dans **Sélections planifiées**, régler la distribution d’un studio, traiter ses types inconnus et choisir les visuels des catégories. Le filtre **Plus lancés sur 7 jours** respecte les titres masqués et les places réservées. Un compte VIP peut recevoir une sélection mobile publiée à son intention.
+
+Dans **Parcours financiers → Opérations de portefeuille et rapprochement**, ouvrir un compte TST, enregistrer les opérations par référence et retrouver leurs réservations, cotations, enquêtes, relevés et versions de clôture. Dans **Club → Tournois → Participations gratuites et prix fictifs**, les deux types d’unités ont des soldes et des conditions d’emploi distincts.
+
 ## Couverture par module
 
 | Module | Fonction | Validés en démo | Partiels | Non livrés |
@@ -33,9 +37,9 @@ Dans **Sports → Mes coupons**, le joueur connecté retrouve sa mise, son racha
 | D03 | Produits et activation | 3 | 0 | 0 |
 | D04 | Mise en service et reprise | 2 | 1 | 0 |
 | D05 | Éditeur et traductions | 2 | 0 | 1 |
-| D06 | Catalogue fournisseur | 2 | 2 | 0 |
-| D07 | Sélections du hall | 1 | 2 | 0 |
-| D08 | Découverte et favoris | 3 | 1 | 0 |
+| D06 | Catalogue fournisseur | 4 | 0 | 0 |
+| D07 | Sélections du hall | 3 | 0 | 0 |
+| D08 | Découverte et favoris | 4 | 0 | 0 |
 | D09 | Segments et communications | 2 | 0 | 1 |
 | D10 | Affiliation | 2 | 0 | 1 |
 | D11 | Offres et bonus | 1 | 1 | 1 |
@@ -44,19 +48,19 @@ Dans **Sports → Mes coupons**, le joueur connecté retrouve sa mise, son racha
 | D14 | Vérification d’identité | 3 | 0 | 0 |
 | D15 | Risque et enquêtes | 3 | 0 | 0 |
 | D16 | Jeu responsable | 2 | 1 | 0 |
-| D17 | Portefeuille et journal | 1 | 1 | 1 |
+| D17 | Portefeuille et journal | 3 | 0 | 0 |
 | D18 | Caisse et retraits | 3 | 0 | 0 |
-| D19 | Lancements et événements de jeu | 1 | 2 | 0 |
-| D20 | Manches et relectures | 1 | 2 | 0 |
-| D21 | Rapprochement et clôture | 0 | 3 | 0 |
+| D19 | Lancements et événements de jeu | 3 | 0 | 0 |
+| D20 | Manches et relectures | 3 | 0 | 0 |
+| D21 | Rapprochement et clôture | 3 | 0 | 0 |
 | D22 | Services aux opérateurs | 3 | 0 | 0 |
 | D23 | Paris sportifs | 3 | 0 | 0 |
 | D24 | Caisse crypto | 0 | 0 | 3 |
 | D25 | Canal Telegram | 1 | 1 | 1 |
-| D26 | Jeux à prix | 0 | 1 | 2 |
-| D27 | API partenaires | 1 | 1 | 1 |
+| D26 | Jeux à prix | 3 | 0 | 0 |
+| D27 | API partenaires | 2 | 0 | 1 |
 | D28 | Crédits de test | 2 | 0 | 0 |
-| **Total** | **88 tickets** | 55 | 21 | 12 |
+| **Total** | **88 tickets** | 73 | 6 | 9 |
 
 ## Couverture par phase
 
@@ -69,9 +73,9 @@ Dans **Sports → Mes coupons**, le joueur connecté retrouve sa mise, son racha
 | P4A | 1 | 1 | 0 | 0 |
 | P4B | 1 | 1 | 0 | 0 |
 | P1X | 2 | 2 | 0 | 0 |
-| E1 | 23 | 14 | 8 | 1 |
-| E2 | 22 | 6 | 11 | 5 |
-| E3 | 15 | 7 | 2 | 6 |
+| E1 | 23 | 20 | 2 | 1 |
+| E2 | 22 | 15 | 3 | 4 |
+| E3 | 15 | 10 | 1 | 4 |
 
 ## Parcours d’acceptation
 

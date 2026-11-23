@@ -1,8 +1,10 @@
 import { createPlayerSignIn, validPlayerName } from './lib/player-signin.js';
 import { createPartnerLobby } from './lib/partner-lobby.js';
+import { createDistribution } from './lib/catalogue-distribution.js';
 import { createLobbyShelves } from './lib/lobby-shelves.js';
 import { createReviewDesk } from './lib/review-desk.js';
 import { createCashierDesk } from './lib/cashier-desk.js';
+import {createFinanceOperations} from './lib/finance-operations.js';
 import { createFinancePilot } from './lib/finance-pilot.js';
 import { createOperatorProducts } from './lib/operator-products.js';
 import { createOperatorServices } from './lib/operator-services.js';
@@ -313,13 +315,15 @@ const savedTitles = createSavedTitles(db, { fail, transaction,
 const encryptionKey = encryptionKeyValue ? Buffer.from(encryptionKeyValue, 'hex') : null;
 const staffAudit = createStaffAudit(db, { fail, transaction, encryptionKey });
 const partnerLobby=transaction(()=>createPartnerLobby(db,{fail,audit:staffAudit.record,encryptionKey}));
-const lobbyShelves = transaction(() => createLobbyShelves(db, { fail, audit: staffAudit.record }));
+const distribution=transaction(()=>createDistribution(db,{fail,audit:staffAudit.record}));
+const lobbyShelves = transaction(() => createLobbyShelves(db, { fail, audit: staffAudit.record,distribution }));
 const financePilot = transaction(() => createFinancePilot(db, { fail, audit: staffAudit.record }));
+const financeOperations=transaction(()=>createFinanceOperations(db,{fail,audit:staffAudit.record,cashier:financePilot.cashier}));
 const reviewDesk=transaction(()=>createReviewDesk(db,{fail,audit:staffAudit.record,createWallet:financePilot.cashier.open}));
 const cashierDesk=transaction(()=>createCashierDesk(db,{fail,audit:staffAudit.record,review:reviewDesk,ledger:financePilot.cashier}));
-const operatorProducts = transaction(() => createOperatorProducts(db, { fail, audit: staffAudit.record }));
+const operatorProducts = transaction(() => createOperatorProducts(db, { fail, audit: staffAudit.record, eligible:(tenant,id,market,channel)=>distribution.eligible(tenant,{market:market??publishedTenantConfig(tenant).config.displayMarket,channel:channel||'desktop'}).some(game=>game.id===id) }));
 const operatorServices = transaction(() => createOperatorServices(db, { fail, audit: staffAudit.record }));
-const providerCatalog=transaction(()=>createProviderCatalog(db,{fail,audit:staffAudit.record,encryptKey:encryptProviderKey}));
+const providerCatalog=transaction(()=>createProviderCatalog(db,{fail,audit:staffAudit.record,encryptKey:encryptProviderKey,distribution}));
 installPlayerAccess(db, transaction);
 const dashboard = createDashboard(db, { transaction, fail });
 const playerAccess = createPlayerAccess(db, { fail, recordAudit: staffAudit.record });
@@ -327,10 +331,8 @@ const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, 
 const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath,
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
-const publicCatalogueFrom = 'FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1';
-const publicProviderCount = db.prepare('SELECT count(*) AS total ' + publicCatalogueFrom);
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath,
-  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => clubModel(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null), giftPreview: tenant => giftRewards.describe(tenant,null) });
+  providerCount: tenant => distribution.eligible(tenant,{market:publishedTenantConfig(tenant).config.displayMarket}).length, clubHome: (tenant,locale) => clubModel(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null), giftPreview: tenant => giftRewards.describe(tenant,null) });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
@@ -888,11 +890,17 @@ async function api(req, res, path, tenantId, requestId) {
     const config = publishedTenantConfig(tenantId).config;
     const context = {market:params.get('market') ?? config.displayMarket,channel:params.get('channel') || 'desktop',
       lang:params.get('lang') || (config.primaryLocale.startsWith('fr')?'fr':'en')};
+    if(player && path==='/api/v1/lobby' && clubEnabled(tenantId))context.vip=membership.balance(tenantId,player).vip;
+    if(protectedView && params.get('cohort')==='vip')context.vip=true;
     if (protectedView && params.has('at')) context.now=Number(params.get('at'));
     return transaction(()=>lobbyShelves.publicView(tenantId,context),{readOnly:true});
   }
   if (path === '/api/admin/shelves' || path.startsWith('/api/admin/shelves/')) {
     staffContext(req,tenantId,catalogueRoles);
+    if(path==='/api/admin/shelves/distribution' && req.method==='GET')return distribution.admin(tenantId);
+    if(path==='/api/admin/shelves/distribution' && req.method==='POST'){
+      const input=await body(req);return auditedChange(catalogueRoles,input,staff=>distribution.change(tenantId,staff,requestId,input),'publishCatalogue');
+    }
     if (route === 'GET /api/admin/shelves') return { ...lobbyShelves.index(tenantId),zone:publishedTenantConfig(tenantId).config.reportingTimeZone };
     if (route === 'POST /api/admin/shelves/preview') return lobbyShelves.preview(tenantId,(await body(req)) || {});
     if (route === 'POST /api/admin/shelves/change') {
@@ -972,6 +980,11 @@ async function api(req, res, path, tenantId, requestId) {
       );
     }
     fail(404, 'opMissing');
+  }
+  if(path==='/api/admin/operator/finance-operations'){
+    staffContext(req,tenantId,['operator_admin']);
+    if(req.method==='GET')return params.has('id')?financeOperations.detail(tenantId,params.get('id')):{items:financeOperations.list(tenantId)};
+    if(req.method==='POST'){const input=await body(req);return auditedChange(['operator_admin'],input,actor=>financeOperations.operate(tenantId,actor,requestId,input));}
   }
   if(path==='/api/admin/operator/sports'){
     if(req.method==='GET'){staffContext(req,tenantId,['operator_admin']);return sportsBook.view(tenantId,null);}
@@ -1237,7 +1250,8 @@ async function api(req, res, path, tenantId, requestId) {
     return transaction(()=>{
       req.assertPlayerSession();if(input.owner!==player)fail(409,'giftAccountChanged');
       const now=Date.now();
-      if(input.action==='purchase')membership.purchase(tenantId,player,input,now);
+      if(typeof input.action==='string'&&input.action.startsWith('prize-'))membership.prizes.player(tenantId,player,input,now);
+      else if(input.action==='purchase')membership.purchase(tenantId,player,input,now);
       else if(input.action==='cancel')membership.cancel(tenantId,player,input.id||0,now);
       else if(input.action==='enter')membership.enter(tenantId,player,input.id||0,now);
       else if(input.action==='unlink')monthlyTelegram.unlink(tenantId,player);
@@ -2277,7 +2291,13 @@ async function api(req, res, path, tenantId, requestId) {
       return { id: ticketId, status, priority, updatedAt: now, replied: hasReply, auditId };
     });
   }
-  if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category ' + publicCatalogueFrom + ' ORDER BY gc.title_en').all(tenantId);
+  if(req.method==='GET' && (path==='/api/games'||/^\/api\/games\/(?:random|[1-9]\d*)$/.test(path))){
+    const market=params.get('market')??publishedTenantConfig(tenantId).config.displayMarket;
+    const channel=params.get('channel')||'desktop',pool=distribution.eligible(tenantId,{market,channel});
+    if(path==='/api/games')return pool;
+    if(path.endsWith('/random'))return {game:pool.length?pool[randomInt(pool.length)]:null};
+    const title=pool.find(g=>g.id===Number(path.split('/').at(-1)));if(!title)fail(404,'opMissing');return title;
+  }
   if (route==='GET /api/player-auth/methods') return playerSignIn.methods(req);
   if (route==='GET /api/player-auth/external/pending') return playerSignIn.pending(req,tenantId);
   if (req.method==='POST' && path.startsWith('/api/player-auth/')) {
@@ -2539,11 +2559,13 @@ const assets = {
   '/sports-weekend.webp': ['sports-weekend.webp', 'image/webp'],
   '/player-signin.webp': ['player-signin.webp', 'image/webp'],
   '/sports-marina.webp': ['sports-marina.webp', 'image/webp'],
+  '/finance-operations.js':['finance-operations.js','text/javascript'],
   '/sport-tickets.js': ['sport-tickets.js', 'text/javascript'],
   '/sports-centre.js': ['sports-centre.js', 'text/javascript'],
   '/lobby-navigation.js': ['lobby-navigation.js', 'text/javascript'],
   '/operator-workflows.js':['operator-workflows.js','text/javascript'],
   '/provider-catalog.js':['provider-catalog.js','text/javascript'],
+  '/catalogue-distribution.js':['catalogue-distribution.js','text/javascript'],
   '/club-market.js':['club-market.js','text/javascript'],
   '/club-admin.js':['club-admin.js','text/javascript'],
   '/referral-views.js':['referral-views.js','text/javascript'],
