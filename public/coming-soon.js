@@ -1,3 +1,4 @@
+import { createRotation, rotationButton } from './banner-motion.js';
 import { games, catalogueCategories, collectionKey, matchesCatalogue } from './catalog.js';
 
 export const comingSoonCopy = {
@@ -171,10 +172,14 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
 
   const spotlight = $('lobby-spotlight');
   let spotlightTitles = [], spotlightSlug = spotlight.dataset.initialSlug || '';
+  let spotlightRotation, nextCover;
+  function rotateSpotlight() {
+    if (!nextCover || (nextCover.complete && nextCover.naturalWidth)) stepSpotlight(1);
+  }
   function showSpotlight() {
     const title = spotlightTitles.find((item) => item.slug === spotlightSlug) || spotlightTitles[0];
     spotlight.hidden = !title;
-    if (!title) return;
+    if (!title) { spotlightRotation?.attach(null); nextCover=undefined; return; }
     spotlightSlug = title.slug;
     const image = $('spotlight-image');
     if (title.artwork && image.getAttribute('src') !== title.artwork) image.src = title.artwork;
@@ -185,6 +190,19 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     $('spotlight-type').textContent = [collectionName(title), t(title.demoGame ? 'playableDemo' : 'comingSoon')].filter(Boolean).join(' · ');
     spotlight.querySelector('.spotlight-nav').hidden = spotlightTitles.length < 2;
     for (const button of spotlight.querySelectorAll('button')) button.disabled = spotlightTitles.length < 2;
+    if (currentRoute === '/' && document.body.dataset.lobbyBrand === 'habibi' && spotlightTitles.length > 1) {
+      if (!spotlight.querySelector('[data-banner-toggle]')) spotlight.querySelector('.spotlight-nav').insertAdjacentHTML('afterbegin',rotationButton(isFrench()));
+      const next = spotlightTitles[(spotlightTitles.indexOf(title)+1)%spotlightTitles.length];
+      if (!next.artwork) nextCover = undefined;
+      else if (nextCover?.getAttribute('src') !== next.artwork) {
+        nextCover = new Image();
+        nextCover.src = next.artwork;
+        nextCover.decode().catch(() => {});
+      }
+      spotlightRotation ||= createRotation(rotateSpotlight,isFrench,9100);
+      spotlightRotation.attach(spotlight);
+      spotlightRotation.sync();
+    } else spotlightRotation?.attach(null);
   }
   function stepSpotlight(direction) {
     if (spotlightTitles.length < 2) return;

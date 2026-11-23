@@ -1,5 +1,6 @@
 import { sports, leagues, matches, byId, prices, programTime, outcome, marketName, frameOf, clockLabel } from './sports-data.js';
-import { sportsNavigation, carousel, featureRail, selectionsView, slotView, ticketHistory, bundles, slotSymbols, icon, combinedPrice } from './sports-discovery.js';
+import { createRotation } from './banner-motion.js';
+import { sportsNavigation, carousel, carouselContent, scoreWire, featureRail, selectionsView, slotView, ticketHistory, bundles, slotSymbols, icon, combinedPrice } from './sports-discovery.js';
 
 const newBoard = () => ({
   sport: 'all', status: 'all', area: 'board', league: '', detail: '', picks: new Map(),
@@ -67,8 +68,9 @@ function matchBoard(state, fr) {
     : state.sport === 'all' ? t('Match centre','Centre des matchs') : sports[state.sport].label[lang];
   const empty = favorites && !state.favorites.size ? t('Tap the star on a match to find it here.','Touche l’étoile d’un match pour le retrouver ici.') : t('No matches found for these filters.','Aucun match trouvé pour ces filtres.');
   const toggleLabel = state.paused ? t('Resume simulation','Reprendre la simulation') : t('Pause simulation','Mettre la simulation en pause');
-  const showToggle = live.length && state.status !== 'upcoming' && !(featuredBoard(state) && state.slide === 1);
-  const toggle = showToggle ? `<button type="button" class="board-pause" data-hub-control="pause" aria-pressed="${state.paused}" aria-label="${toggleLabel}" title="${toggleLabel}"><span aria-hidden="true">${state.paused ? '▶' : 'Ⅱ'}</span></button>` : '';
+  const liveBanner = featuredBoard(state) && state.slide === 1;
+  const showToggle = live.length && state.status !== 'upcoming';
+  const toggle = showToggle ? `<button type="button" class="board-pause" ${liveBanner ? 'hidden' : 'data-hub-control="pause"'} aria-pressed="${state.paused}" aria-label="${toggleLabel}" title="${toggleLabel}"><span aria-hidden="true">${state.paused ? '▶' : 'Ⅱ'}</span></button>` : '';
   return `<div class="match-controls"><h2>${heading}</h2><div class="match-tools">${toggle}${selector}</div></div>${groups || `<p class="hub-note">${empty}</p>`}`;
 }
 
@@ -81,7 +83,7 @@ export function sportsMarkup(fr, state = newBoard()) {
   const views = { predictions: selectionsView, slots: slotView, tickets: ticketHistory };
   const content = (views[state.area] || matchBoard)(state,fr);
   return `<div class="sports-centre" data-sports-lang="${fr?'fr':'en'}">${sportsNavigation(state,fr)}
-    ${popular ? carousel(state,fr)+featureRail(state,fr) : ''}
+    ${popular ? carousel(state,fr)+scoreWire(state,fr)+featureRail(state,fr) : ''}
     <div class="sports-feedback" aria-live="polite">${state.notice ? (fr ? 'Coupon démo mis à jour.' : 'Practice slip updated.') : ''}</div>
     <div class="hub-sports"><div class="match-centre">${content}</div>${slipMarkup(state,fr)}</div></div>`;
 }
@@ -93,6 +95,15 @@ function validLeg(leg) {
 export function createSportsCentre(panel, french, account) {
   let state = newBoard();
   let mounted = false, locale, timer, ownerKey;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const rotation = createRotation(() => {
+    moveSlide(state.slide+1);
+    const track = panel.querySelector('.wire-track');
+    if (!track || track.matches(':hover,:focus-within') || track.scrollWidth <= track.clientWidth+2) return;
+    const end = track.scrollLeft + track.clientWidth >= track.scrollWidth-3;
+    const next = [...track.children].find(card => card.offsetLeft > track.scrollLeft+3);
+    track.scrollTo({left:end ? 0 : next?.offsetLeft || 0,behavior:'smooth'});
+  }, french);
   function storageKey() {
     return 'habibi-sports-v1:' + location.pathname + ':' + (account()?.id || 'guest');
   }
@@ -111,7 +122,10 @@ export function createSportsCentre(panel, french, account) {
     const fr = french();
     for (const node of panel.querySelectorAll('[data-score]')) {
       const [id, side] = node.dataset.score.split('-');
-      node.textContent = frameOf(byId.get(id), state.step)[Number(side) + 1];
+      const value = String(frameOf(byId.get(id), state.step)[Number(side)+1]);
+      if (node.textContent === value) continue;
+      node.textContent = value;
+      if (!reducedMotion.matches) node.animate([{color:'#ffdf6a'},{color:getComputedStyle(node).color}],{duration:750});
     }
     for (const node of panel.querySelectorAll('[data-clock]')) {
       const match = byId.get(node.dataset.clock);
@@ -134,7 +148,7 @@ export function createSportsCentre(panel, french, account) {
     const focused = old?.contains(document.activeElement) ? document.activeElement : null;
     const editing = focused?.hasAttribute('data-sport-query');
     const cursor = editing ? focused.selectionStart : 0;
-    const offsets = ['.sport-tabs','.sports-shortcuts','.sports-rail'].map(sel=>[sel,old?.querySelector(sel)?.scrollLeft || 0]);
+    const offsets = ['.sport-tabs','.sports-shortcuts','.sports-rail','.wire-track'].map(sel=>[sel,old?.querySelector(sel)?.scrollLeft || 0]);
     const slipScroll = old?.querySelector('.hub-slip').scrollTop || 0;
     old?.remove();
     panel.insertAdjacentHTML('beforeend', sportsMarkup(french(), state));
@@ -154,6 +168,7 @@ export function createSportsCentre(panel, french, account) {
       input.focus({preventScroll:true}); input.setSelectionRange(cursor,cursor);
     } else if (focused?.dataset.hubControl) focusControl(focused.dataset.hubControl);
     updateRail();
+    rotation.attach(panel.querySelector('.sports-carousel'));
   }
   function focusControl(id) { panel.querySelector(`[data-hub-control="${id}"]`)?.focus({preventScroll:true}); }
   function choose(area, sport = 'all', status = 'all') {
@@ -177,7 +192,25 @@ export function createSportsCentre(panel, french, account) {
     const detail=panel.querySelector(`[data-hub-control="detail-${id}"]`);
     detail.closest('.fixture').scrollIntoView({block:'center',behavior:'instant'});detail.focus({preventScroll:true});
   }
-  function moveSlide(index) { state.slide=(index+3)%3; paint(); }
+  function moveSlide(index) {
+    const hero=panel.querySelector('.sports-carousel');
+    if (!hero) return;
+    const before=state.slide;
+    state.slide=(index+3)%3;
+    if (before===state.slide) return;
+    hero.classList.replace('slide-'+before,'slide-'+state.slide);
+    hero.querySelector('.feature-inner').outerHTML=carouselContent(state,french());
+    for (const [i,dot] of [...hero.querySelectorAll('.slide-dots button')].entries()) {
+      if (i===state.slide) dot.setAttribute('aria-current','true');
+      else dot.removeAttribute('aria-current');
+    }
+    const pause=panel.querySelector('.board-pause');
+    if (pause) {
+      pause.hidden=state.slide===1;
+      if (pause.hidden) pause.removeAttribute('data-hub-control');
+      else pause.dataset.hubControl='pause';
+    }
+  }
   panel.addEventListener('scroll', event=>{ if (event.target.classList?.contains('sports-rail')) updateRail(); },true);
   const railSize = new ResizeObserver(() => { if (mounted) updateRail(); });
   railSize.observe(panel);
@@ -221,8 +254,8 @@ export function createSportsCentre(panel, french, account) {
     } else if (id==='show-weekend') {
       const target=panel.querySelector('[data-hub-control="bundle-weekend"],[data-hub-control="replace-weekend"]');
       target?.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});target?.focus({preventScroll:true});return;
-    } else if (id==='feature' || id.startsWith('match-')) {
-      revealMatch(id==='feature'?'marina':id.slice(6));return;
+    } else if (id==='feature' || id.startsWith('match-') || id.startsWith('wire-')) {
+      revealMatch(id==='feature'?'marina':id.slice(id.indexOf('-')+1));return;
     } else if (id.startsWith('bundle-') || id.startsWith('replace-')) {
       addBundle(id.slice(id.indexOf('-')+1),id.startsWith('replace-'));
     } else if (id.startsWith('keep-')) {
@@ -297,10 +330,11 @@ export function createSportsCentre(panel, french, account) {
         initial.querySelectorAll('button:disabled, select:disabled').forEach(el => { el.disabled = false; });
       } else paint();
       locale = fr; mounted = true; runClock();updateRail();
+      rotation.attach(panel.querySelector('.sports-carousel'));
     },
     leave() {
       if (!mounted) return;
-      mounted = false; state.slipOpen = false; clearInterval(timer);
+      mounted = false; state.slipOpen = false; clearInterval(timer);rotation.attach(null);
       panel.querySelector('.sports-centre')?.remove();
     }
   };
