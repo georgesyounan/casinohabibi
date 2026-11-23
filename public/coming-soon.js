@@ -80,6 +80,13 @@ export const comingSoonCopy = {
   comingSoonAuditSaved: ['Saved preview draft', 'Brouillon d’aperçu enregistré'],
   comingSoonAuditPublished: ['Published Coming Soon preview', 'Aperçu À venir publié'],
   comingSoonAuditArchived: ['Archived Coming Soon preview', 'Aperçu À venir archivé'],
+  catalogueOrderHistory: ['Featured order history', 'Historique des jeux en vedette'],
+  catalogueBefore: ['Before', 'Avant'],
+  catalogueAfter: ['After', 'Après'],
+  catalogueOrderEmpty: ['No featured titles', 'Aucun jeu en vedette'],
+  catalogueNoOrderChanges: ['No changes to the featured order recorded for this title.', 'Aucun changement d’ordre enregistré pour cette fiche.'],
+  catalogueOlderOrders: ['Older revisions', 'Révisions précédentes'],
+  catalogueTitleTranslation: ['Add a title for each selected language before publishing.', 'Ajoutez un titre pour chaque langue sélectionnée avant de publier.'],
 };
 
 const fields = ['titleEn', 'titleFr', 'studio', 'descriptionEn', 'descriptionFr', 'altEn', 'altFr', 'collectionEn', 'collectionFr', 'category', 'featuredRank'];
@@ -93,6 +100,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   const adminStatus = $('coming-soon-admin-status');
   const newButton = $('coming-soon-new');
   const search = $('coming-soon-admin-search');
+  const historyPanel=$('catalogue-order-history'), historyBody=$('catalogue-order-revisions'), older=$('catalogue-older-orders');
+  let historyCursor=null, historyRequest=0;
   const saveForm = $('coming-soon-save-search');
   const emptyLobby = () => ({ titles: [], featured: [], discover: [] });
   let lobby = emptyLobby(), loadedLocale;
@@ -117,7 +126,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   let savedSearch = '';
   const pageSize = 10;
 
-  const titleName = (title) => isFrench() ? title.titleFr : title.titleEn;
+  const titleName = (title) => (isFrench() ? title.titleFr : title.titleEn) || title.titleEn || title.titleFr;
   const isFavorite = (key) => getFavorites().has(key);
   const dateTime = (time) => new Intl.DateTimeFormat(isFrench() ? 'fr-CA' : 'en-CA', { dateStyle: 'medium', timeStyle: 'short' }).format(time);
   const stateText = (state) => t({ draft: 'comingSoonDraft', published: 'comingSoonPublished', archived: 'comingSoonArchived' }[state]);
@@ -333,6 +342,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   function selectDraft(title) {
     const language = editLanguage.value;
     selected = title;
+    historyRequest++;historyCursor=null;historyPanel.open=false;historyPanel.hidden=!title;
+    historyBody.replaceChildren();older.hidden=true;$('catalogue-order-status').textContent='';
     artwork = title?.artwork || '';
     form.reset();
     editLanguage.value = language;
@@ -343,6 +354,31 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     dirty = conflict = false;
     showTranslation();
   }
+  async function loadOrderHistory(before=null) {
+    if(!selected || !historyPanel.open)return;
+    const request=++historyRequest, status=$('catalogue-order-status');
+    status.textContent=t('loading');older.disabled=true;
+    try {
+      const page=await api('admin/coming-soon/order-history/'+encodeURIComponent(selected.slug)+(before?'?before='+before:''),undefined,'GET');
+      if(request!==historyRequest)return;
+      if(!before)historyBody.replaceChildren();
+      for(const entry of page.items){
+        const section=element('section');
+        section.append(element('strong',t('comingSoonRevision')+' '+entry.revision+' · '+dateTime(entry.at)));
+        for(const [label,order] of [['catalogueBefore',entry.previous],['catalogueAfter',entry.current]]){
+          const list=element('ol');
+          for(const item of order)list.append(element('li',titleName(item)+' · '+item.slug));
+          section.append(element('p',t(label)),order.length?list:element('p',t('catalogueOrderEmpty')));
+        }
+        historyBody.append(section);
+      }
+      historyCursor=page.next;older.hidden=!page.next;
+      status.textContent=historyBody.children.length?'':t('catalogueNoOrderChanges');
+    } catch(error) {if(request===historyRequest)status.textContent=t(error.message);}
+    finally {if(request===historyRequest)older.disabled=false;}
+  }
+  historyPanel.addEventListener('toggle',()=>{if(historyPanel.open)void loadOrderHistory();});
+  older.addEventListener('click',()=>{if(historyCursor)void loadOrderHistory(historyCursor);});
   function editorActions() {
     if (form.hidden) return;
     $('coming-soon-edit-title').textContent = selected ? titleName(selected) : t('comingSoonNew');

@@ -48,6 +48,12 @@ Run `npm run dev` from the project folder, then open `http://localhost:3000`.
 
 The development database defaults to `data/northplay.sqlite`, preserving the existing local sandbox database. Copying `.env.example` creates a private local configuration file. Use a different `DATA_DIR` for an isolated local database.
 
+### Shared catalogue workspace
+
+With Node 24, run `npm run demo:workspace -- init ../habibi-training` once, then `npm run demo:workspace -- start ../habibi-training`. The first command creates a private baseline and an `access.json` file containing local credentials for the publisher, content editor and player. The second prints the two local brand URLs. Open `/admin` on the first brand for staff sign-in.
+
+Both teams start with the same examples in [shared-fixtures.json](scripts/shared-fixtures.json). The player sees Club Classic. The editor also sees Studio Preview and can edit drafts. The publisher can publish them. The second brand has an empty catalogue and separate access. Stop the session with Ctrl+C and run the start command again to restore the original data. Two teams can use the same baseline concurrently by choosing different `PORT` values.
+
 ### Staging and production environments
 
 Environment files are loaded automatically by the npm scripts. Copy `.env.staging.example` to `.env.staging`, replace the placeholders with real staging settings and secrets, then run `npm run start:staging`. Production uses `.env.production` with `npm run start:production`. Keep `.env`, `.env.staging`, and `.env.production` private; Git ignores them. The checked-in `*.example` files contain placeholders only.

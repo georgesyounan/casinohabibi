@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "brands": {
+    "editorial": {
+      "host": "127.0.0.1",
+      "id": "sandbox"
+    },
+    "isolated": {
+      "host": "localhost",
+      "id": "fixture-partner"
+    }
+  },
+  "accounts": {
+    "publisher": {
+      "email": "publisher@habibi.example.test",
+      "role": "operator_admin"
+    },
+    "editor": {
+      "email": "editor@habibi.example.test",
+      "role": "operator_content"
+    },
+    "player": {
+      "email": "player@habibi.example.test",
+      "role": "player"
+    }
+  },
+  "cards": [
+    {
+      "slug": "studio-preview",
+      "titleEn": "Studio Preview",
+      "titleFr": "Aperçu du studio",
+      "state": "draft"
+    },
+    {
+      "slug": "club-classic",
+      "titleEn": "Club Classic",
+      "titleFr": "Classique du Club",
+      "state": "published"
+    }
+  ],
+  "expected": {
+    "public": [
+      "club-classic"
+    ],
+    "editor": [
+      "studio-preview",
+      "club-classic"
+    ],
+    "otherBrand": []
+  }
+}

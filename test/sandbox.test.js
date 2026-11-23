@@ -3898,3 +3898,95 @@ test('Habibi club credits one daily gift, tracks distinct games and ranks real q
     assert.ok(!(await guest('discovery/club')).data.items.some(i=>i.id===offer.id));
   }finally{db.close();}
 });
+
+test('D06.1 and D07.1 keep names distinct, incomplete drafts private and featured order inspectable after archive',async t=>{
+  const {base}=await startSandbox(t);const owner=client(base),visitor=client(base);
+  await owner('admin/login',staffCredentials);
+  const path='admin/coming-soon', mutate=(data,id=randomUUID())=>owner(path,data,undefined,{'X-Request-ID':id});
+  const input=cardDraft('Same Name',{featuredRank:2}), requestId=randomUUID();
+  const [a,b]=await Promise.all([mutate(input,requestId),mutate(input)]);
+  assert.equal(a.status,200);assert.equal(b.status,200);
+  const first=a.data.title,second=b.data.title;assert.notEqual(first.id,second.id);assert.notEqual(first.slug,second.slug);
+  assert.deepEqual((await mutate(input,requestId)).data,a.data);
+  const explicit=await mutate({...input,slug:first.slug});assert.equal(explicit.status,409);
+  const incomplete=await mutate(cardDraft('Same Name',{titleFr:''}));
+  assert.equal(incomplete.status,200);
+  assert.equal((await mutate({action:'publish',slug:incomplete.data.title.slug,version:1})).data.error,'catalogueTitleTranslation');
+  assert.ok(!(await visitor('coming-soon')).data.titles.some(r=>r.id===incomplete.data.title.id));
+  assert.equal((await mutate({...input,slug:incomplete.data.title.slug,version:1})).data.title.id,incomplete.data.title.id);
+  const long=cardDraft('a'.repeat(64));const x=await mutate(long),y=await mutate(long);
+  assert.equal(x.data.title.slug.length,64);assert.equal(y.data.title.slug.length,64);assert.notEqual(x.data.title.slug,y.data.title.slug);
+  await mutate({action:'publish',slug:first.slug,version:1});
+  await mutate({...input,slug:second.slug,version:1,featuredRank:1});
+  await mutate({action:'publish',slug:second.slug,version:2});
+  assert.deepEqual((await visitor('coming-soon')).data.featured,[second.slug,first.slug]);
+  const archiveId=randomUUID(),archive={action:'archive',slug:second.slug,version:3};
+  const closed=await mutate(archive,archiveId);assert.equal(closed.status,200);
+  assert.deepEqual((await mutate(archive,archiveId)).data,closed.data);
+  assert.deepEqual((await visitor('coming-soon')).data.featured,[first.slug]);
+  const history=path+'/order-history/'+second.slug;
+  assert.equal((await visitor(history)).status,401);
+  const page=(await owner(history)).data;
+  assert.equal(page.items.length,2);
+  assert.deepEqual(page.items[0].previous.map(r=>r.slug),[second.slug,first.slug]);
+  assert.deepEqual(page.items[0].current.map(r=>r.slug),[first.slug]);
+  assert.equal(page.items[0].revision,4);
+  assert.equal((await owner(history+'?before=bad')).status,400);
+});
+
+test('D05.2 Spanish guide keeps its translation, fallback fields, previous address and language-specific indexing',async t=>{
+  const {base}=await startSandbox(t,{appBasePath:'/casinohabibi'});
+  const url=base+'/casinohabibi',staff=client(url);
+  await staff('admin/login',staffCredentials);
+  const setup=(await staff('admin/config')).data;
+  const settings=await staff('admin/config',{version:setup.version,config:{...setup.config,primaryLocale:'fr-CA'}});
+  assert.equal((await staff('admin/config/publish',{version:settings.data.version})).status,200);
+  const record={kind:'help',slug:'core-guide'},route='admin/website-content';
+  const content={titleEn:'English',bodyEn:'From English',titleFr:'Guide français',bodyFr:'Texte de la marque',altEn:'',altFr:'',linkEn:'',linkFr:'',artwork:'',target:'',
+    titleEs:'Guía del club',bodyEs:'',addressEs:'recibir',seoTitleEs:'Club en español'};
+  const change=(action,version,fields)=>staff(route,{...record,action,version,...(fields && {content:fields})});
+  assert.equal((await change('save',0,content)).status,200);
+  assert.equal((await change('publish',1)).status,200);
+  const read=slug=>fetch(url+'/help/'+slug+'?lang=es',{redirect:'manual'});
+  const original=await read('recibir'),markup=await original.text();
+  assert.equal(original.status,200);assert.match(markup,/<h1>Guía del club<\/h1><p>Texte de la marque<\/p>/);
+  assert.match(markup,/<html lang="es-MX"/);assert.match(markup,/<title>Club en español/);
+  assert.match(await (await fetch(url+'/sitemap.xml')).text(),/recibir\?lang=es/);
+  assert.equal((await change('save',2,{...content,addressEs:'guia-club',noindexEs:true})).status,200);
+  assert.equal((await change('publish',3)).status,200);
+  const earlier=await read('recibir');assert.equal(earlier.status,301);assert.equal(earlier.headers.get('location'),'/casinohabibi/help/guia-club?lang=es');
+  const latest=await read('guia-club');assert.equal(latest.headers.get('x-robots-tag'),'noindex');
+  assert.doesNotMatch(await(await fetch(url+'/sitemap.xml')).text(),/guia-club\?lang=es/);
+  const api=(await staff('help/guia-club?locale=es-MX')).data;assert.equal(api.body,'Texte de la marque');
+  assert.match(await (await fetch(url+'/help/core-guide?lang=fr')).text(),/<h1>Guide français<\/h1>/);
+});
+
+test('D04.1 both teams can restart a clean versioned workspace with scoped staff and player access',async t=>{
+  const temp=await mkdtemp(join(tmpdir(),'habibi-workspace-proof-'));t.after(()=>rm(temp,{recursive:true,force:true}));
+  const folder=join(temp,'fixture'),args=['scripts/shared-workspace.js'];
+  const env={...process.env,APP_ENV:'development',PORT:'0'};
+  execFileSync(process.execPath,[...args,'init',folder],{env});
+  const {accounts}=JSON.parse(await readFile(join(folder,'access.json'),'utf8'));
+  const expected=JSON.parse(await readFile('scripts/shared-fixtures.json','utf8')).expected;
+  for(const role of ['publisher','editor']){
+    const session=spawn(process.execPath,[...args,'start',folder],{env,stdio:['ignore','pipe','pipe']});
+    const stopped=once(session,'exit'),line=createInterface({input:session.stdout});
+    try{
+      const message=await Promise.race([once(line,'line').then(([s])=>JSON.parse(s)),stopped.then(()=>{throw Error('Workspace failed to start');})]);
+      const user=client(message.url),player=client(message.url),partner=client(message.partner);
+      assert.equal((await user('admin/login',accounts[role])).status,200);
+      assert.equal((await player('login',accounts.player)).status,200);
+      assert.equal((await partner('admin/login',accounts[role])).status,403);
+      assert.deepEqual((await partner('coming-soon')).data.titles.map(x=>x.slug),expected.otherBrand);
+      assert.deepEqual((await player('coming-soon')).data.titles.map(x=>x.slug),expected.public);
+      assert.deepEqual((await user('admin/coming-soon')).data.map(x=>x.slug).sort(),[...expected.editor].sort());
+      assert.equal((await player('admin/coming-soon/preview/studio-preview')).status,401);
+      const draft=(await user('admin/coming-soon/preview/studio-preview')).data;
+      assert.equal(draft.version,1);assert.equal(draft.titleEn,'Studio Preview');
+      const changed=await user('admin/coming-soon',{...cardDraft('Edited fixture'),slug:draft.slug,version:draft.version});
+      assert.equal(changed.status,200);assert.equal(changed.data.title.version,2);
+      const result=await user('admin/coming-soon',{action:'publish',slug:draft.slug,version:2});
+      assert.equal(result.status,role==='publisher'?200:403);
+    }finally{session.kill();await stopped;line.close();}
+  }
+});

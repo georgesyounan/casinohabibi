@@ -52,7 +52,8 @@ const appBasePath = (process.env.APP_BASE_PATH ?? publicSite?.pathname ?? '').re
 if (!/^(?:\/[a-zA-Z0-9_-]+)*$/.test(appBasePath)) throw new Error('APP_BASE_PATH must contain only URL directory segments');
 const cookiePath = appBasePath || '/';
 const publicBaseUrl = publicSite ? `${publicSite.origin}${appBasePath}` : '';
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer between 1 and 65535');
+const minimumPort=appEnvironment==='development' && host==='127.0.0.1'?0:1;
+if (!Number.isInteger(port) || port < minimumPort || port > 65535) throw new Error('PORT must be an integer between '+minimumPort+' and 65535');
 if (process.env.SECURE_COOKIES !== undefined && !['0', '1'].includes(process.env.SECURE_COOKIES)) throw new Error('SECURE_COOKIES must be 0 or 1');
 if (encryptionKeyValue && !/^[a-f0-9]{64}$/i.test(encryptionKeyValue)) throw new Error('PROVIDER_KEY_ENCRYPTION must contain exactly 64 hexadecimal characters');
 if ((bootstrapEmailValue && !bootstrapPasswordValue) || (!bootstrapEmailValue && bootstrapPasswordValue)) throw new Error('Set both BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD');
@@ -1294,6 +1295,11 @@ async function api(req, res, path, tenantId, requestId) {
     if (!title) fail(404, 'comingSoonMissing');
     if(player) transaction(()=>rewards.observe(tenantId,player,'preview',title.id,'preview-'+title.id));
     return title;
+  }
+  const orderHistory = route.match(/^GET \/api\/admin\/coming-soon\/order-history\/([a-z0-9-]{1,64})$/);
+  if (orderHistory) {
+    staffContext(req,tenantId,catalogueRoles);
+    return comingSoon.orderHistory(tenantId,orderHistory[1],new URL(req.url,'http://localhost').searchParams.get('before'));
   }
   const draftPreview = route.match(/^GET \/api\/admin\/coming-soon\/preview\/([a-z0-9-]{1,64})$/);
   if (draftPreview) {
@@ -2612,6 +2618,6 @@ createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify({ error: error.status ? error.message : 'unavailable', requestId }));
   }
-}).listen(port, host, () => {
-  console.log(JSON.stringify({ event: 'server_started', environment: appEnvironment, host, port }));
+}).listen(port, host, function () {
+  console.log(JSON.stringify({ event: 'server_started', environment: appEnvironment, host, port:this.address().port }));
 });

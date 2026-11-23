@@ -1,10 +1,10 @@
 # Revue de développement de Casino Habibi
 
-Révision du 22 novembre 2026. Le texte extrait du PDF joint et celui du PDF maître du ZIP sont identiques sur 17 200 mots. Le ZIP apporte 10 fiches de phase, 28 fiches de module, 88 tickets, un rapprochement avec 25 modules historiques, 174 références et 9 décisions. La revue initiale utilisait `fb8191f3eed7d0b281cc160ffa50ce184983881d`. Les nouvelles fonctions appartiennent à la même application et utilisent ses contrôles de marque et de rôle.
+Mise à jour du 23 novembre 2026. Le cahier comprend 88 tickets et 28 modules. Les quatre derniers critères du socle ont été exercés sur une instance isolée. Les 24 tickets du socle passent leur scénario en démo.
 
 [Ouvrir les 88 tickets, leurs critères, les fichiers de preuve et les écarts](development-backlog.csv) · [Ouvrir les 174 références et leurs types de preuve](source-traceability.csv)
 
-« Validé en démo » indique un critère exercé sur une instance isolée. La colonne « Partiel » précise dans le CSV le comportement disponible et le travail restant. « À développer » indique un parcours absent. « Option à choisir » reprend les verticales conditionnelles de la phase E3. Les quatre colonnes comptent des tickets. Un nom de produit observé dans une vidéo décrit la référence étudiée, indépendamment de la disponibilité chez Casino Habibi.
+« Validé en démo » indique un scénario exercé avec des comptes et ressources de test. « Partiel » indique un parcours dont certains critères restent ouverts. « Non livré » désigne une fonction restant à réaliser. La colonne Classification du CSV conserve le périmètre initial de chaque ticket.
 
 ## Prise en main
 
@@ -22,52 +22,52 @@ Dans **Caisse de test**, choisir le dossier, le montant et le moyen admissible. 
 
 ## Couverture par module
 
-| Module | Fonction | Validés en démo | Partiels | À développer | Options à choisir |
-| --- | --- | ---: | ---: | ---: | ---: |
-| D01 | Marques, équipe et audit | 2 | 1 | 0 | 0 |
-| D02 | Comptes et soutien joueur | 2 | 1 | 0 | 0 |
-| D03 | Produits et activation | 2 | 1 | 0 | 0 |
-| D04 | Mise en service et reprise | 1 | 2 | 0 | 0 |
-| D05 | Éditeur et traductions | 1 | 1 | 1 | 0 |
-| D06 | Catalogue fournisseur | 1 | 3 | 0 | 0 |
-| D07 | Sélections du hall | 0 | 3 | 0 | 0 |
-| D08 | Découverte et favoris | 3 | 1 | 0 | 0 |
-| D09 | Segments et communications | 2 | 0 | 1 | 0 |
-| D10 | Affiliation | 2 | 0 | 1 | 0 |
-| D11 | Offres et bonus | 1 | 0 | 2 | 0 |
-| D12 | Fidélité et récompenses | 2 | 2 | 1 | 0 |
-| D13 | Rapports et indicateurs | 3 | 1 | 0 | 0 |
-| D14 | Vérification d’identité | 3 | 0 | 0 | 0 |
-| D15 | Risque et enquêtes | 3 | 0 | 0 | 0 |
-| D16 | Jeu responsable | 2 | 1 | 0 | 0 |
-| D17 | Portefeuille et journal | 1 | 1 | 1 | 0 |
-| D18 | Caisse et retraits | 3 | 0 | 0 | 0 |
-| D19 | Lancements et événements de jeu | 1 | 2 | 0 | 0 |
-| D20 | Manches et relectures | 1 | 2 | 0 | 0 |
-| D21 | Rapprochement et clôture | 0 | 3 | 0 | 0 |
-| D22 | Services aux opérateurs | 3 | 0 | 0 | 0 |
-| D23 | Paris sportifs | 0 | 0 | 0 | 3 |
-| D24 | Caisse crypto | 0 | 0 | 0 | 3 |
-| D25 | Canal Telegram | 0 | 0 | 0 | 3 |
-| D26 | Jeux à prix | 0 | 0 | 0 | 3 |
-| D27 | API partenaires | 0 | 2 | 1 | 0 |
-| D28 | Crédits de test | 2 | 0 | 0 | 0 |
-| **Total** | **88 tickets** | 41 | 27 | 8 | 12 |
+| Module | Fonction | Validés en démo | Partiels | Non livrés |
+| --- | --- | ---: | ---: | ---: |
+| D01 | Marques, équipe et audit | 2 | 1 | 0 |
+| D02 | Comptes et soutien joueur | 3 | 0 | 0 |
+| D03 | Produits et activation | 2 | 1 | 0 |
+| D04 | Mise en service et reprise | 2 | 1 | 0 |
+| D05 | Éditeur et traductions | 2 | 0 | 1 |
+| D06 | Catalogue fournisseur | 2 | 2 | 0 |
+| D07 | Sélections du hall | 1 | 2 | 0 |
+| D08 | Découverte et favoris | 3 | 1 | 0 |
+| D09 | Segments et communications | 2 | 0 | 1 |
+| D10 | Affiliation | 2 | 0 | 1 |
+| D11 | Offres et bonus | 1 | 1 | 1 |
+| D12 | Fidélité et récompenses | 2 | 3 | 0 |
+| D13 | Rapports et indicateurs | 3 | 1 | 0 |
+| D14 | Vérification d’identité | 3 | 0 | 0 |
+| D15 | Risque et enquêtes | 3 | 0 | 0 |
+| D16 | Jeu responsable | 2 | 1 | 0 |
+| D17 | Portefeuille et journal | 1 | 1 | 1 |
+| D18 | Caisse et retraits | 3 | 0 | 0 |
+| D19 | Lancements et événements de jeu | 1 | 2 | 0 |
+| D20 | Manches et relectures | 1 | 2 | 0 |
+| D21 | Rapprochement et clôture | 0 | 3 | 0 |
+| D22 | Services aux opérateurs | 3 | 0 | 0 |
+| D23 | Paris sportifs | 0 | 1 | 2 |
+| D24 | Caisse crypto | 0 | 0 | 3 |
+| D25 | Canal Telegram | 0 | 2 | 1 |
+| D26 | Jeux à prix | 0 | 1 | 2 |
+| D27 | API partenaires | 0 | 2 | 1 |
+| D28 | Crédits de test | 2 | 0 | 0 |
+| **Total** | **88 tickets** | 46 | 28 | 14 |
 
 ## Couverture par phase
 
-| Phase | Tickets | Validés en démo | Partiels | À développer | Options à choisir |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| P0 | 2 | 1 | 1 | 0 | 0 |
-| P1 | 10 | 8 | 2 | 0 | 0 |
-| P2 | 8 | 6 | 2 | 0 | 0 |
-| P3 | 4 | 4 | 0 | 0 | 0 |
-| P4A | 1 | 1 | 0 | 0 | 0 |
-| P4B | 1 | 1 | 0 | 0 | 0 |
-| P1X | 2 | 2 | 0 | 0 | 0 |
-| E1 | 23 | 12 | 10 | 1 | 0 |
-| E2 | 22 | 5 | 10 | 7 | 0 |
-| E3 | 15 | 1 | 2 | 0 | 12 |
+| Phase | Tickets | Validés en démo | Partiels | Non livrés |
+| --- | ---: | ---: | ---: | ---: |
+| P0 | 2 | 2 | 0 | 0 |
+| P1 | 10 | 10 | 0 | 0 |
+| P2 | 8 | 8 | 0 | 0 |
+| P3 | 4 | 4 | 0 | 0 |
+| P4A | 1 | 1 | 0 | 0 |
+| P4B | 1 | 1 | 0 | 0 |
+| P1X | 2 | 2 | 0 | 0 |
+| E1 | 23 | 12 | 10 | 1 |
+| E2 | 22 | 5 | 12 | 5 |
+| E3 | 15 | 1 | 6 | 8 |
 
 ## Parcours d’acceptation
 
