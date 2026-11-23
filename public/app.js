@@ -2225,7 +2225,7 @@ function render() {
     void publicWebsite.load();
     if (!publicWebsite.isHelp) void refreshEdition();
   }
-  document.documentElement.lang = language ? 'fr-CA' : 'en-CA';
+  document.documentElement.lang = (publicWebsite.isHelp && document.querySelector('#site-help-content article')?.lang) || (language ? 'fr-CA' : 'en-CA');
   if (initialBrand) {
     const preference = 'northplay_ui_locale=' + (language ? 'fr' : 'en');
     if (!document.cookie.split('; ').includes(preference)) document.cookie = preference + '; Path=' + appPath('/') + '; Max-Age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');

@@ -310,12 +310,12 @@
               <fieldset id="catalogue-edit-fields" class="catalogue-edit-fields">
                 <label><span data-copy="catalogueEditLanguage"></span><select id="catalogue-edit-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
                 <div data-card-locale="en-CA" class="catalogue-translation">
-                  <label><span data-copy="comingSoonTitleEn"></span><input name="titleEn" lang="en-CA" maxlength="120" required></label>
+                  <label><span data-copy="comingSoonTitleEn"></span><input name="titleEn" lang="en-CA" maxlength="120"></label>
                   <label><span data-copy="comingSoonDescriptionEn"></span><textarea name="descriptionEn" lang="en-CA" rows="3" maxlength="800"></textarea></label>
                   <label><span data-copy="catalogueCollectionOptional"></span><input name="collectionEn" lang="en-CA" maxlength="64"></label>
                 </div>
                 <div data-card-locale="fr-CA" class="catalogue-translation" hidden>
-                  <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" lang="fr-CA" maxlength="120" required></label>
+                  <label><span data-copy="comingSoonTitleFr"></span><input name="titleFr" lang="fr-CA" maxlength="120"></label>
                   <label><span data-copy="comingSoonDescriptionFr"></span><textarea name="descriptionFr" lang="fr-CA" rows="3" maxlength="800"></textarea></label>
                   <label><span data-copy="catalogueCollectionOptional"></span><input name="collectionFr" lang="fr-CA" maxlength="64"></label>
                 </div>
@@ -335,6 +335,10 @@
                 </div></details>
               </fieldset>
               <div class="actions admin-form-actions"><button type="submit" data-copy="saveDraft"></button><a id="catalogue-preview-action" class="button ghost" data-copy="comingSoonDraftPreview" hidden></a><button type="button" id="catalogue-publish" data-copy="comingSoonPublish" hidden></button><a id="catalogue-public-action" class="button ghost" data-copy="comingSoonOpen" hidden></a><button type="button" id="catalogue-archive" class="ghost" data-copy="comingSoonArchive" hidden></button><button type="button" id="catalogue-reload" class="ghost" data-copy="catalogueReload" hidden></button></div>
+              <details id="catalogue-order-history" class="admin-disclosure" hidden>
+                <summary data-copy="catalogueOrderHistory"></summary>
+                <div class="site-detail-body"><div id="catalogue-order-revisions"></div><p id="catalogue-order-status" role="status"></p><button id="catalogue-older-orders" type="button" class="ghost" data-copy="catalogueOlderOrders" hidden></button></div>
+              </details>
             </form>
             <section id="catalogue-draft-preview" class="admin-editor" aria-labelledby="draft-preview-heading" hidden>
               <div class="admin-page-heading"><h4 id="draft-preview-heading" data-copy="comingSoonDraftPreview" tabindex="-1"></h4><a id="close-draft-preview" class="button ghost" href="/admin#coming-soon-admin" data-copy="comingSoonBackToCatalogue"></a></div>
@@ -622,9 +626,10 @@
               <fieldset id="site-fields" class="site-fields">
                 <legend class="admin-visually-hidden" data-copy="siteEditor"></legend>
                 <div class="admin-form-grid">
-                  <label><span data-copy="siteEditLanguage"></span><select id="site-edit-language"><option value="en-CA">English</option><option value="fr-CA">Français</option></select></label>
+                  <label><span data-copy="siteEditLanguage"></span><select id="site-edit-language"><option value="en-CA">English</option><option value="fr-CA">Français</option><option value="es-MX">Español</option></select></label>
                   <label id="site-slug-field"><span data-copy="siteSlug"></span><input name="slug" autocomplete="off" maxlength="64" pattern="[a-z0-9]+(-[a-z0-9]+)*" dir="ltr"><small id="site-url"></small></label>
                 </div>
+                <small id="site-spanish-fallback" data-copy="siteSpanishFallback" hidden></small>
                 <label><span data-copy="siteTitle"></span><input name="heading" maxlength="120"></label>
                 <label><span data-copy="siteBody"></span><textarea name="body" rows="4"></textarea></label>
                 <details id="site-search-settings" class="admin-disclosure">
@@ -634,6 +639,7 @@
                     <label><span data-copy="siteSearchTitle"></span><input name="seoTitle" maxlength="120"></label>
                     <label><span data-copy="siteSearchDescription"></span><textarea name="seoDescription" rows="2" maxlength="240"></textarea></label>
                     <label class="admin-check"><input type="checkbox" name="indexable" checked><span data-copy="siteAllowIndex"></span></label>
+                    <label class="admin-check"><input type="checkbox" name="noindexTranslation"><span data-copy="siteNoindexTranslation"></span></label>
                     <div class="guide-snippet" role="group" aria-labelledby="guide-snippet-label">
                       <span id="guide-snippet-label" data-copy="siteSearchPreview"></span>
                       <small id="guide-snippet-url" dir="ltr"></small><strong id="guide-snippet-title"></strong><p id="guide-snippet-description"></p>

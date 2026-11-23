@@ -1,4 +1,4 @@
-import { guideAddress, guidePath, searchSnippet } from './guide-metadata.js';
+import { guideAddress, guidePath, searchSnippet, guideSuffix as suffix, guideField, spanishGuide } from './guide-metadata.js';
 
 export const websiteContentCopy = {
   siteContentTab: ['Banner and guides', 'Bannière et guides'],
@@ -8,6 +8,7 @@ export const websiteContentCopy = {
   siteSearch: ['Search content', 'Rechercher un contenu'],
   siteBackList: ['Back to content', 'Retour aux contenus'],
   siteEditor: ['Content editor', 'Éditeur de contenu'],
+  siteSpanishFallback: ['A Spanish title publishes this translation. Empty fields use the site’s primary language.', 'Un titre espagnol publie cette traduction. Les champs vides reprennent la langue principale du site.'],
   siteEditLanguage: ['Translation to edit', 'Traduction à modifier'],
   siteSlug: ['Initial page address', 'Adresse initiale de la page'],
   siteSearchSettings: ['Page address and search preview', 'Adresse et aperçu de recherche'],
@@ -24,6 +25,7 @@ export const websiteContentCopy = {
     'Include this guide in search engines in all languages',
     'Autoriser le référencement de ce guide dans toutes ses langues'
   ],
+  siteNoindexTranslation: ['Hide this translation from search engines','Masquer cette traduction des moteurs de recherche'],
   siteCollection: ['Catalogue collection', 'Collection du catalogue'],
   siteNoCollection: ['No collection', 'Aucune collection'],
   siteCollectionHeading: ['Previews in this collection', 'Fiches de cette collection'],
@@ -96,7 +98,6 @@ export const websiteContentCopy = {
 };
 
 const el = (id) => document.getElementById(id);
-const suffix = (lang) => (lang === 'fr-CA' ? 'Fr' : 'En');
 const stateKeys = { draft: 'siteDraft', published: 'sitePublished', changed: 'siteChanged', archived: 'siteArchived' };
 const slugify = (title) =>
   title
@@ -240,7 +241,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     if (record.kind !== 'help' || !el('site-search-settings').open) return;
     const lang = langSelect.value,
       slug = address(),
-      info = searchSnippet(data, lang);
+      info = searchSnippet(data, lang,index?.primaryLocale);
     field('publicAddress').placeholder = slug;
     field('seoTitle').placeholder = data['title' + suffix(lang)] || '';
     const href = guidePath(appPath(''), guideAddress(data, slug, lang), lang);
@@ -257,7 +258,7 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       ...index.items.filter((i) => i.kind === 'help')
     ];
     const rows = entries.filter((i) =>
-      [i.slug, i.addressEn, i.addressFr, i.titleEn, i.titleFr, t(i.kind === 'banner' ? 'siteBanner' : 'siteHelpPage')]
+      [i.slug, i.addressEn, i.addressFr, i.addressEs, i.titleEn, i.titleFr, i.titleEs, t(i.kind === 'banner' ? 'siteBanner' : 'siteHelpPage')]
         .join(' ')
         .toLocaleLowerCase()
         .includes(query)
@@ -358,9 +359,9 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     const label = (available && data['link' + s]) || websiteContentCopy[linkType][Number(lang === 'fr-CA')];
     const value = {
       locale: lang,
-      title: data['title' + s],
-      body: data['body' + s],
-      alt: data['alt' + s],
+      title: guideField(data,'title',lang,index?.primaryLocale),
+      body: guideField(data,'body',lang,index?.primaryLocale),
+      alt: guideField(data,'alt',lang,index?.primaryLocale),
       artwork: data.artwork,
       link: data.target ? { label } : null
     };
@@ -398,14 +399,17 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
   }
   function translation() {
     const s = suffix(langSelect.value);
-    field('heading').value = data['title' + s];
-    field('body').value = data['body' + s];
-    field('alt').value = data['alt' + s];
-    field('link').value = data['link' + s];
+    field('heading').value = data['title' + s] || '';
+    field('body').value = data['body' + s] || '';
+    field('alt').value = data['alt' + s] || '';
+    field('link').value = data['link' + s] || '';
+    field('body').placeholder=langSelect.value===spanishGuide ? data['body'+suffix(index.primaryLocale)] || '' : '';
+    el('site-spanish-fallback').hidden=langSelect.value!==spanishGuide;
     field('publicAddress').value = data['address' + s] || '';
     field('seoTitle').value = data['seoTitle' + s] || '';
     field('seoDescription').value = data['seoDescription' + s] || '';
     field('indexable').checked = data.indexable !== false;
+    field('noindexTranslation').checked=Boolean(data['noindex'+s]);
     const published = record.publishedLinks?.find((item) => item.locale === langSelect.value);
     const liveLink = el('site-open-live');
     liveLink.hidden = !published;
@@ -457,6 +461,8 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
     field('body').maxLength = result.kind === 'banner' ? 500 : 6000;
     el('site-slug-field').hidden = result.kind === 'banner' || Boolean(result.version);
     el('site-search-settings').hidden = result.kind === 'banner';
+    langSelect.querySelector('[value="es-MX"]').hidden=result.kind!=='help';
+    if(result.kind!=='help' && langSelect.value===spanishGuide)langSelect.value=locale();
     const optionsHeading = el('site-options').querySelector('summary');
     optionsHeading.dataset.copy = result.kind === 'help' ? 'siteGuideOptions' : 'siteImageAndLink';
     optionsHeading.textContent = t(optionsHeading.dataset.copy);
@@ -523,8 +529,8 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
       return;
     }
     if (verb === 'save' && record.kind === 'help') {
-      for (const lang of ['en-CA', 'fr-CA']) {
-        const value = data['address' + suffix(lang)].trim();
+      for (const lang of ['en-CA', 'fr-CA',spanishGuide]) {
+        const value = (data['address' + suffix(lang)]||'').trim();
         if (value && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) {
           langSelect.value = lang;
           el('site-search-settings').open = true;
@@ -636,6 +642,9 @@ export function createWebsiteEditor({ api, element, action, t, appPath, locale, 
   field('collection').addEventListener('change', () => {
     data.collection = field('collection').value;
     controls();
+  });
+  field('noindexTranslation').addEventListener('change',()=>{
+    data['noindex'+suffix(langSelect.value)]=field('noindexTranslation').checked; controls();
   });
   field('indexable').addEventListener('change', () => {
     data.indexable = field('indexable').checked;
