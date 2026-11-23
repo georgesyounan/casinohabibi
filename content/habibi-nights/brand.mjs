@@ -12,8 +12,12 @@ const original = {
 const mark = readFileSync(new URL('./mark.png', import.meta.url));
 assert.ok(mark.length <= 16 * 1024 && mark.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')));
 const logo = 'data:image/png;base64,' + mark.toString('base64');
+const previousMarks = new Set([
+  '489a91cd61d295c30529b7bf8f006a260b760b919c35cea7ab143cb936f7c4d9',
+  '00d20838215c1b8b3fb692ea0839f3115d10858433d3dbb5a2635a2533fbab6e'
+]);
 const studio = {
-  brandName: 'Casino Habibi', accentColor: '#91ccff', brandLogo: logo, brandFavicon: logo,
+  brandName: 'Casino Habibi', accentColor: '#1242dc', brandLogo: logo, brandFavicon: logo,
   heroTitleEn: 'Habibi Studio', heroTitleFr: 'Habibi Studio',
   heroIntroEn: 'Roulette, blackjack and slots. Play with demo credits.',
   heroIntroFr: 'Roulette, blackjack et machines à sous. Jouez avec des crédits fictifs.'
@@ -28,12 +32,12 @@ export function publishStudioBrand(db, tenant, published, actor, recordAudit) {
     if (live[key] === original[key]) next[key] = value;
   }
   if (live.brandName === studio.brandName) {
-    if (live.accentColor?.toLowerCase() === '#83ffd4') next.accentColor = studio.accentColor;
+    if (['#83ffd4', '#91ccff'].includes(live.accentColor?.toLowerCase())) next.accentColor = studio.accentColor;
     for (const key of ['brandLogo','brandFavicon']) {
       const current = live[key];
       if (typeof current !== 'string' || !current.startsWith('data:image/png;base64,')) continue;
       const bytes = Buffer.from(current.slice('data:image/png;base64,'.length),'base64');
-      if (createHash('sha256').update(bytes).digest('hex') === '489a91cd61d295c30529b7bf8f006a260b760b919c35cea7ab143cb936f7c4d9') next[key] = studio[key];
+      if (previousMarks.has(createHash('sha256').update(bytes).digest('hex'))) next[key] = studio[key];
     }
   }
   const fields = changedFields(live, next);

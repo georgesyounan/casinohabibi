@@ -93,7 +93,7 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
   const first = JSON.parse(run());
   const brand = JSON.parse(liveConfig().config);
   assert.equal(brand.brandName, 'Casino Habibi');
-  assert.equal(brand.accentColor, '#91ccff');
+  assert.equal(brand.accentColor, '#1242dc');
   assert.equal(brand.heroTitleFr, 'Habibi Studio');
   assert.match(brand.brandLogo, /^data:image\/png;base64,/);
   assert.match(brand.heroIntroFr, /crédits fictifs/);
@@ -150,7 +150,7 @@ test('the demo edition publishes three eligible bilingual previews and a guide a
   }
   const beforeBrand = counts();
   assert.equal(publishBrand().auditIds.length,2);
-  assert.deepEqual(JSON.parse(liveConfig().config),{...publishedMint,accentColor:'#91ccff'});
+  assert.deepEqual(JSON.parse(liveConfig().config),{...publishedMint,accentColor:'#1242dc'});
   const keptDraft = db.prepare("SELECT config FROM tenant_config_versions WHERE tenant_id='sandbox' AND status='draft'").get();
   assert.deepEqual(JSON.parse(keptDraft.config),privateDraft);
   assert.deepEqual(publishBrand().auditIds,[]);
