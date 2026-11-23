@@ -173,9 +173,6 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   const spotlight = $('lobby-spotlight');
   let spotlightTitles = [], spotlightSlug = spotlight.dataset.initialSlug || '';
   let spotlightRotation, nextCover;
-  function rotateSpotlight() {
-    if (!nextCover || (nextCover.complete && nextCover.naturalWidth)) stepSpotlight(1);
-  }
   function showSpotlight() {
     const title = spotlightTitles.find((item) => item.slug === spotlightSlug) || spotlightTitles[0];
     spotlight.hidden = !title;
@@ -199,7 +196,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
         nextCover.src = next.artwork;
         nextCover.decode().catch(() => {});
       }
-      spotlightRotation ||= createRotation(rotateSpotlight,isFrench,9100);
+      spotlightRotation ||= createRotation(() => stepSpotlight(1),isFrench,9100);
       spotlightRotation.attach(spotlight);
       spotlightRotation.sync();
     } else spotlightRotation?.attach(null);
