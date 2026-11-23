@@ -600,6 +600,7 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
 
   return {
     isDetail: Boolean(detailSlug), loadLobby, renderDetail, renderLobby, loadDrafts, loadSaves, renderAdmin, favoriteStatus,
+    titles: () => lobbyEnabled() ? lobby.titles : [], card,
     setStaffAccess(role, allowed) {
       staffRole = role;
       canPublish = allowed;
