@@ -20,6 +20,40 @@ export function createDiscoveryAdmin({api,t,french,publish,openPlayer,supportHre
       if(gen!==generation)return;
       const isProgram=kind==='programs';
       const items=result.items;
+      if(isProgram && result.telegram) {
+        const config=result.telegram, card=el('details','','discovery-card'), form=el('form','','discovery-form');
+        card.dataset.monthlyTelegram='';
+        const state=config.ready?l('Active','Actif'):l('Setup required','À configurer');
+        card.append(el('summary',l('Monthly bonus · Telegram','Bonus mensuel · Telegram')+' · '+state));
+        if(config.ready) form.append(el('p',config.title+' · @'+config.bot));
+        form.append(el('p',l('Add a dedicated bot as an administrator of your Telegram channel or group. Players will link their account with a private code.',
+          'Ajoutez un bot dédié comme administrateur de votre canal ou groupe Telegram. Les joueurs associeront leur compte avec un code privé.')));
+        const target=field(form,'telegramTarget',l('Channel or group','Canal ou groupe'),
+          {value:config.target,placeholder:l('@name, https://t.me/… or -100…','@nom, https://t.me/… ou -100…'),maxLength:120,required:true});
+        const token=field(form,'telegramToken',l('Bot token from BotFather','Jeton du bot fourni par BotFather'),
+          {type:'password',maxLength:100,required:!config.bot,placeholder:config.bot?l('Saved · enter a new token to replace','Enregistré · saisissez un jeton pour le remplacer'):''});
+        token.autocomplete='new-password';token.spellcheck=false;target.spellcheck=false;
+        const save=el('button',l('Verify and activate Telegram','Vérifier et activer Telegram'));save.type='submit';
+        const feedback=el('p');feedback.setAttribute('role','status');form.append(save,feedback);
+        form.addEventListener('submit',async event=>{
+          event.preventDefault();if(save.disabled)return;
+          save.disabled=true;feedback.textContent=l('Checking Telegram…','Vérification auprès de Telegram…');
+          try {
+            await api('admin/discovery/telegram',{version:config.version,target:target.value,token:token.value});
+            token.value='';
+            if(gen===generation){await load(kind);root.querySelector('.discovery-feedback').textContent=l('Telegram is active for the monthly bonus.','Telegram est actif pour le bonus mensuel.');}
+          } catch(e) {
+            if(gen===generation){
+              feedback.textContent=t(e.message);save.disabled=false;
+              // Activation may already have staged a new version. Keep the form usable for a retry.
+              try { const latest=await api('admin/discovery/programs?withCatalogue=1',undefined,'GET');
+                if(latest.telegram)config.version=latest.telegram.version;
+              } catch {}
+            }
+          }
+        });
+        card.append(form);body.append(card);
+      }
       if(isProgram && result.daily) {
         const daily=result.daily,details=el('details','','discovery-card'),form=el('form','','discovery-form');
         const title=l('Daily demo bonus','Bonus quotidien démo');

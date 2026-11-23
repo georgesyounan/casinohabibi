@@ -71,9 +71,22 @@ function rowText(row, fr) {
       l('1% of yesterday’s play-money stakes', '1 % des mises fictives d’hier') +
       (row.amount ? ' · ' + cash(row.amount, fr) : '')
     );
+  if (row.key === 'monthly') {
+    const amount = cash(row.amount, fr) + ' ' + l('play money', 'fictifs');
+    const hint = {
+      telegramClosed: l('Telegram enrollment opens soon', 'Inscription Telegram bientôt ouverte'),
+      guest: l('Telegram membership required', 'Inscription Telegram requise'),
+      telegramStart: l('Join the channel and link your Telegram account', 'Rejoignez le canal et associez votre compte Telegram'),
+      telegramCode: l('Press Start in the bot to receive your private code', 'Appuyez sur Démarrer dans le bot pour recevoir votre code privé'),
+      telegramClaim: l('Membership checked when you claim', 'Abonnement vérifié à la réclamation'),
+      telegramWait: l('Too many attempts. Try again when the ten-minute code expires.', 'Trop de tentatives. Réessayez à l’expiration du code de dix minutes.')
+    }[row.state];
+    return hint ? amount + ' · ' + hint : amount;
+  }
   if (row.key === 'premonth') return cash(row.amount, fr) + ' · ' + l('from the 25th', 'dès le 25 du mois');
   return cash(row.amount, fr) + ' · ' + l('play money', 'argent fictif');
 }
+const actionable = ['available', 'play', 'telegramStart', 'telegramClaim'];
 function giftRow(row, fr, base, pending) {
   const l = (en, f) => (fr ? f : en),
     key = row.key;
@@ -86,6 +99,11 @@ function giftRow(row, fr, base, pending) {
     empty: l('No credit', 'Aucun crédit'),
     scheduled: l('From the 25th', 'Dès le 25'),
     paused: l('Paused', 'En pause'),
+    telegramClosed: l('Coming soon', 'Bientôt'),
+    telegramStart: l('Link Telegram', 'Lier Telegram'),
+    telegramCode: l('Open bot ↗', 'Ouvrir le bot ↗'),
+    telegramClaim: l('Verify & claim', 'Vérifier et réclamer'),
+    telegramWait: l('Try later', 'En attente'),
     pending: '…'
   };
   const state = pending ? 'pending' : row.state,
@@ -95,8 +113,12 @@ function giftRow(row, fr, base, pending) {
   const control =
     state === 'guest'
       ? `<a ${attr} href="${link(base, fr, { gift: key, access: 'signin' })}">${text}</a>`
-      : `<button type="button" ${attr}${['available', 'play'].includes(state) ? '' : ' disabled'}>${text}</button>`;
-  return `<li class="gift-row" data-reward="${key}" data-state="${state}"><span class="gift-icon">${icons[key]}</span><div><strong>${name}</strong><small>${rowText(row, fr)}</small></div>${control}</li>`;
+      : state === 'telegramCode'
+        ? `<a ${attr} href="${safe(row.botUrl)}" target="_blank" rel="noopener noreferrer">${text}</a>`
+        : `<button type="button" ${attr}${actionable.includes(state) ? '' : ' disabled'}>${text}</button>`;
+  const join = !pending && row.joinUrl ? `<a class="gift-channel" href="${safe(row.joinUrl)}" target="_blank" rel="noopener noreferrer">${l('Join the Telegram channel ↗', 'Rejoindre le canal Telegram ↗')}</a>` : '';
+  const verify = state === 'telegramCode' ? `<form class="gift-telegram-code"><label>${l('Code from Telegram','Code reçu sur Telegram')}<input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" placeholder="00000000" required></label><button type="submit" class="gift-cta">${l('Confirm','Confirmer')}</button></form>` : '';
+  return `<li class="gift-row" data-reward="${key}" data-state="${state}"><span class="gift-icon">${icons[key]}</span><div><strong>${name}</strong><small>${rowText(row, fr)}</small>${join}</div>${control}${verify}</li>`;
 }
 export function giftContents(data, fr, base, { full = false, pending = false } = {}) {
   const l = (en, f) => (fr ? f : en);
@@ -161,12 +183,18 @@ export function createGiftMenu({
         const focus = surface.contains(document.activeElement)
           ? document.activeElement.closest('[data-gift-key]')?.dataset.giftKey
           : null;
+        const previousCode = !all && surface.querySelector('.gift-telegram-code input');
+        const codeValue = previousCode?.value || '';
+        const codeFocus = previousCode && previousCode === document.activeElement;
         const scroll = surface.querySelector('.gift-list')?.scrollTop || 0;
         surface.innerHTML = markup;
         surface.giftMarkup = markup;
         const list = surface.querySelector('.gift-list');
         if (list) list.scrollTop = scroll;
-        if (focus) focusRow(surface, focus);
+        const nextCode = surface.querySelector('.gift-telegram-code input');
+        if (nextCode && codeValue) nextCode.value = codeValue;
+        if (nextCode && codeFocus) nextCode.focus({preventScroll:true});
+        else if (focus) focusRow(surface, focus);
       }
       const status = surface.querySelector('.gift-status');
       if (status && (status.giftNotice !== notice || status.giftError !== error)) {
@@ -182,10 +210,12 @@ export function createGiftMenu({
         }
       }
       for (const button of surface.querySelectorAll('button[data-gift-key]')) {
-        const available = ['available', 'play'].includes(button.closest('[data-state]').dataset.state);
+        const available = actionable.includes(button.closest('[data-state]').dataset.state);
         button.disabled = Boolean(saving) || !available;
         button.toggleAttribute('data-submitting', saving === button.dataset.giftKey);
       }
+      const confirm = surface.querySelector('.gift-telegram-code button');
+      if (confirm) confirm.disabled = Boolean(saving);
       surface.setAttribute('aria-busy', String(Boolean(saving || loading)));
     }
   }
@@ -252,10 +282,10 @@ export function createGiftMenu({
       }
     }
   }
-  async function redeem(key) {
+  async function redeem(key, code) {
     if (saving || pending() || !owner()) return;
     const row = model?.rows.find((item) => item.key === key);
-    if (!row || !['available', 'play'].includes(row.state)) return;
+    if (!row || !(actionable.includes(row.state) || (row.state === 'telegramCode' && code))) return;
     const id = owner(),
       version = ++revision;
     loading = false;
@@ -264,6 +294,16 @@ export function createGiftMenu({
     error = false;
     paint();
     try {
+      if (row.state === 'telegramStart' || row.state === 'telegramCode') {
+        const confirm = row.state === 'telegramCode';
+        const result = await api('discovery/telegram/' + (confirm ? 'confirm' : 'start'), {owner:id,lang:french()?'fr':'en',code});
+        if (version !== revision || id !== owner() || result.gifts.owner !== id) return;
+        notice = confirm ? (french() ? 'Compte Telegram associé.' : 'Telegram account linked.') : '';
+        receive(result.gifts);
+        const visible = surfaces.find(surface => surface.getClientRects().length && (!menu.contains(surface) || menu.open));
+        if (visible) focusRow(visible, 'monthly');
+        return;
+      }
       const result = await api('discovery/gift', {
         owner: id,
         key,
@@ -299,7 +339,12 @@ export function createGiftMenu({
       }
     }
   }
-  for (const surface of surfaces)
+  for (const surface of surfaces) {
+    surface.addEventListener('submit', (e) => {
+      if (!e.target.matches('.gift-telegram-code')) return;
+      e.preventDefault();
+      if (e.target.reportValidity()) void redeem('monthly', e.target.elements.code.value.trim());
+    });
     surface.addEventListener('click', (e) => {
       const retry = e.target.closest('[data-gift-retry]');
       if (retry) {
@@ -317,7 +362,7 @@ export function createGiftMenu({
         e.altKey
       )
         return;
-      if (!owner() && pending()) return;
+      if (control.matches('a[target="_blank"]') || (!owner() && pending())) return;
       e.preventDefault();
       if (control.disabled || saving || e.detail > 1) return;
       const key = control.dataset.giftKey;
@@ -326,6 +371,7 @@ export function createGiftMenu({
         signin(key);
       } else void redeem(key);
     });
+  }
   menu.addEventListener('toggle', () => {
     if (menu.open) {
       notice = '';
