@@ -93,7 +93,12 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   const newButton = $('coming-soon-new');
   const search = $('coming-soon-admin-search');
   const saveForm = $('coming-soon-save-search');
-  let lobby = { titles: [], featured: [], discover: [] };
+  const emptyLobby = () => ({ titles: [], featured: [], discover: [] });
+  let lobby = emptyLobby(), loadedLocale;
+  const uiLocale = () => isFrench() ? 'fr-CA' : 'en-CA';
+  const initial = $('catalog-summary').dataset;
+  let initialEditionAvailable = Boolean(initial.locale);
+  const initialCollections = [...$('catalog-collection').options].filter(option => option.value).map(option => [option.value, option.text]);
   let preview;
   let detailLoaded = false;
   let staffRole;
@@ -164,8 +169,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     return node;
   }
 
-  let spotlightTitles = [], spotlightSlug = '';
   const spotlight = $('lobby-spotlight');
+  let spotlightTitles = [], spotlightSlug = spotlight.dataset.initialSlug || '';
   function showSpotlight() {
     const title = spotlightTitles.find((item) => item.slug === spotlightSlug) || spotlightTitles[0];
     spotlight.hidden = !title;
@@ -173,13 +178,16 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
     spotlightSlug = title.slug;
     const image = $('spotlight-image');
     if (title.artwork && image.getAttribute('src') !== title.artwork) image.src = title.artwork;
+    image.alt = (isFrench() ? title.altFr : title.altEn) || '';
     image.hidden = !title.artwork;
     $('spotlight-link').href = publicUrl(title);
     $('spotlight-name').textContent = titleName(title);
     $('spotlight-type').textContent = [collectionName(title), t(title.demoGame ? 'playableDemo' : 'comingSoon')].filter(Boolean).join(' · ');
     spotlight.querySelector('.spotlight-nav').hidden = spotlightTitles.length < 2;
+    for (const button of spotlight.querySelectorAll('button')) button.disabled = spotlightTitles.length < 2;
   }
   function stepSpotlight(direction) {
+    if (spotlightTitles.length < 2) return;
     const index = spotlightTitles.findIndex((item) => item.slug === spotlightSlug);
     spotlightSlug = spotlightTitles[(index + direction + spotlightTitles.length) % spotlightTitles.length].slug;
     showSpotlight();
@@ -194,7 +202,9 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   }
 
   function renderLobby(filter, search, collection, recentPreviews) {
-    const collections = new Map();
+    if (loadedLocale && loadedLocale !== uiLocale()) { lobby = emptyLobby(); loadedLocale = undefined; }
+    const seeded = initialEditionAvailable && !loadedLocale && initial.locale === uiLocale() && lobbyEnabled();
+    const collections = new Map(seeded ? initialCollections : []);
     if (lobbyEnabled()) for (const title of lobby.titles) {
       if (collectionName(title)) collections.set(collectionKey(title), collectionName(title));
     }
@@ -210,12 +220,19 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
       $('coming-soon').hidden = true;
       return { count: 0, playable: 0, available: 0, hasFavorites: false };
     }
+    const normal = filter === 'all' && !search.trim() && !collection;
+    if (seeded) {
+      spotlight.hidden = !spotlight.dataset.initialSlug;
+      $('coming-soon').hidden = true;
+      return { count: normal ? Number(initial.count) : 0, playable: normal ? Number(initial.playable) : 0,
+        available: Number(initial.count), hasFavorites: false };
+    }
     const bySlug = new Map(lobby.titles.map((title) => [title.slug, title]));
     const ordered = new Set([...lobby.featured, ...lobby.discover]);
+    if (bySlug.has(spotlightSlug)) ordered.add(spotlightSlug);
     spotlightTitles = [...ordered].map(slug => bySlug.get(slug)).filter(Boolean);
     showSpotlight();
     const stars = lobby.titles.filter((title) => isFavorite(title.favoriteKey));
-    const normal = filter === 'all' && !search.trim() && !collection;
     const filtered = normal ? [] : lobby.titles.filter((title) => {
       if (filter === 'recent' && (!title.demoGame || !recentPreviews.has(title.slug))) return false;
       if (filter === 'favorites' && !isFavorite(title.favoriteKey)) return false;
@@ -272,7 +289,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
   let lobbyRequest = 0;
   async function loadLobby() {
     const request = ++lobbyRequest;
-    const suffix = '?locale=' + (isFrench() ? 'fr-CA' : 'en-CA');
+    const locale = uiLocale();
+    const suffix = '?locale=' + locale;
     if (detailSlug) {
       preview = alternative = previewError = undefined;
       detailLoaded = false;
@@ -288,9 +306,8 @@ export function createComingSoonUi({ api, t, element, action, appPath, currentRo
         }
       } finally { if (request === lobbyRequest) detailLoaded = true; }
     } else {
-      lobby = { titles: [], featured: [], discover: [] };
       const result = await api('coming-soon' + suffix, undefined, 'GET');
-      if (request === lobbyRequest) lobby = result;
+      if (request === lobbyRequest && uiLocale() === locale) { lobby = result; loadedLocale = locale; initialEditionAvailable = false; }
     }
   }
 

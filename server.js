@@ -308,7 +308,10 @@ const comingSoon = createComingSoon(db, { fail, recordAudit: staffAudit.record, 
 const websiteContent = createWebsiteContent(db, { transaction, fail, recordAudit: staffAudit.record, validArtwork: validBrandLogo, appBasePath,
   titleAvailable: (tenant, slug, locale) => Boolean(comingSoon.published(tenant, slug, catalogueAudience(tenant, locale))) });
 const publicationFollowup = createPublicationFollowup(db, { transaction, fail });
-const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath });
+const publicCatalogueFrom = 'FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1';
+const publicProviderCount = db.prepare('SELECT count(*) AS total ' + publicCatalogueFrom);
+const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath,
+  providerCount: tenant => publicProviderCount.get(tenant).total });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
@@ -1981,7 +1984,7 @@ async function api(req, res, path, tenantId, requestId) {
       return { id: ticketId, status, priority, updatedAt: now, replied: hasReply, auditId };
     });
   }
-  if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1 ORDER BY gc.title_en').all(tenantId);
+  if (route === 'GET /api/games') return db.prepare('SELECT gc.id, gc.provider, gc.external_id AS externalId, gc.title_en AS titleEn, gc.title_fr AS titleFr, gc.category ' + publicCatalogueFrom + ' ORDER BY gc.title_en').all(tenantId);
   if (route === 'POST /api/signup' || route === 'POST /api/login') {
     limitAuthAttempts(req, route);
     const { email, password, locale, referralCode } = await body(req);
@@ -2230,6 +2233,8 @@ const assets = {
   '/review-desk.js':['review-desk.js','text/javascript'],
   '/partner-lobby.js':['partner-lobby.js','text/javascript'],
   '/lobby-shelves.js':['lobby-shelves.js','text/javascript'],
+  '/sports-marina.webp': ['sports-marina.webp', 'image/webp'],
+  '/sports-centre.js': ['sports-centre.js', 'text/javascript'],
   '/lobby-navigation.js': ['lobby-navigation.js', 'text/javascript'],
   '/operator-workflows.js':['operator-workflows.js','text/javascript'],
   '/provider-catalog.js':['provider-catalog.js','text/javascript'],
@@ -2325,6 +2330,7 @@ createServer(async (req, res) => {
       if (path === '/') content = content.toString().replace('<body>', '<body class="player-home">');
       const view = transaction(() => describePublicPage(tenantId, lobbyPresentation(tenantId).config, {
         path, params: requestUrl.searchParams, helpSlug: help?.[1], previewSlug: preview?.[1],
+        visitId: req.headers.cookie?.match(/(?:^|;\s*)northplay_visit=([a-f0-9]{32})(?:;|$)/)?.[1],
         preferredLocale: req.headers.cookie?.match(/(?:^|;\s*)northplay_ui_locale=(fr|en)(?:;|$)/)?.[1],
         signedIn: Boolean((path === '/' || help || preview) && signedPlayer(req, tenantId))
       }), { readOnly: true });
