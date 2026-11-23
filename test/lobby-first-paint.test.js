@@ -60,3 +60,26 @@ test('opening the league during startup preserves the chosen panel when the acco
   assert.match(root.innerHTML,/id="club-link-league"[^>]+aria-expanded="true"/);
   assert.match(root.innerHTML,/Aucun point enregistré/);
 });
+
+test('the public header renders searchable, localized player shortcuts before scripts load', () => {
+  const template = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const config = {brandName:'Casino Habibi', enabledLocales:['fr-CA','en-CA'], primaryLocale:'fr-CA'};
+  const appBasePath = '/casinohabibi';
+  const describe = createPublicPages({appBasePath});
+  function render(path, query, brand = config) {
+    const {meta} = describe('tenant', brand, {path, params:new URLSearchParams(query)});
+    return pageHead(template, meta, 'https://example.test');
+  }
+  for (const [tag, label] of [['fr','Bonus et quêtes'],['en','Bonuses and quests']]) {
+    const html = render('/', {lang:tag, q:'a"<b'});
+    assert.match(html, /<summary class="player-tool"/);
+    assert.ok(html.includes('aria-label="' + label + '"'));
+    assert.ok(html.includes('href="/casinohabibi/?lang=' + tag + '&amp;view=promotions&amp;club=daily#player-club"'));
+    assert.ok(html.includes('href="/casinohabibi/?lang=' + tag + '&amp;support=1"'));
+    assert.match(html, /method="get" action="\/casinohabibi\/#games"/);
+    assert.match(html, /id="game-search" name="q"[^>]*value="a&quot;&lt;b"/);
+    assert.equal((html.match(/id="home-search"/g) || []).length, 1);
+  }
+  assert.doesNotMatch(render('/admin', {lang:'fr'}), /id="header-support"/);
+  assert.doesNotMatch(render('/', {lang:'en'}, {...config, brandName:'Northplay'}), /id="header-gifts"/);
+});

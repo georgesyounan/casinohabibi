@@ -13,6 +13,7 @@ import { comingSoonCopy, createComingSoonUi } from './coming-soon.js';
 import { dashboardCopy, createReportUi } from './dashboard.js';
 import { websiteContentCopy, createPublicWebsiteContent, createWebsiteEditor } from './website-content.js';
 import { followupCopy, createPublicationFollowup } from './publication-followup.js';
+import { createEventBoard } from './lobby-events.js';
 import { createClubHome } from './player-club.js';
 import { discoveryCopy, createDiscoveryPlayer } from './discovery.js';
 import {growthCopy,createGrowthPlayer} from './growth-player.js';
@@ -35,6 +36,7 @@ const copy = {
   clubOfferChanged:['The daily offer has changed. Check its updated terms.','L’offre du jour a changé. Consultez les nouvelles conditions.'],
   club_daily_settings:['Daily demo bonus updated','Bonus quotidien démo modifié'],
   dailyDemoBonus:['Daily demo bonus','Bonus quotidien démo'],
+  weeklyDrawPrize:['Weekly raffle prize','Prix du tirage hebdomadaire'],
   clubDayChanged:['A new daily bonus is available. Refresh and claim it.','Un nouveau bonus quotidien est disponible. Actualisez pour le réclamer.'],
   supportLinkedRef: ['Related reference (optional)', 'Référence liée (facultative)'],
   ...dashboardCopy,
@@ -492,8 +494,13 @@ function element(tag, value, className) {
   return node;
 }
 
-function isClubBonus(raw) {
-  try { return JSON.parse(raw)?.type==='club_daily'; } catch { return false; }
+function clubCreditLabel(raw) {
+  try {
+    const type=JSON.parse(raw)?.type;
+    if(type==='club_daily') return t('dailyDemoBonus');
+    if(type==='club_raffle') return t('weeklyDrawPrize');
+  } catch {}
+  return '';
 }
 function demoBalanceResetDetails(rawOutcome) {
   if (typeof rawOutcome !== 'string' || !rawOutcome) return null;
@@ -839,7 +846,16 @@ function updateAccount() {
   $('#account').textContent = player ? money(player.balance) : t(knownMember ? 'account' : 'signin');
   const unreadSupport = player?.supportReplies || 0;
   $('#account').setAttribute('aria-label', player ? t('account') + ' · ' + money(player.balance) + (unreadSupport ? ' · ' + t('supportUnreadLabel').replace('{count}', new Intl.NumberFormat(language ? 'fr-CA' : 'en-CA').format(unreadSupport)) : '') : t(knownMember ? 'account' : 'signin'));
-  $('#account').classList.toggle('has-support-reply', Boolean(unreadSupport));
+  const messages = $('#header-support');
+  if (messages) {
+    const count = messages.querySelector('.support-count');
+    count.hidden = !unreadSupport;
+    count.textContent = unreadSupport > 99 ? '99+' : String(unreadSupport);
+    const label = unreadSupport ? t('supportNewReplies').replace('{count}', String(unreadSupport)) : t('headerSupport');
+    messages.title = label;
+    messages.setAttribute('aria-label', label);
+  }
+  $('#account').classList.toggle('has-support-reply', !messages && Boolean(unreadSupport));
   $('#account').title = unreadSupport ? t('supportUnreadLabel').replace('{count}', String(unreadSupport)) : '';
   $('#safety-controls').textContent = player ? t('accountControls') : t('safetyCta');
 }
@@ -878,7 +894,8 @@ function historyEntryElement(entry, showSupport = true) {
       const date = entry.createdAt ? ` · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}` : '';
       return element('li', `${t('demoBalanceResetHistory').replace('{balance}', money(reset.newBalance))}${date}`);
     }
-    if (isClubBonus(entry.outcome)) return element('li', `${t('dailyDemoBonus')} · +${money(entry.amount)} · ${new Date(entry.createdAt).toLocaleDateString(language?'fr-CA':'en-CA')}`);
+    const clubCredit = clubCreditLabel(entry.outcome);
+    if (clubCredit) return element('li', `${clubCredit} · +${money(entry.amount)} · ${new Date(entry.createdAt).toLocaleDateString(language?'fr-CA':'en-CA')}`);
     return element('li', `${t('starter')} · +${money(entry.amount)}`);
   }
   const date = entry.createdAt ? ` · ${new Date(entry.createdAt).toLocaleString(language ? 'fr-CA' : 'en-CA')}` : '';
@@ -1035,6 +1052,11 @@ function composeSupport(reference='') {
   supportView='new';
   renderDialog();
 }
+function enterPlayerSupport() {
+  if (player) openSupportCenter();
+  else { clearDemoSelection(); afterSignIn = 'support'; openPanel('signin'); }
+}
+
 function openSupportCenter(reference) {
   ++supportRequest;
   supportReference=typeof reference==='string'?reference:'';
@@ -1077,6 +1099,10 @@ async function resumePlayerEntry(access) {
   const clean=new URL(location.href);
   clean.searchParams.delete('access');history.replaceState(history.state,'',clean);
   if (['signup','signin'].includes(access)) {
+    if(clean.searchParams.get('event')==='raffle'){
+      if(player){eventBoard.resume();return;}
+      clearDemoSelection();afterSignIn='raffle';
+    }
     const tab=clean.searchParams.get('club');
     if(clean.searchParams.get('view')==='promotions' && ['daily','quests','rewards','league'].includes(tab)){
       if(player){clubHome.select(tab);return;}
@@ -1097,7 +1123,7 @@ async function resumePlayerEntry(access) {
           return;
         }
       }
-      if (['discovery','support','clubHome'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
+      if (['discovery','support','clubHome','raffle'].includes(saved.afterSignIn)) afterSignIn=saved.afterSignIn;
       if (typeof saved.requestedClubTab==='string') requestedClubTab=saved.requestedClubTab;
     } catch {}
     sessionStorage.removeItem('habibi-auth-destination');
@@ -1137,6 +1163,7 @@ async function finishPlayerSignIn(auth, openDestination=true) {
   afterSignIn = undefined;
   requestedClubTab = undefined;
   if (target === 'clubHome') { $('#dialog').close(); clubHome.select(pendingClubSection); }
+  else if (target === 'raffle') { $('#dialog').close();eventBoard.resume(); }
   else if (target === 'support') openSupportCenter(); else openPanel(target);
 }
 const playerLoginUi=createPlayerSignInUi({
@@ -1653,7 +1680,7 @@ function renderDialog() {
         const reset = demoBalanceResetDetails(entry.outcome);
         return [
           entry.createdAt ? new Date(entry.createdAt).toISOString() : '',
-          reset ? t('demoBalanceResetCsv') : isClubBonus(entry.outcome) ? t('dailyDemoBonus') : roundTitle(entry) || (language ? 'Crédit de départ' : 'Starting credit'),
+          reset ? t('demoBalanceResetCsv') : clubCreditLabel(entry.outcome) || roundTitle(entry) || (language ? 'Crédit de départ' : 'Starting credit'),
           reset ? t('demoBalanceResetCsvDetail').replace('{balance}', money(reset.newBalance)) : describeOutcome(entry.game, entry.outcome),
           (entry.wager / 100).toFixed(2),
           (entry.amount / 100).toFixed(2),
@@ -2014,7 +2041,9 @@ function renderCatalog() {
     link?.focus({preventScroll:true});link?.scrollIntoView({block:'nearest'});
   }
   lobbySections.render();
+  renderFinderMatches();
   if (!accountPending) void clubHome.sync();
+  void eventBoard.sync();
 }
 
 let providerStatus;
@@ -2051,6 +2080,8 @@ const clubHome = createClubHome({
   signIn(section){clearDemoSelection();requestedClubTab=section;afterSignIn='clubHome';openPanel('signin');},
   updateAccount(fresh){player=fresh;updateAccount();}
 });
+const eventBoard=createEventBoard({api,base:appBasePath,french:()=>Boolean(language),account:()=>player,pending:()=>accountPending,translate:t,
+  signin(){clearDemoSelection();afterSignIn='raffle';openPanel('signin');}});
 const lobbySections = createLobbySections({
   french: () => Boolean(language), appPath, catalogue: comingSoonUi, providers: () => providerGames,
   house: () => ({name:demoProviderName(), count:games.length}), account: () => player, club:openClub, roundTitle, money,
@@ -2061,6 +2092,7 @@ const lobbySections = createLobbySections({
   editionFailed: () => editionStatus === 'error',
   retryEdition: () => void refreshEdition(),
   onNavigate(url) {
+    if (headerFinder) headerFinder.open = false;
     const params = url.searchParams;
     const category = params.get('category');
     filter = ['slots', 'table', 'live', 'favorites', 'recent'].includes(category) ? category : 'all';
@@ -2086,10 +2118,7 @@ const lobbySections = createLobbySections({
       }
     }
   },
-  support() {
-    if(player) openSupportCenter();
-    else { clearDemoSelection(); afterSignIn='support'; openPanel('signin'); }
-  }
+  support: enterPlayerSupport
 });
 const followupUi = createPublicationFollowup({ api, t, element, appPath, locale: siteContentLocale });
 const publicWebsite = createPublicWebsiteContent({ api, element, t, currentRoute, locale: siteContentLocale, brand: () => tenantBrandName });
@@ -2177,7 +2206,20 @@ function render() {
   $('header nav').setAttribute('aria-label', t('primaryNav'));
   $('footer nav').setAttribute('aria-label', t('footerNav'));
   updatePolicyLinks();
-  $('#game-search').placeholder = t('searchGames');
+  $('#game-search').placeholder = t(headerFinder ? 'headerSearchHint' : 'searchGames');
+  if (headerFinder) {
+    const lang = language ? 'fr' : 'en';
+    $('#home-search input[name="lang"]').value = lang;
+    const search = headerFinder.querySelector('summary');
+    const submit = $('#home-search button[type="submit"]');
+    const gifts = $('#header-gifts');
+    for (const [control, key] of [[search, 'searchGames'], [submit, 'headerSearchSubmit'], [gifts, 'headerGifts']]) {
+      control.title = t(key);
+      control.setAttribute('aria-label', t(key));
+    }
+    gifts.href = lobbySections.homeUrl({view:'promotions', club:'daily'}, '#player-club');
+    $('#header-support').href = lobbySections.homeUrl({support:'1'});
+  }
   $('#home-search').dataset.compact = t('searchCompact');
   $('#open-discovery').title = t('discovery');
   $('#language').textContent = language ? 'EN' : 'FR';
@@ -2289,7 +2331,76 @@ $('#close').addEventListener('click', () => {
   }
   $('#dialog').close();
 });
-$('#game-search').value = searchQuery;
+const headerFinder = $('#header-finder');
+if (!headerFinder) $('#game-search').value = searchQuery;
+
+function renderFinderMatches() {
+  if (!headerFinder?.open) return;
+  const query = $('#game-search').value.trim();
+  const list = $('#finder-matches');
+  const matches = new Map();
+  const catalogueLink = label => lobbySections.homeUrl({q:label}, '#games');
+  function suggest(label, fields, category, href) {
+    if (matches.size < 5 && matchesCatalogue(query, fields, category)) matches.set(href, label);
+  }
+  if (query) {
+    for (const game of games) {
+      const name = gameName(game);
+      suggest(name, [...game.name, demoProviderName()], game.type, catalogueLink(name));
+    }
+    for (const game of comingSoonUi.titles()) {
+      if (matches.size >= 5) break;
+      const name = language ? game.titleFr : game.titleEn;
+      const locale = siteContentLocale();
+      suggest(name, [game.titleFr, game.titleEn, game.studio, game.collectionFr, game.collectionEn], game.category,
+        appPath('/coming-soon/' + encodeURIComponent(game.slug)) + '?' + new URLSearchParams({lang:locale.slice(0,2), locale}));
+    }
+    for (const game of providerGames) {
+      if (matches.size >= 5) break;
+      const name = language ? game.titleFr : game.titleEn;
+      suggest(name, [game.titleEn, game.titleFr, game.provider, game.externalId], game.category, catalogueLink(name));
+    }
+  }
+  const signature = JSON.stringify([...matches]);
+  if (list.dataset.matches === signature) return;
+  list.dataset.matches = signature;
+  list.replaceChildren();
+  for (const [href, label] of matches) {
+    const item = element('li');
+    const link = element('a', label);
+    link.href = href;
+    if (link.pathname === appPath('/')) link.className = 'hub-link';
+    item.append(link);
+    list.append(item);
+  }
+  list.hidden = !matches.size;
+}
+
+if (headerFinder) {
+  headerFinder.addEventListener('toggle', () => {
+    if (headerFinder.open) {
+      $('#game-search').focus({preventScroll:true});
+      renderFinderMatches();
+    }
+  });
+  document.addEventListener('click', event => {
+    if (headerFinder.open && !headerFinder.contains(event.target)) headerFinder.open = false;
+  });
+  document.addEventListener('focusin', event => {
+    if (headerFinder.open && !headerFinder.contains(event.target)) headerFinder.open = false;
+  });
+  headerFinder.addEventListener('keydown', event => {
+    if (!headerFinder.open || event.key !== 'Escape') return;
+    event.preventDefault();
+    headerFinder.open = false;
+    headerFinder.querySelector('summary').focus();
+  });
+  $('#header-support').addEventListener('click', event => {
+    if (accountPending || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    enterPlayerSupport();
+  });
+}
 const filterButtons = [...document.querySelectorAll('#filters [data-filter]')];
 function markSelectedFilter() {
   for (const button of filterButtons) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
@@ -2305,15 +2416,21 @@ $('#home-options').addEventListener('keydown', (event) => {
   event.currentTarget.querySelector('summary').focus();
 });
 $('#home-search').addEventListener('submit', (event) => {
+  if (headerFinder && currentRoute !== '/') return;
   event.preventDefault();
-  if(lobbySections.active()){ lobbySections.navigate(lobbySections.homeUrl({q:$('#game-search').value.trim()},'#games')); return; }
+  if (headerFinder || lobbySections.active()) {
+    const query = $('#game-search').value.trim();
+    lobbySections.navigate(lobbySections.homeUrl(query ? {q:query} : {}, '#games'));
+    return;
+  }
   $('#games').focus();
   $('#games').scrollIntoView({ block: 'start' });
 });
 document.addEventListener('keydown', (event) => {
-  if (currentRoute !== '/' || event.key !== '/' || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey ||
+  if ((!headerFinder && currentRoute !== '/') || event.key !== '/' || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey ||
       event.defaultPrevented || $('#dialog').open || event.target.closest('input, textarea, select, [contenteditable]')) return;
   event.preventDefault();
+  if (headerFinder) headerFinder.open = true;
   $('#game-search').focus();
 });
 $('#catalog-collection').addEventListener('change', (event) => {
@@ -2353,6 +2470,7 @@ $('#clear-game-search').addEventListener('click', () => {
   renderCatalog();
 });
 $('#game-search').addEventListener('input', (event) => {
+  if (headerFinder) { renderFinderMatches(); return; }
   if(lobbySections.active()) return;
   searchQuery = event.currentTarget.value;
   rememberCatalogue();
@@ -3455,6 +3573,12 @@ if (!isAdminPage) {
   else if (emailChangeToken) openPanel('emailChange');
   else if(document.body.dataset.lobbyBrand==='habibi' && ['signup','signin','return','cancelled','expired','unverified'].includes(catalogLocation.get('access'))) {
     await resumePlayerEntry(catalogLocation.get('access'));
+  }
+  else if (headerFinder && new URLSearchParams(location.search).get('support') === '1') {
+    const url = new URL(location.href);
+    url.searchParams.delete('support');
+    history.replaceState(history.state, '', url);
+    enterPlayerSupport();
   }
   else if(currentRoute==='/' && (new URLSearchParams(location.search).get('partner')==='1' || new URLSearchParams(location.search).get('inbox')==='1' || new URLSearchParams(location.search).has('listInvite') || /^[1-9]\d{0,14}$/.test(new URLSearchParams(location.search).get('quest')||''))){
     if(!player)afterSignIn='discovery';

@@ -26,6 +26,7 @@ import { createDiscoveryNavigation } from './lib/discovery-navigation.js';
 import { collectionKey } from './public/catalog.js';
 import { createSupportCases } from './lib/support-cases.js';
 import { createPlayerClub } from './lib/player-club.js';
+import { createLobbyEvents } from './lib/lobby-events.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
@@ -323,13 +324,21 @@ const publicationFollowup = createPublicationFollowup(db, { transaction, fail })
 const publicCatalogueFrom = 'FROM game_catalog gc JOIN providers p ON p.id = gc.provider_id AND p.tenant_id = gc.tenant_id WHERE gc.tenant_id = ? AND gc.enabled = 1';
 const publicProviderCount = db.prepare('SELECT count(*) AS total ' + publicCatalogueFrom);
 const describePublicPage = createPublicPages({ websiteContent, comingSoon, appBasePath,
-  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => playerClub.home(tenant,null,locale) });
+  providerCount: tenant => publicProviderCount.get(tenant).total, clubHome: (tenant,locale) => playerClub.home(tenant,null,locale), eventBoard: tenant => lobbyEvents.board(tenant,null) });
 const discoveryNavigation=createDiscoveryNavigation({website:websiteContent,configFor:t=>publishedTenantConfig(t).config,appBasePath,fail});
 const rewards = createRewards(db, {fail,accountBreaks,audit:staffAudit.record,navigation:discoveryNavigation});
 const supportCases = createSupportCases(db, fail, attachSupportMessages, accountBreaks);
 const clubEnabled = tenant => lobbyPresentation(tenant).config.brandName.trim().toLowerCase()==='casino habibi';
 const playerClub=transaction(()=>createPlayerClub(db,{rewards,accountBreaks,fail,audit:staffAudit.record,
   previewCount:(tenant,locale)=>comingSoonEnabled(tenant)?comingSoon.keys(tenant,catalogueAudience(tenant,locale)).length:0}));
+const lobbyEvents = transaction(() => createLobbyEvents(db,{fail,accountBreaks,standings:playerClub.standings}));
+function settleClubDraws() {
+  if (lobbyEvents.hasDue()) transaction(() => lobbyEvents.settle());
+}
+settleClubDraws();
+setInterval(() => {
+  try { settleClubDraws(); } catch (error) { console.error('Club draw deferred', error.code || error.name); }
+}, 60_000).unref();
 transaction(()=>{
   for(const {id} of db.prepare('SELECT id FROM tenants').all()) {
     rewards.seed(id);
@@ -1084,6 +1093,21 @@ async function api(req, res, path, tenantId, requestId) {
   if (route==='GET /api/admin/discovery/report') {
     staffContext(req,tenantId,supportRoles);
     return transaction(()=>engagementReport(db,dashboard.context(tenantId,publishedTenantConfig(tenantId).config,params,Date.now()),params,fail),{readOnly:true});
+  }
+  if (route==='GET /api/discovery/events') {
+    if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
+    settleClubDraws();
+    return transaction(()=>lobbyEvents.board(tenantId,player),{readOnly:true});
+  }
+  if (route==='POST /api/discovery/raffle') {
+    if (!player) fail(401,'signin');
+    if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
+    const input=await body(req);
+    return transaction(()=>{
+      req.assertPlayerSession();
+      const result=lobbyEvents.enter(tenantId,player,input.day);
+      return {...result,board:lobbyEvents.board(tenantId,player)};
+    });
   }
   if (route==='GET /api/discovery/club' || route==='GET /api/discovery/standings') {
     if (!clubEnabled(tenantId)) fail(404,'discoveryMissing');
@@ -2373,6 +2397,7 @@ const assets = {
   '/referral-views.js':['referral-views.js','text/javascript'],
   '/growth-admin.js':['growth-admin.js','text/javascript'],
   '/contact-views.js': ['contact-views.js','text/javascript'],
+  '/lobby-events.js': ['lobby-events.js', 'text/javascript'],
   '/player-club.js': ['player-club.js', 'text/javascript'],
   '/discovery.js': ['discovery.js', 'text/javascript'],
   '/discovery-admin.js': ['discovery-admin.js', 'text/javascript'],
