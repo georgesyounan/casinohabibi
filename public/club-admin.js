@@ -20,6 +20,26 @@ export function membershipAdmin(body,{api,t,ui}){
       }
       const nfield=(node,name,label,initial,min=1)=>field(node,name,label,{type:'number',min,step:1,value:initial,required:true});
       const select=(node,label,pairs,chosen)=>{const wrap=el('label',label),s=el('select');for(const [v,txt] of pairs){const o=el('option',txt);o.value=v;s.append(o);}s.value=chosen;wrap.append(s);node.append(wrap);return s;};
+      form(l('Reserved trending slots','Places réservées dans les tendances'),l('Save slot','Enregistrer la place'),node=>{
+        const slot=select(node,l('Position','Position'),[1,2,3,4].map(i=>[String(i),'#'+i]),'1');
+        const game=select(node,l('Game','Jeu'),[['',l('Rank by activity','Classer selon l’activité')],['gold','Gold Rush'],['roulette','Roulette'],['blackjack','Blackjack'],['aurora','Aurora']],data.pins.find(p=>p.slot===1)?.game||'');
+        slot.onchange=()=>{game.value=data.pins.find(p=>p.slot===Number(slot.value))?.game||'';};
+        return ()=>({action:'trend',slot:Number(slot.value),game:game.value});
+      });
+      form(l('Free entries and prize rules','Participations gratuites et prix'),l('Save rules','Enregistrer les règles'),node=>{
+        const prev=data.prizes.rules,threshold=nfield(node,'minimum',l('Redemption threshold','Seuil de remise'),prev.threshold);
+        const free=nfield(node,'units',l('Units per free entry','Unités par participation gratuite'),prev.freeUnits);
+        const zone=field(node,'zone',l('Day boundary time zone','Fuseau de la journée'),{value:prev.zone,required:true});
+        return ()=>({action:'prize-rules',threshold:Number(threshold.value),freeUnits:Number(free.value),zone:zone.value,version:prev.version});
+      });
+      for(const c of data.prizes.claims.filter(x=>x.state==='pending')){
+        form(l('Prize request','Demande de prix')+' #'+c.id+' · '+c.amount,l('Record decision','Enregistrer la décision'),node=>{
+          const state=select(node,l('Decision','Décision'),[['denied',l('Decline and return units','Refuser et restituer les unités')],['fulfilled',l('Award demo prize','Remettre le prix fictif')]],'denied');
+          const check=field(node,'checked',l('Player and eligibility checked','Compte et admissibilité vérifiés'),{type:'checkbox'});
+          const reason=field(node,'reason',l('Decision note','Motif de la décision'),{required:true,maxLength:200});
+          return ()=>({action:'prize-decision',id:c.id,state:state.value,checked:check.checked,reason:reason.value});
+        });
+      }
       form(l('VIP rules','Règles VIP'),l('Save rules','Enregistrer les règles'),node=>{
         const threshold=nfield(node,'threshold',l('VIP threshold in points','Seuil VIP en points'),data.rules.threshold);
         const rule=select(node,l('After a reversal','Après une correction'),[['1',l('Recalculate tier','Recalculer le palier')],['0',l('Keep earned tier','Conserver le palier acquis')]],String(data.rules.demote));

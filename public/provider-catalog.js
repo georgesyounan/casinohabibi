@@ -94,6 +94,9 @@ export function createProviderCatalogUi({api,t,french,canPublish,openPanel,appPa
           card.append(link);
         }
         if(row.inFeed&&canPublish()){
+          const artBox=el('details');artBox.append(el('summary',l('Editorial artwork','Illustration éditoriale')));card.append(artBox);
+          const art=field(artBox,'art',l('Artwork','Illustration'),{items:['','game-gold.webp','game-aurora.webp','game-blackjack.webp','game-roulette.webp','campaign-casino.webp','campaign-reels.webp','campaign-match.webp'].map(a=>[a,a||l('Supplier artwork','Illustration du fournisseur')]),value:row.editorArt||''});
+          artBox.append(button(l('Save artwork','Enregistrer le visuel'),async()=>{try{await api('admin/shelves/distribution',{action:'art',id:row.id,art:art.value});await refresh(t('catalogListingUpdated'));}catch(err){if(card.isConnected)status.textContent=t(err.message);}},true));
           const toggle=button(t(row.hidden?'catalogListingShow':'catalogListingHide'),async()=>{
             if(toggle.disabled)return;toggle.disabled=true;
             try{
@@ -160,10 +163,10 @@ export function createProviderCatalogUi({api,t,french,canPublish,openPanel,appPa
     if(new TextEncoder().encode(raw).length>256*1024)throw Error('catalogFileSize');
     let games;
     try{games=JSON.parse(raw);}catch{throw Error('catalogInvalidJson');}
-    const issue=providerCatalogIssue(games);
+    const issue=providerCatalogIssue(games,true);
     if(issue)throw Object.assign(Error(issue.key),{row:issue.row});
     const name=form.elements.name.value.trim();
-    return {name,games,sample:Boolean(name&&name===sampleName)};
+    return {name,games,reviewUnknown:true,sample:Boolean(name&&name===sampleName)};
   }
   function renderImport(){
     const sampleButton=by('load-sample-catalog');sampleButton.disabled=busy;
@@ -181,7 +184,7 @@ export function createProviderCatalogUi({api,t,french,canPublish,openPanel,appPa
       else if(data)previewNote.textContent=t('catalogNeedReview').replace('{count}',data.games.length);
       return;
     }
-    previewNote.textContent=countsText(c);
+    previewNote.textContent=countsText(c)+(review.result.review?.length?' · '+review.result.review.length+' '+l('supplier types to review','types fournisseur à réviser'):'');
     const key=review.result.revision+french();
     if(previewKey!==key){changes(detail,review.result);previewKey=key;}
     detail.hidden=false;

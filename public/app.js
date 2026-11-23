@@ -45,6 +45,9 @@ const copy = {
   telegramSettings:['Check the bot token and the channel username or numeric ID.','Vérifiez le jeton du bot et le nom ou l’identifiant numérique du canal.'],
   telegramAdminNeeded:['Make the bot an administrator of this channel.','Donnez au bot le rôle d’administrateur du canal.'],
   telegramBotBusy:['Choose a dedicated bot. This one is already connected to another service.','Choisissez un bot dédié. Celui-ci est déjà relié à un autre service.'],
+  prizeThreshold:['Insufficient eligible prize units or below the redemption threshold.','Le solde admissible ou le seuil de remise est insuffisant.'],
+  prizeJoin:['Join the demo prize program first.','Rejoignez le programme de prix fictifs.'],
+  prizeUnit:['Only prize units are eligible.','Seules les unités de prix sont admissibles.'],
   sportSuspended:['This market is closed for picks.','Les sélections sont fermées pour ce marché.'],
   sportPriceChanged:['Odds changed. Review the updated prices and confirm again.','Les cotes ont changé. Vérifiez les nouvelles cotes et confirmez de nouveau.'],
   sportRisk:['The stake or exposure limit is reached.','La limite de mise ou d’exposition est atteinte.'],
@@ -2065,9 +2068,11 @@ function renderCatalog() {
     const card = element('article', '', 'card provider-card');
     card.id='provider-game-'+game.id;card.tabIndex=-1;
     const art = createArt(icon, artClass);
+    if(game.art){art.style.backgroundImage='url("'+appPath('/'+game.art)+'")';art.style.backgroundSize='cover';}
     addFavoriteButton(art, `provider:${game.provider}:${game.externalId}`, language ? game.titleFr : game.titleEn);
     const info = element('span', '', 'card-info');
     info.append(element('small', t('catalogListing'), 'catalog-label'), element('strong', language ? game.titleFr : game.titleEn), element('small', `${t(game.category)} · ${game.provider}`));
+    if(game.bonusBuy===true)info.append(element('small',language?'Achat de bonus disponible':'Bonus buy available'));
     card.append(art, info);
     providers.append(card);
   }
@@ -3599,7 +3604,7 @@ if (!isAdminPage) {
   if (currentRoute === '/') publicShelf.start();
   if (!publicWebsite.isHelp) {
     void refreshEdition();
-    void api('games', undefined, 'GET').then(items => {
+    void api('games?channel='+(matchMedia('(max-width: 700px)').matches?'mobile':'desktop'), undefined, 'GET').then(items => {
       providerGames = items;
       providersStatus = 'ready';
     }).catch(() => { providersStatus = 'error'; }).finally(renderCatalog);
