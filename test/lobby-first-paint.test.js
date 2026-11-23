@@ -51,7 +51,7 @@ test('opening the league during startup preserves the chosen panel when the acco
     t.after(()=>{if(old)Object.defineProperty(globalThis,key,old);else delete globalThis[key];});
   }
   let click;
-  const root={dataset:{},contains:()=>false,addEventListener(name,fn){if(name==='click')click=fn;}};
+  const root={dataset:{},contains:()=>false,querySelector:()=>null,addEventListener(name,fn){if(name==='click')click=fn;}};
   const api=async path=>path.includes('standings')?{rows:[],own:null}:snapshot;
   const club=createClubHome({root,api,base:'/casinohabibi',account:()=>null,french:()=>true,translate:x=>x});
   await click({button:0,preventDefault(){},target:{closest:s=>s==='[data-club-card]'?{dataset:{clubCard:'league'}}:null}});
