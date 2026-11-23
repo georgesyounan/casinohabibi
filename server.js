@@ -28,6 +28,7 @@ import { createSupportCases } from './lib/support-cases.js';
 import { createPlayerClub } from './lib/player-club.js';
 import { createLobbyEvents } from './lib/lobby-events.js';
 import { createGiftRewards, slotRoll } from './lib/gift-rewards.js';
+import { createMonthlyTelegram } from './lib/monthly-telegram.js';
 import { createRewards } from './lib/rewards.js';
 import { createCommunications } from './lib/communications.js';
 import { createGrowth } from './lib/growth.js';
@@ -333,7 +334,10 @@ const clubEnabled = tenant => lobbyPresentation(tenant).config.brandName.trim().
 const playerClub=transaction(()=>createPlayerClub(db,{rewards,accountBreaks,fail,audit:staffAudit.record,
   previewCount:(tenant,locale)=>comingSoonEnabled(tenant)?comingSoon.keys(tenant,catalogueAudience(tenant,locale)).length:0}));
 const lobbyEvents = transaction(() => createLobbyEvents(db,{fail,accountBreaks,standings:playerClub.standings}));
-const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,fail}));
+const monthlyTelegram=transaction(()=>createMonthlyTelegram(db,{fail,transaction,
+  seal:(tenant,value)=>encryptProviderKey('monthly-telegram:'+tenant,value),
+  unseal:(tenant,value)=>decryptStaffSecret(value,'monthly-telegram:'+tenant)}));
+const giftRewards=transaction(()=>createGiftRewards(db,{club:playerClub,events:lobbyEvents,accountBreaks,telegram:monthlyTelegram,fail}));
 function settleClubDraws() {
   if (lobbyEvents.hasDue()) transaction(() => lobbyEvents.settle());
 }
@@ -447,10 +451,10 @@ function encryptStaffSecret(secret) {
   const ciphertext = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
 }
-function decryptStaffSecret(value) {
+function decryptStaffSecret(value, purpose = 'northplay-staff-totp') {
   const packed = Buffer.from(value, 'base64');
   const decipher = createDecipheriv('aes-256-gcm', encryptionKey, packed.subarray(0, 12));
-  decipher.setAAD(Buffer.from('northplay-staff-totp'));
+  decipher.setAAD(Buffer.from(purpose));
   decipher.setAuthTag(packed.subarray(12, 28));
   return Buffer.concat([decipher.update(packed.subarray(28)), decipher.final()]).toString('utf8');
 }
@@ -847,7 +851,8 @@ async function api(req, res, path, tenantId, requestId) {
     return publicationFollowup.list(tenantId, staff, staffPermissions(staff), new URL(req.url, 'http://localhost').searchParams);
   }
   const savedResource = ['PUT', 'DELETE'].includes(req.method) && path.match(/^\/api\/me\/saved\/([1-9]\d{0,15})$/);
-  if (req.method !== 'GET' && !savedResource && req.headers['content-type'] !== 'application/json') fail(415, 'invalid');
+  const mediaType = route==='POST /api/discovery/telegram/webhook' ? req.headers['content-type']?.split(';')[0].trim().toLowerCase() : req.headers['content-type'];
+  if (req.method !== 'GET' && !savedResource && mediaType !== 'application/json') fail(415, 'invalid');
   const catalogueLocale = new URL(req.url, 'http://localhost').searchParams.get('locale');
   const params = new URL(req.url,'http://localhost').searchParams;
   if (route === 'GET /api/v1/lobby' || route === 'GET /api/admin/shelves/at' || route === 'GET /api/partner/v1/lobby') {
@@ -1043,8 +1048,16 @@ async function api(req, res, path, tenantId, requestId) {
     if(key==='credits')testCredits.requireTest(tenantId,input.playerId);
     return auditedChange(roles,input,actor=>handlers[key](tenantId,actor.id,requestId,input),key==='poll'||(key==='placement'&&input.action!=='save')?'publishWebsite':undefined);
   }
+  if (route==='POST /api/admin/discovery/telegram') {
+    const authorize=()=>staffContext(req,tenantId);
+    const actor=authorize();
+    if(!adminEnabled || !clubEnabled(tenantId)) fail(404,'discoveryMissing');
+    const input=await body(req);
+    return monthlyTelegram.configure(tenantId,input,playerLinkBase(req,tenantId),authorize,
+      action=>staffAudit.record(tenantId,actor.id,'monthly_telegram_'+action,'monthly_bonus',requestId));
+  }
   if (route==='GET /api/admin/discovery/programs') {
-    staffContext(req,tenantId,websiteRoles);
+    const staff=staffContext(req,tenantId,websiteRoles);
     const items=rewards.staff(tenantId);
     if(params.get('withCatalogue')!=='1')return items;
     const enabled=comingSoonEnabled(tenantId);
@@ -1053,7 +1066,9 @@ async function api(req, res, path, tenantId, requestId) {
     const config=publishedTenantConfig(tenantId).config;
     const editorial=websiteContent.adminList(tenantId,config);
     const previews=enabled?comingSoon.previewOptions(tenantId,catalogueAudience(tenantId)):[];
-    return {items,enabled,threeSaveQuest,daily:clubEnabled(tenantId)?playerClub.settings(tenantId):null,previewCount:previews.length,previews,collections:editorial.collections,guides:editorial.targets.filter(x=>x.key.startsWith('help/'))};
+    return {items,enabled,threeSaveQuest,daily:clubEnabled(tenantId)?playerClub.settings(tenantId):null,
+      telegram:staff.role==='operator_admin' && clubEnabled(tenantId)?monthlyTelegram.admin(tenantId):null,
+      previewCount:previews.length,previews,collections:editorial.collections,guides:editorial.targets.filter(x=>x.key.startsWith('help/'))};
   }
   if (route==='POST /api/admin/discovery/daily') {
     staffContext(req,tenantId,websiteRoles);
@@ -1106,14 +1121,42 @@ async function api(req, res, path, tenantId, requestId) {
     if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
     return transaction(()=>giftRewards.describe(tenantId,player),{readOnly:true});
   }
+  if (route==='POST /api/discovery/telegram/webhook') {
+    const version=monthlyTelegram.authenticateHook(tenantId,req.headers['x-telegram-bot-api-secret-token']);
+    const update=await body(req,64*1024);
+    return transaction(()=>monthlyTelegram.handleMessage(tenantId,version,update));
+  }
+  if (route==='POST /api/discovery/telegram/start' || route==='POST /api/discovery/telegram/confirm') {
+    if(!player)fail(401,'signin');
+    if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
+    const input=await body(req);
+    const error=transaction(()=>{
+      req.assertPlayerSession();
+      if(input.owner!==player)fail(409,'giftAccountChanged');
+      const row=giftRewards.describe(tenantId,player).rows.find(r=>r.key==='monthly');
+      if(row.state==='paused')fail(409,'discoveryPaused');
+      if(row.state==='claimed')return null;
+      if(path.endsWith('/confirm'))return monthlyTelegram.confirm(tenantId,player,input.code);
+      monthlyTelegram.start(tenantId,player,input.lang);
+      return null;
+    });
+    if(error)fail(409,error);
+    return {gifts:giftRewards.describe(tenantId,player)};
+  }
   if (route==='POST /api/discovery/gift') {
     if(!player)fail(401,'signin');
     if(!clubEnabled(tenantId))fail(404,'discoveryMissing');
     const input=await body(req);
+    if(input.owner!==player)fail(409,'giftAccountChanged');
+    let membership=null;
+    if(input.key==='monthly' && input.action==='claim') {
+      const row=giftRewards.describe(tenantId,player).rows.find(r=>r.key==='monthly');
+      if(row.state==='telegramClaim' && row.period===input.period && row.amount===input.amount)
+        membership=await monthlyTelegram.membership(tenantId,player);
+    }
     return transaction(()=>{
       req.assertPlayerSession();
-      if(input.owner!==player)fail(409,'giftAccountChanged');
-      const now=Date.now(),result=giftRewards.redeem(tenantId,player,input,now);
+      const now=Date.now(),result=giftRewards.redeem(tenantId,player,input,now,membership);
       return {...result,gifts:giftRewards.describe(tenantId,player,now),account:account(player,tenantId)};
     });
   }

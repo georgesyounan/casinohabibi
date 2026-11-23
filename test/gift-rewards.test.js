@@ -19,6 +19,7 @@ test('gift periods, yesterday’s rebate, free spins and retries preserve balanc
     club: { settings: () => ({ amount: 500, enabled: true }) },
     events: { giftRaffle: () => ({ prize: 2500, tickets: 0 }) },
     accountBreaks,
+    telegram: { inspect: () => ({state:'telegramClosed'}), permits: () => false },
     fail
   });
   const now = Date.parse('2026-11-23T10:00:00Z'),
@@ -50,13 +51,14 @@ test('gift periods, yesterday’s rebate, free spins and retries preserve balanc
   assert.throws(() => get('premonth'), /giftUnavailable/);
   assert.equal(get('premonth', now + day * 2).changed, true);
   assert.equal(get('premonth', now + day * 3).changed, false);
-  for (const key of ['reload', 'weekly', 'monthly', 'spins']) {
+  assert.throws(() => get('monthly'), /telegramClosed/);
+  for (const key of ['reload', 'weekly', 'spins']) {
     assert.equal(get(key).changed, true);
     assert.equal(get(key).changed, false);
   }
   assert.equal(row('weekly', now + day * 3).state, 'claimed');
   assert.equal(row('weekly', now + day * 7).state, 'available');
-  assert.equal(row('monthly', Date.parse('2026-12-01T00:00:00Z')).state, 'available');
+  assert.equal(row('monthly', Date.parse('2026-12-01T00:00:00Z')).state, 'telegramClosed');
   assert.throws(() => get('spins', now, 2), /giftUnavailable/);
   for (let i = 1; i <= 7; i++) {
     const result = get('spins', now, i),
