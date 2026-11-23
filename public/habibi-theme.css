@@ -486,8 +486,20 @@ body[data-lobby-brand="habibi"]:not(.player-home) > header .bar:has(.player-tool
 .feed-content tbody th { color: #eff5fc; }
 .feed-content tbody tr:nth-child(odd) { background: #14253c; }
 .feed-content tr > :last-child { text-align: end; }
-.feed-game { display: inline-flex; align-items: center; gap: 7px; }
-.feed-game img { width: 29px; height: 29px; border-radius: 6px; object-fit: cover; }
+.feed-content .event-source { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 3px 12px; }
+.activity-log .activity-time { width: 6.7em; color: #a9d9ff; font-variant-numeric: tabular-nums; }
+.activity-title-cell { display: grid; gap: 2px; line-height: 1.25; }
+.activity-title-cell small { font-size: .7rem; font-weight: 500; color: #abc1db; }
+.activity-title-cell > a { width: fit-content; }
+.activity-kind { color: #aac3df; }
+.activity-kind.recorded { color: #9ee9c6; }
+.activity-archive { margin-top: 10px; color: #c3d7ed; font-size: .8rem; }
+.activity-archive summary { width: fit-content; cursor: pointer; color: #9cd5ff; padding-block: 7px; }
+.activity-archive > div { overflow-x: auto; }
+@media (prefers-reduced-motion: no-preference) {
+  .activity-arrival > * { animation: activity-arrival .4s ease-out; }
+  @keyframes activity-arrival { from { background-color: #21496d; } }
+}
 @media(max-width:710px) {
   .event-cards { grid-template-columns: minmax(0,1fr); gap: 8px; }
   .event-lead { padding-top: 11px; }
@@ -497,15 +509,12 @@ body[data-lobby-brand="habibi"]:not(.player-home) > header .bar:has(.player-tool
   .activity-heading { justify-content: space-between; }
   #lobby-events,#activity-board { scroll-margin-top: 12px; }
 }
-.feed-narrow { display: none; }
 @media(max-width:530px) {
-  .feed-content table[data-feed="casino"] :is(th,td):nth-child(2),
-  .feed-content table[data-feed="casino"] :is(th,td):nth-child(4) { display: none; }
-  .feed-narrow { display: block; color: #a9bfd6; font-size: .65rem; font-weight: 500; }
+  .activity-log[data-feed="casino"] :is(th,td):nth-child(4),
+  .activity-log[data-feed="sports"] :is(th,td):nth-child(3) { display: none; }
   .feed-content :is(td,th) { padding-inline: 5px; }
-  .feed-game { gap: 5px; }
-  .feed-content table[data-feed="sports"] :is(th,td):nth-child(2) { display: none; }
-  .feed-content table[data-feed="sports"] th[scope="row"] { white-space: normal; }
+  .activity-log th[scope="row"], .activity-log[data-feed="sports"] td { white-space: normal; }
+  .activity-log .activity-time { width: 5.5em; white-space: nowrap; font-size: .72rem; }
 }
 
 /* Reward drawer under the gift trigger. Its body scrolls independently on short screens. */

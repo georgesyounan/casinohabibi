@@ -2429,6 +2429,7 @@ const assets = {
   '/catalog.js': ['catalog.js', 'text/javascript'],
   '/dashboard.js': ['dashboard.js', 'text/javascript'],
   '/website-content.js': ['website-content.js', 'text/javascript'],
+  '/activity-feed.js': ['activity-feed.js', 'text/javascript'],
   '/guide-metadata.js': ['guide-metadata.js', 'text/javascript'],
   '/publication-followup.js': ['publication-followup.js', 'text/javascript'],
   '/growth-player.js':['growth-player.js','text/javascript'],
