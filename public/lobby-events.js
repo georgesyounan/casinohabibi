@@ -1,25 +1,13 @@
 import { games } from './catalog.js';
-import { matches, leagues, clockLabel, frameOf } from './sports-data.js';
+import { activityInterval, activityMarkup, updateActivity } from './activity-feed.js';
 
 const day = 86_400_000;
 const tabs = ['casino','sports','race'];
 const covers = new Map(games.map(game=>[game.id,game]));
-const examples = [
-  ['roulette',500,500],['gold',100,400],['blackjack',500,500],['aurora',1000,4000],
-  ['gold',100,-100],['roulette',100,100],['blackjack',1000,1000],['aurora',100,400],
-  ['roulette',500,-500],['gold',1000,1000],['blackjack',500,0],['aurora',500,2000],
-  ['gold',100,100],['roulette',1000,1000],['blackjack',100,100],['aurora',100,100]
-];
 const pick = (fr, en, french) => fr ? french : en;
 const money = (cents,fr) => new Intl.NumberFormat(fr?'fr-CA':'en-CA',{style:'currency',currency:'CAD'}).format(cents/100);
 const escape = raw => String(raw).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 const href = (base,fr,params,anchor='') => escape(base+'/?'+new URLSearchParams({lang:fr?'fr':'en',...params})+anchor);
-function sample(now,step=0) {
-  return examples.map((_,i)=>{
-    const [game,wager,amount]=examples[(i+examples.length-step%examples.length)%examples.length];
-    return {game,wager,amount,at:Math.floor(now/60_000)*60_000-i*67_000};
-  });
-}
 const marker = (key,fr) => key==='sports' ? pick(fr,'Simulated matches','Matchs simulés') :
   pick(fr,'Simulated preview','Aperçu simulé');
 const trophy = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 3h10v6a5 5 0 0 1-10 0zm0 2H3v2a5 5 0 0 0 5 5m9-7h4v2a5 5 0 0 1-5 5m-4 2v5m-4 2h8"/></svg>';
@@ -133,35 +121,6 @@ function createWinStream(rail,api,french,base) {
   return {seed,poll,render,switchSource};
 }
 const feedTitle=(fr,tab)=>({casino:'Casino',sports:'Sports',race:pick(fr,'Race standings','Classement')})[tab];
-function feedTable(data,fr,tab,base,step=0) {
-  const l=(en,french)=>pick(fr,en,french);
-  let headers,rows,empty='',source='';
-  if (tab==='race') {
-    headers=[l('Rank','Rang'),l('Points','Points'),l('Players at this rank','Joueurs à ce rang')];
-    rows=data.race.rows.map(r=>['#'+r.rank,String(r.score),String(r.players)]);
-    empty=l('The first club point opens this week’s standings.','Le premier point du Club ouvre le classement de la semaine.');
-  } else if (tab==='sports') {
-    source=marker('sports',fr);
-    headers=[l('Match','Match'),l('League','Ligue'),l('Game clock','Chrono'),l('Score','Pointage')];
-    rows=matches.filter(m=>m.frames?.length).map(m=>{
-      const frame=frameOf(m,step);
-      return [`<a class="hub-link" href="${href(base,fr,{view:'sports'})}">${escape(m.teams.join(' · '))}</a>`,escape(leagues[m.league][Number(fr)]),escape(clockLabel(m,frame,fr)),frame[1]+' – '+frame[2]];
-    });
-  } else {
-    const illustrative=!data.rounds.length;
-    const feed=illustrative?sample(data.now,step):data.rounds;
-    source=illustrative?marker('casino',fr):l('Last 24 hours · Play money','Dernières 24 h · Argent fictif');
-    headers=[l('Game','Jeu'),l('Time','Heure')+' (UTC)',l('Stake','Mise'),l('Multiplier','Multiplicateur'),l('Payout','Versement')];
-    const time = new Intl.DateTimeFormat(fr?'fr-CA':'en-GB',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
-    rows=feed.slice(0,8).map(r=>{
-      const game=covers.get(r.game),name=game.name[Number(fr)],payout=r.wager+r.amount;
-      return [`<a class="hub-link feed-game" href="${href(base,fr,{q:name},'#games')}"><img loading="lazy" alt="" width="29" height="29" src="${escape(base)}/game-${game.id}.webp"><span>${escape(name)}<small class="feed-narrow">${escape(time.format(r.at))} UTC</small></span></a>`,
-        escape(time.format(r.at)),money(r.wager,fr),(payout/r.wager).toLocaleString(fr?'fr-CA':'en-CA',{maximumFractionDigits:2})+'×',
-        `<span${r.amount>0?' class="feed-win"':''}>${money(payout,fr)}</span><small class="feed-narrow">${(payout/r.wager).toLocaleString(fr?'fr-CA':'en-CA',{maximumFractionDigits:2})}×</small>`];
-    });
-  }
-  return `<p class="event-source"${source?'':' hidden'}>${source}</p><div class="feed-scroll" tabindex="0" role="region" aria-label="${feedTitle(fr,tab)}"><table data-feed="${tab}"><thead><tr>${headers.map(v=>'<th scope="col">'+v+'</th>').join('')}</tr></thead><tbody>${rows.map(cells=>'<tr>'+cells.map((v,i)=>i?'<td>'+v+'</td>':'<th scope="row">'+v+'</th>').join('')+'</tr>').join('') || '<tr><td colspan="'+headers.length+'">'+empty+'</td></tr>'}</tbody></table></div>`;
-}
 function ring(data,fr) {
   const remaining=Math.max(0,Math.min(100,100*(data.end-data.now)/(data.end-data.start)));
   return `<div class="event-clock"><svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="34"/><circle class="event-arc" cx="40" cy="40" r="34" pathLength="100" stroke-dasharray="${remaining.toFixed(1)} 100" transform="rotate(-90 40 40)"/></svg><span>${pick(fr,'Ends in','Fin dans')}<strong data-event-time>${timeLeft(data.end,data.now,fr)}</strong></span></div>`;
@@ -192,7 +151,7 @@ export function eventMarkup(data,fr,base,tab='casino') {
   const arrow=(action,txt,symbol)=>`<button type="button" class="wire-control" data-wire="${action}" title="${txt}" aria-label="${txt}"><span aria-hidden="true">${symbol}</span></button>`;
   const rail=`<div class="wire-head"><h2><span class="wire-dot" aria-hidden="true"></span>${l('Latest wins','Derniers gains')}</h2><span class="wire-source">${fallback?marker('casino',fr):l('Played rounds · Play money','Parties jouées · Argent fictif')}</span><button type="button" data-wire="source" class="wire-source-switch" aria-pressed="false"${fallback?' hidden':''}>${l('Continuous demo','Démo en continu')}</button><div class="wire-controls">${arrow('prev',l('Previous wins','Gains précédents'),'‹')}${arrow('pause',pause,'Ⅱ')}${arrow('next',l('Next wins','Gains suivants'),'›')}</div></div><div class="wins-track">${winCards(data,fr,base)}</div>`;
   const lower=`<h2 id="events-title">${l('Races & raffles','Courses et tirages')}</h2><div class="event-cards">${cards(data,fr,base)}</div><p class="event-status" role="status"></p>
-    <section id="activity-board" tabindex="-1" aria-labelledby="activity-title"><div class="activity-heading"><h2 id="activity-title">${l('Recent activity','Activité récente')}</h2><button type="button" class="wire-control" data-feed-motion title="${pause}" aria-label="${pause}"><span aria-hidden="true">Ⅱ</span></button><div class="feed-tabs">${tabs.map(k=>`<a data-event-tab="${k}" href="${href(base,fr,{feed:k},'#activity-board')}"${tab===k?' aria-current="true"':''}>${feedTitle(fr,k)}</a>`).join('')}</div></div><div class="feed-content">${feedTable(data,fr,tab,base)}</div></section>`;
+    <section id="activity-board" tabindex="-1" aria-labelledby="activity-title"><div class="activity-heading"><h2 id="activity-title">${l('Recent activity','Activité récente')}</h2><button type="button" class="wire-control" data-feed-motion title="${pause}" aria-label="${pause}"><span aria-hidden="true">Ⅱ</span></button><div class="feed-tabs">${tabs.map(k=>`<a data-event-tab="${k}" href="${href(base,fr,{feed:k},'#activity-board')}"${tab===k?' aria-current="true"':''}>${feedTitle(fr,k)}</a>`).join('')}</div></div><div class="feed-content">${activityMarkup(data,fr,tab,base)}</div></section>`;
   return {rail,lower};
 }
 
@@ -201,7 +160,7 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
   if (!rail || !lower) return {sync(){},resume(){}};
   const seed=document.getElementById('lobby-event-model');
   let data=seed?JSON.parse(seed.textContent):null, owner=0, request=0, reading=false, joining=false, freshUntil=0;
-  let tab=new URLSearchParams(location.search).get('feed')||'casino', renderedLocale=seed?document.documentElement.lang.slice(0,2):'',signature='',lastTab='',step=0;
+  let tab=new URLSearchParams(location.search).get('feed')||'casino', renderedLocale=seed?document.documentElement.lang.slice(0,2):'',signature='',lastTab='',activityTick=-1;
   let paused=false, preference;
   const stream=createWinStream(rail,api,french,base);
   if(data)stream.seed(data);
@@ -218,13 +177,16 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
       control.firstElementChild.textContent=paused?'▶':'Ⅱ';
     }
   }
-  function table() {
+  const timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  function table(refresh=false,force=false) {
     if (!tabs.includes(tab)) tab='casino';
     const content=lower.querySelector('.feed-content');
     if (!data || !content) return;
-    const top=content.querySelector('.feed-scroll')?.scrollLeft||0;
-    content.innerHTML=feedTable(data,french(),tab,base,step);
-    content.querySelector('.feed-scroll').scrollLeft=top;
+    const now=data.now+Math.max(0,Date.now()-received),tick=Math.floor(now/activityInterval);
+    const same=content.firstElementChild?.dataset.activityView===tab;
+    if(!force && same && (paused || (!refresh && tick===activityTick)))return;
+    updateActivity(content,data,Boolean(french()),tab,base,now,timeZone,refresh,!paused && !reduced.matches);
+    activityTick=tick;
     lower.querySelectorAll('.feed-tabs [data-event-tab]').forEach(link=>{
       if (link.dataset.eventTab===tab) link.setAttribute('aria-current','true');
       else link.removeAttribute('aria-current');
@@ -245,7 +207,8 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
       grid.querySelectorAll('details').forEach((el,i)=>{el.open=Boolean(open[i]);});
       if(focused>=0)grid.querySelectorAll('a,button,summary')[focused]?.focus({preventScroll:true});
     }
-    signature=next;renderedLocale=lang;lastTab=tab;table();motion();stream.render(paused);
+    const switched=renderedLocale!==lang || lastTab!==tab || activityTick<0;
+    signature=next;renderedLocale=lang;lastTab=tab;table(true,switched);motion();stream.render(paused);
   }
   function refreshTime() {
     if (!data) return;
@@ -254,7 +217,7 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
     if (now>=Math.min(data.end,data.today+day)) freshUntil=0;
   }
   let received=Date.now();
-  function accept(board) {stream.seed(board);data=board;received=Date.now();freshUntil=received+15_000;paint();refreshTime();}
+  function accept(board) {stream.seed(board);data=board;received=Date.now();freshUntil=received+(active() && onscreen(lower) && tab!=='sports' && !paused ? 3600 : 15_000);paint();refreshTime();}
   async function sync(force=false) {
     const id=identity();
     if (id!==owner) {owner=id;request++;reading=false;joining=false;freshUntil=0;data=null;signature='';lower.replaceChildren();rail.replaceChildren();}
@@ -304,7 +267,8 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
     if(link.hasAttribute('data-raffle-enter')){void takeTicket(link);return;}
     if(link.hasAttribute('data-raffle-signin')){if(!pending()){e.preventDefault();if(identity())void sync(true);else signin();}return;}
     if (!data)return;
-    e.preventDefault();tab=link.dataset.eventTab;lastTab=tab;table();
+    e.preventDefault();tab=link.dataset.eventTab;lastTab=tab;table(true,true);
+    if(!link.closest('.feed-tabs') && tab==='race'){const archive=lower.querySelector('.activity-archive');if(archive)archive.open=true;}
     history.replaceState(history.state,'',link.href);
     if (!link.closest('.feed-tabs')){const board=document.getElementById('activity-board');board.focus({preventScroll:true});board.scrollIntoView({block:'start'});}
   });
@@ -313,14 +277,13 @@ export function createEventBoard({api,base,french,account,pending,signin,transla
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)void sync();});
   const onscreen=el=>{const r=el.getBoundingClientRect();return r.height>0 && r.bottom>0 && r.top<innerHeight;};
   window.setInterval(()=>{
-    if(document.hidden||!active()||!onscreen(rail))return;
-    void stream.poll();stream.render(paused);
-  },750);
+    if(document.hidden||!active())return;
+    if(onscreen(rail)){void stream.poll();stream.render(paused);}
+    if(!paused && onscreen(lower))table();
+  },400);
   window.setInterval(()=>{
     if(document.hidden||!active())return;
     refreshTime();void sync();
-    if(paused)return;
-    if((tab==='sports'||(tab==='casino'&&data&&!data.rounds.length))&&onscreen(lower)&&!lower.matches(':hover,:focus-within')){step++;table();}
   },3000);
   return {sync,resume};
 }
